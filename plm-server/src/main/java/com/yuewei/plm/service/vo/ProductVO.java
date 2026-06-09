@@ -1,0 +1,40 @@
+package com.yuewei.plm.service.vo;
+
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import lombok.Builder;
+import lombok.Data;
+
+@Data
+@Builder
+public class ProductVO {
+    private Long productId;
+    private Long parentProductId;
+    private Long customerId;
+    private String productCode;
+    private String productName;
+    private String productType;
+    private String seriesName;
+    private String model;
+    private String color;
+    private String material;
+    private String packageType;
+    private String surfaceProcess;
+    private String coreProcess;
+    private String composition;
+    private Long ownerUserId;
+    private String versionNo;
+    private String status;
+    private LocalDate effectiveDate;
+    private LocalDateTime releasedAt;
+    private String releasedBy;
+    private LocalDateTime frozenAt;
+    private String frozenBy;
+    private String freezeReason;
+    private String lockStatus;
+    private String remark;
+    private LocalDateTime createdAt;
+    private String createdBy;
+    private LocalDateTime updatedAt;
+    private String updatedBy;
+}
