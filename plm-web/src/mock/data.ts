@@ -123,6 +123,297 @@ const productLogs: OperateLogEntry[] = [
   }
 ]
 
+const newProductLineTimeline = [
+  {
+    title: '客户/市场需求归集',
+    phase: '立项阶段',
+    time: '2026-05-28T09:00:00+08:00',
+    owner: '销售 / 项目经理',
+    status: 'approved' as CommonStatus,
+    description: '完成客户需求、市场机会、目标机型范围、成本区间与测试范围收集。'
+  },
+  {
+    title: '新产品线立项',
+    phase: '立项阶段',
+    gate: true,
+    time: '2026-05-29T11:00:00+08:00',
+    owner: '项目经理 / 管理层',
+    status: 'approved' as CommonStatus,
+    description: '输出立项说明、风险评估、目标周期与投入边界，作为完整新品流程入口。'
+  },
+  {
+    title: 'Product 建档',
+    phase: '立项阶段',
+    time: '2026-05-30T15:00:00+08:00',
+    owner: '工程',
+    status: 'approved' as CommonStatus,
+    description: '建立产品主档、责任人、版本、测试项、成本拆分与主资料索引。'
+  },
+  {
+    title: '图纸与外观确认',
+    phase: '设计验证阶段',
+    gate: true,
+    time: '2026-06-01T10:00:00+08:00',
+    owner: '工程 / 供应商',
+    status: 'approved' as CommonStatus,
+    description: '完成结构图、外观图、包装草图与关键尺寸确认。'
+  },
+  {
+    title: '开模申请',
+    phase: '开模阶段',
+    gate: true,
+    time: '2026-06-02T14:00:00+08:00',
+    owner: '工程 / 采购',
+    status: 'approved' as CommonStatus,
+    description: '提交完整开模资料并完成开模审批。'
+  },
+  {
+    title: '模具制作与试模',
+    phase: '开模阶段',
+    time: '2026-06-03T18:00:00+08:00',
+    owner: '模具供应商',
+    status: 'approved' as CommonStatus,
+    description: '完成模具制作、试模与结构修正，具备签样条件。'
+  },
+  {
+    title: '签样确认',
+    phase: '签样阶段',
+    gate: true,
+    time: '2026-06-04T09:30:00+08:00',
+    owner: '项目经理 / 客户',
+    status: 'approved' as CommonStatus,
+    description: '锁定外观与结构版本，签样通过后方可推进量产资料。'
+  },
+  {
+    title: '工艺路线与红样测试',
+    phase: '工艺定型阶段',
+    time: '2026-06-05T10:00:00+08:00',
+    owner: '工程 / 品质',
+    status: 'reviewing' as CommonStatus,
+    description: '正在验证工艺路线、红样测试、磁吸力与表面耐磨结果。'
+  },
+  {
+    title: 'BOM 资料确认',
+    phase: '工艺定型阶段',
+    gate: true,
+    time: null,
+    owner: '工程 / 采购',
+    status: 'pending' as CommonStatus,
+    description: '确认 EBOM、MBOM、包装 BOM、替代料与主供应来源。'
+  },
+  {
+    title: '文件与质量资料冻结',
+    phase: '测试验证阶段',
+    gate: true,
+    time: null,
+    owner: '工程 / 品质',
+    status: 'pending' as CommonStatus,
+    description: '冻结图纸、SOP、SIP、检验标准、样品结论与客户确认资料。'
+  },
+  {
+    title: 'Product 发布审批',
+    phase: '投产发布阶段',
+    gate: true,
+    time: null,
+    owner: '管理层',
+    status: 'pending' as CommonStatus,
+    description: '完成发布审批后进入正式发布与量产追溯阶段。'
+  },
+  {
+    title: '历史追溯',
+    phase: '投产发布阶段',
+    time: null,
+    owner: '系统 / 业务团队',
+    status: 'pending' as CommonStatus,
+    description: '沉淀版本快照、审批记录、测试结论与后续变更轨迹。'
+  }
+]
+
+const newModelVariantTimeline = [
+  {
+    title: '选择父产品线',
+    phase: '扩展确认阶段',
+    time: '2026-06-01T09:00:00+08:00',
+    owner: '项目经理',
+    status: 'approved' as CommonStatus,
+    variantTag: 'inherited' as const,
+    description: '基于既有产品线继承基础图纸、工艺路线、BOM 和测试基线。'
+  },
+  {
+    title: '新型号/颜色需求确认',
+    phase: '扩展确认阶段',
+    gate: true,
+    time: '2026-06-02T11:30:00+08:00',
+    owner: '项目经理 / 销售',
+    status: 'approved' as CommonStatus,
+    variantTag: 'difference' as const,
+    description: '确认新增机型、颜色、渠道包装与差异边界，只做扩展不重走新品立项。'
+  },
+  {
+    title: '差异图纸与外观确认',
+    phase: '差异调整阶段',
+    time: '2026-06-03T15:00:00+08:00',
+    owner: '工程 / 供应商',
+    status: 'approved' as CommonStatus,
+    variantTag: 'difference' as const,
+    description: '仅处理新机型孔位、尺寸和配色差异，不重做整套父图纸。'
+  },
+  {
+    title: '改模判断',
+    phase: '差异调整阶段',
+    time: '2026-06-04T10:00:00+08:00',
+    owner: '工程 / 模具工程师',
+    status: 'approved' as CommonStatus,
+    variantTag: 'optional' as const,
+    description: '本版本沿用父模具，无需新开模，仅保留改模判断记录。'
+  },
+  {
+    title: '差异组件与 BOM 确认',
+    phase: '差异调整阶段',
+    time: '2026-06-06T16:00:00+08:00',
+    owner: '工程 / 采购',
+    status: 'reviewing' as CommonStatus,
+    variantTag: 'difference' as const,
+    description: '正在确认黑色 TPU 替代料、渠道包装 BOM 与差异组件成本。'
+  },
+  {
+    title: '样品确认与针对性测试',
+    phase: '验证阶段',
+    gate: true,
+    time: null,
+    owner: '工程 / 品质',
+    status: 'pending' as CommonStatus,
+    variantTag: 'difference' as const,
+    description: '仅验证发生变化的样品、外观、包装和关键性能，不重复全量测试。'
+  },
+  {
+    title: '版本冻结',
+    phase: '发布阶段',
+    gate: true,
+    time: null,
+    owner: '工程 / 品质',
+    status: 'pending' as CommonStatus,
+    variantTag: 'inherited' as const,
+    description: '冻结差异图纸、差异 BOM、测试记录与渠道资料。'
+  },
+  {
+    title: '子版本发布',
+    phase: '发布阶段',
+    gate: true,
+    time: null,
+    owner: '管理层',
+    status: 'pending' as CommonStatus,
+    variantTag: 'inherited' as const,
+    description: '发布为父产品线下的子版本，进入后续追溯与变更管理。'
+  }
+]
+
+const newProductLineApprovals: ApprovalStep[] = [
+  {
+    stepName: '立项审批',
+    approver: '王总',
+    status: 'approved',
+    time: '2026-05-29T16:30:00+08:00',
+    comment: '同意按新品完整流程推进。'
+  },
+  {
+    stepName: '开模审批',
+    approver: '管理层',
+    status: 'approved',
+    time: '2026-06-02T17:30:00+08:00',
+    comment: '开模资料齐全，允许进入模具制作。'
+  },
+  {
+    stepName: '资料冻结会签',
+    approver: '品质主管',
+    status: 'pending',
+    time: null,
+    comment: '待红样测试与 BOM 会签完成后提交冻结。'
+  },
+  {
+    stepName: '发布审批',
+    approver: '王总',
+    status: 'pending',
+    time: null,
+    comment: '待冻结资料齐套后确认正式发布。'
+  }
+]
+
+const newModelVariantApprovals: ApprovalStep[] = [
+  {
+    stepName: '扩展确认',
+    approver: '王总',
+    status: 'approved',
+    time: '2026-06-02T18:00:00+08:00',
+    comment: '同意以父产品线为基础做型号扩展。'
+  },
+  {
+    stepName: '改模判断记录',
+    approver: '模具工程师',
+    status: 'approved',
+    time: '2026-06-04T15:00:00+08:00',
+    comment: '本版本无需新开模，沿用父模具。'
+  },
+  {
+    stepName: '子版本发布审批',
+    approver: '王总',
+    status: 'pending',
+    time: null,
+    comment: '待差异 BOM、样品确认和版本冻结完成后发布。'
+  }
+]
+
+const productLogsByProduct: Record<number, OperateLogEntry[]> = {
+  101: [
+    {
+      time: '2026-06-04T10:10:00+08:00',
+      operator: '张敏',
+      action: '签样确认完成，推进到工艺路线与红样测试阶段。',
+      level: 'normal'
+    },
+    {
+      time: '2026-06-06T19:20:00+08:00',
+      operator: '张敏',
+      action: '补录新品 BOM 会签准备说明，待进入资料冻结关口。',
+      level: 'normal'
+    }
+  ],
+  102: [
+    {
+      time: '2026-06-04T15:20:00+08:00',
+      operator: '刘浩',
+      action: '完成差异图纸确认并记录无需新开模判断。',
+      level: 'normal'
+    },
+    {
+      time: '2026-06-06T18:40:00+08:00',
+      operator: '刘浩',
+      action: '补录黑色版本差异 BOM 说明，等待采购确认替代料成本。',
+      level: 'normal'
+    }
+  ],
+  103: [
+    {
+      time: '2026-05-24T16:00:00+08:00',
+      operator: '赵越',
+      action: '完成粉色版本针对性测试，提交子版本发布审批。',
+      level: 'normal'
+    },
+    {
+      time: '2026-05-28T09:00:00+08:00',
+      operator: '赵越',
+      action: '子版本发布完成并转入历史追溯。',
+      level: 'normal'
+    }
+  ]
+}
+
+const variantParentProductMap: Record<number, string | null> = {
+  101: null,
+  102: '超星 3.0',
+  103: '亮甲 3.0'
+}
+
 const testItemsByProduct: Record<number, ProductTestItem[]> = {
   101: [
     { name: '跌落测试', method: '1.2m 六面各两次', owner: '品质', frequency: '红样', result: '进行中', dueDate: '2026-06-08' },

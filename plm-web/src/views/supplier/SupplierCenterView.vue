@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ArrowRight } from '@element-plus/icons-vue'
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
@@ -60,6 +61,28 @@ const activeSupplier = computed(() => {
   return list.find((item) => item.supplierId === activeSupplierId.value) || list[0]
 })
 
+const metrics = computed(() => {
+  const suppliers = snapshot.value?.suppliers || []
+  return [
+    { label: '合作供应商', value: suppliers.length, hint: '材料、包材、模具统一维护' },
+    {
+      label: '交付风险',
+      value: suppliers.filter((item) => item.deliveryRisk === '高').length,
+      hint: '优先跟踪影响打样与发布的交付问题'
+    },
+    {
+      label: '资质缺口',
+      value: suppliers.reduce((sum, item) => sum + item.qualificationFiles.filter((file) => file.statusLabel !== '有效').length, 0),
+      hint: '需要补齐合规文件与有效期管理'
+    },
+    {
+      label: '参与项目',
+      value: suppliers.reduce((sum, item) => sum + item.relatedProjects.length, 0),
+      hint: '聚合查看历史合作项目与供应记录'
+    }
+  ]
+})
+
 async function loadSnapshot() {
   loading.value = true
   try {
@@ -90,28 +113,19 @@ onMounted(loadSnapshot)
 <template>
   <PageContainer
     title="供应商管理"
-    description="按优化文档重构为统一入口：列表看基础信息，详情看供应记录、参与项目与资质状态。"
+    description="按优化文档收敛为统一入口：列表看基础信息，详情只看供应记录、参与项目与资质文件，不展示内部报价审批内容。"
   >
     <template #actions>
-      <el-button @click="router.push('/costs')">成本报价</el-button>
-      <el-button type="primary" @click="router.push('/inventories')">物料 / 模具</el-button>
+      <el-button @click="router.push('/inventories')">物料 / 模具</el-button>
+      <el-button type="primary" @click="router.push('/products')">产品管理</el-button>
     </template>
 
     <section class="metric-grid" v-loading="loading">
-      <button
-        v-for="metric in snapshot?.metrics || []"
-        :key="metric.label"
-        class="metric-card summary-button"
-        type="button"
-        @click="openTarget(metric.targetPath)"
-      >
+      <div v-for="metric in metrics" :key="metric.label" class="metric-card">
         <p class="metric-card__label">{{ metric.label }}</p>
         <p class="metric-card__value">{{ metric.value }}</p>
-        <div class="metric-card__footer">
-          <span class="metric-card__trend">{{ metric.hint }}</span>
-          <el-icon><ArrowRight /></el-icon>
-        </div>
-      </button>
+        <span class="metric-card__trend">{{ metric.hint }}</span>
+      </div>
     </section>
 
     <SearchBar

@@ -1,4 +1,4 @@
-import type { ApprovalStep, CommonStatus, TimelineItem } from './common'
+import type { ApprovalStep, CommonStatus, MoldAction, ProductFlowMode, ProductLifecycle, TimelineItem } from './common'
 
 export interface ProductSummary {
   productId: number
@@ -14,14 +14,24 @@ export interface ProductSummary {
   versionNo: string
   status: CommonStatus
   currentStage: string
+  currentStepNo?: number
   customerName: string
   frozenFlag: boolean
   releasedAt: string | null
   completionRate: number
   estimatedCost: number
   estimatedCostCurrency: string
+  actualCost?: number | null
+  rdCost?: number | null
+  productCost?: number | null
+  totalCost?: number | null
   testItemCount: number
   activeBomVersion: string
+  productFlowMode?: ProductFlowMode
+  lifecycle?: ProductLifecycle
+  moldAction?: MoldAction | null
+  nextAction?: string | null
+  gateSummary?: string | null
 }
 
 export interface ProductBomItem {
@@ -89,6 +99,7 @@ export interface ProductBasicInfo {
   productName: string
   seriesName: string
   productType: string
+  productFlowMode?: ProductFlowMode
   ownerUserName: string
   status: CommonStatus
   versionNo: string
@@ -99,12 +110,23 @@ export interface ProductBasicInfo {
   composition: string
   customerName: string
   currentStage: string
+  currentStepNo?: number
   expectedReleaseDate: string | null
   model: string
   color: string
   estimatedCost: number
   estimatedCostCurrency: string
+  actualCost?: number | null
+  rdCost?: number | null
+  productCost?: number | null
+  totalCost?: number | null
   productTypeLabel: string
+  parentProductName?: string | null
+  inheritedSummary?: string | null
+  lifecycle?: ProductLifecycle
+  moldAction?: MoldAction | null
+  nextAction?: string | null
+  gateSummary?: string | null
 }
 
 export interface ProductDetail {
@@ -122,6 +144,7 @@ export interface ProductDetail {
 }
 
 export interface ProductFormPayload {
+  parentProductId?: number | null
   productCode: string
   productName: string
   seriesName: string
@@ -135,11 +158,17 @@ export interface ProductFormPayload {
   composition: string
   customerName: string
   currentStage: string
+  currentStepNo?: number
   expectedReleaseDate: string
   model: string
   color: string
   estimatedCost: number
   estimatedCostCurrency: string
+  actualCost?: number | null
+  rdCost?: number | null
+  productCost?: number | null
+  totalCost?: number | null
+  moldAction?: MoldAction | null
   costBreakdown: ProductCostBreakdownItem[]
   testItems: ProductTestItem[]
 }

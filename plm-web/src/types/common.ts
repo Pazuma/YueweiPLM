@@ -32,6 +32,21 @@ export type CommonStatus =
   | 'approved'
   | 'rejected'
   | 'blocked'
+  | 'skipped'
+
+export type ProductFlowMode = 'new_product_line' | 'new_model_variant'
+
+export type ProductLifecycle =
+  | 'initiation'
+  | 'design'
+  | 'tooling'
+  | 'sampling'
+  | 'process'
+  | 'pilot'
+  | 'mx'
+  | 'release'
+
+export type MoldAction = 'modify' | 'new' | 'none'
 
 export interface UserProfile {
   userId: number
@@ -54,11 +69,21 @@ export interface SearchField {
 }
 
 export interface TimelineItem {
+  stepNo?: number
   title: string
   time: string | null
   owner?: string
   description?: string
   status?: CommonStatus
+  phase?: string
+  gate?: boolean
+  variantTag?: 'inherited' | 'difference' | 'optional'
+  lifecycle?: ProductLifecycle
+  nodeType?: 'stage' | 'gate' | 'decision'
+  branchLabel?: string
+  branchStatus?: 'selected' | 'optional' | 'skipped'
+  detailLines?: string[]
+  gateLabel?: string
 }
 
 export interface ApprovalStep {
@@ -106,7 +131,7 @@ export interface DashboardMilestone {
 
 export interface DashboardRisk {
   title: string
-  level: '高' | '中' | '低'
+  level: 'high' | 'medium' | 'low'
   owner: string
   action: string
   targetPath: string

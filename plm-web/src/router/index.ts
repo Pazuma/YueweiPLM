@@ -37,7 +37,7 @@ const routes = [
         path: 'bom',
         name: 'BomCenter',
         component: () => import('@/views/bom/BomCenterView.vue'),
-        meta: { title: 'BOM 资料', permission: 'product:view' }
+        meta: { title: 'BOM 管理', permission: 'product:view' }
       },
       {
         path: 'products/create',
@@ -95,27 +95,27 @@ const routes = [
       },
       {
         path: 'production-orders',
-        name: 'ProductionOrderList',
-        component: () => import('@/views/module/ModulePlaceholderView.vue'),
-        meta: { title: '生产执行', permission: 'production-order:view', moduleKey: 'production-order' }
+        name: 'TestCenter',
+        component: () => import('@/views/test/TestCenterView.vue'),
+        meta: { title: '测试管理', permission: 'production-order:view' }
       },
       {
         path: 'processes',
         name: 'ProcessList',
-        component: () => import('@/views/module/ModulePlaceholderView.vue'),
-        meta: { title: '工艺路线', permission: 'process:view', moduleKey: 'process' }
+        component: () => import('@/views/process/ProcessCenterView.vue'),
+        meta: { title: '工艺路线', permission: 'process:view' }
       },
       {
         path: 'inventories',
-        name: 'InventoryList',
-        component: () => import('@/views/module/ModulePlaceholderView.vue'),
-        meta: { title: '物料库存', permission: 'inventory:view', moduleKey: 'inventory' }
+        name: 'InventoryCenter',
+        component: () => import('@/views/inventory/InventoryCenterView.vue'),
+        meta: { title: '物料库存', permission: 'inventory:view' }
       },
       {
         path: 'files',
         name: 'FileCenter',
         component: () => import('@/views/file/FileCenterView.vue'),
-        meta: { title: '文件中心', permission: 'product:view' }
+        meta: { title: '文件管理', permission: 'product:view' }
       },
       {
         path: 'suppliers',

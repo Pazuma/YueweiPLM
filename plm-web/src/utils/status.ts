@@ -1,7 +1,11 @@
 import type { CommonStatus, ObjectType } from '@/types/common'
 
 export const STATUS_LABEL_MAP: Record<ObjectType, Partial<Record<CommonStatus, string>>> = {
-  customer: { draft: '草稿', active: '启用', inactive: '停用' },
+  customer: {
+    draft: '草稿',
+    active: '启用',
+    inactive: '停用'
+  },
   product: {
     draft: '草稿',
     developing: '开发中',
@@ -12,7 +16,8 @@ export const STATUS_LABEL_MAP: Record<ObjectType, Partial<Record<CommonStatus, s
     pending: '待处理',
     approved: '已通过',
     rejected: '已驳回',
-    blocked: '已阻塞'
+    blocked: '已阻塞',
+    skipped: '已跳过'
   },
   order: {
     draft: '草稿',
@@ -33,14 +38,19 @@ export const STATUS_LABEL_MAP: Record<ObjectType, Partial<Record<CommonStatus, s
     confirmed: '已确认',
     locked: '已锁定',
     changed: '已变更',
-    archived: '已归档'
+    archived: '已归档',
+    pending: '待确认',
+    approved: '已通过',
+    blocked: '已阻塞',
+    skipped: '已跳过'
   },
   inventory: {
     draft: '草稿',
     available: '可用',
     reserved: '已预留',
     consumed: '已消耗',
-    closed: '已关闭'
+    closed: '已关闭',
+    in_use: '使用中'
   },
   workstation: {
     draft: '草稿',
@@ -75,7 +85,8 @@ export const STATUS_COLOR_MAP: Partial<Record<CommonStatus, string>> = {
   pending: 'warning',
   approved: 'success',
   rejected: 'danger',
-  blocked: 'danger'
+  blocked: 'danger',
+  skipped: 'info'
 }
 
 export function getStatusLabel(status: CommonStatus, objectType: ObjectType = 'product') {
@@ -95,5 +106,6 @@ export function getStatusActions(status: CommonStatus) {
     active: ['edit'],
     pending: ['approve', 'reject']
   }
+
   return map[status] || []
 }
