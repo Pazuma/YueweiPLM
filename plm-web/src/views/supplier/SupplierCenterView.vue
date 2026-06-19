@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ArrowRight } from '@element-plus/icons-vue'
+import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
@@ -12,12 +13,113 @@ import type { SearchField } from '@/types/common'
 import type { SupplierCenterSnapshot, SupplierDetail, SupplierSupplyRecord } from '@/types/supplier'
 import { formatAmount, formatDate } from '@/utils/format'
 
+interface SupplierCreateForm {
+  supplierName: string
+  shortName: string
+  contactPerson: string
+  contactPhone: string
+  contactEmail: string
+  region: string
+  supplyCategories: string[]
+  paymentTerm: string
+  cooperationLevel: string
+  deliveryRisk: string
+  status: 'draft' | 'active' | 'inactive'
+}
+
 const router = useRouter()
 const loading = ref(false)
 const snapshot = ref<SupplierCenterSnapshot | null>(null)
 const activeSupplierId = ref<number | null>(null)
 const rows = computed(() => snapshot.value?.suppliers || [])
 
+// ---- create dialog ----
+const createDialogVisible = ref(false)
+const createFormRef = ref<FormInstance>()
+
+function createEmptySupplierForm(): SupplierCreateForm {
+  return {
+    supplierName: '',
+    shortName: '',
+    contactPerson: '',
+    contactPhone: '',
+    contactEmail: '',
+    region: '',
+    supplyCategories: [],
+    paymentTerm: '月结 30 天',
+    cooperationLevel: '待评估',
+    deliveryRisk: '中',
+    status: 'draft'
+  }
+}
+
+const createForm = ref<SupplierCreateForm>(createEmptySupplierForm())
+const editDialogVisible = ref(false)
+const editFormRef = ref<FormInstance>()
+const editForm = ref<SupplierCreateForm>(createEmptySupplierForm())
+
+const createRules: FormRules<SupplierCreateForm> = {
+  supplierName: [{ required: true, message: '请输入供应商名称', trigger: 'blur' }],
+  contactPerson: [{ required: true, message: '请输入联系人', trigger: 'blur' }],
+  contactPhone: [{ required: true, message: '请输入联系电话', trigger: 'blur' }],
+  region: [{ required: true, message: '请输入所在区域', trigger: 'blur' }],
+  supplyCategories: [{ required: true, message: '请选择供应品类', trigger: 'change' }]
+}
+
+function openCreateDialog() {
+  createDialogVisible.value = true
+}
+
+function resetCreateForm() {
+  createForm.value = createEmptySupplierForm()
+}
+
+function normalizeSupplierStatus(status: SupplierDetail['status']): SupplierCreateForm['status'] {
+  if (status === 'active' || status === 'inactive' || status === 'draft') return status
+  return 'draft'
+}
+
+async function submitCreateForm() {
+  const form = createFormRef.value
+  if (!form || !snapshot.value) return
+
+  await form.validate()
+
+  const nextId = Math.max(...snapshot.value.suppliers.map((item) => item.supplierId), 0) + 1
+  const now = new Date().toISOString()
+
+  const newSupplier: SupplierDetail = {
+    supplierId: nextId,
+    supplierCode: `SUP-NEW-${String(nextId).padStart(4, '0')}`,
+    supplierName: createForm.value.supplierName,
+    shortName: createForm.value.shortName,
+    contactPerson: createForm.value.contactPerson,
+    contactPhone: createForm.value.contactPhone,
+    contactEmail: createForm.value.contactEmail,
+    supplyCategories: createForm.value.supplyCategories,
+    region: createForm.value.region,
+    status: createForm.value.status,
+    updatedAt: now,
+    cooperationLevel: createForm.value.cooperationLevel,
+    paymentTerm: createForm.value.paymentTerm,
+    deliveryRisk: createForm.value.deliveryRisk,
+    supplyRecords: [],
+    relatedProjects: [],
+    qualificationFiles: []
+  }
+
+  snapshot.value = {
+    ...snapshot.value,
+    suppliers: [newSupplier, ...snapshot.value.suppliers]
+  }
+
+  activeSupplierId.value = newSupplier.supplierId
+  createDialogVisible.value = false
+  resetCreateForm()
+  ElMessage.success('新增供应商成功')
+}
+
+// ---- search / table ----
 const searchFields: SearchField[] = [
   { prop: 'keyword', label: '关键词', type: 'input', placeholder: '供应商编码 / 名称 / 联系人' },
   {
@@ -101,6 +203,48 @@ function selectSupplier(row: SupplierDetail) {
   activeSupplierId.value = row.supplierId
 }
 
+function openEditSupplier(row: SupplierDetail) {
+  editForm.value = {
+    supplierName: row.supplierName,
+    shortName: row.shortName,
+    contactPerson: row.contactPerson,
+    contactPhone: row.contactPhone,
+    contactEmail: row.contactEmail,
+    region: row.region,
+    supplyCategories: [...row.supplyCategories],
+    paymentTerm: row.paymentTerm,
+    cooperationLevel: row.cooperationLevel,
+    deliveryRisk: row.deliveryRisk,
+    status: normalizeSupplierStatus(row.status)
+  }
+  editDialogVisible.value = true
+}
+
+async function submitEditSupplier() {
+  const form = editFormRef.value
+  const current = activeSupplier.value
+  if (!form || !snapshot.value || !current) return
+
+  await form.validate()
+
+  const updatedAt = new Date().toISOString()
+  snapshot.value = {
+    ...snapshot.value,
+    suppliers: snapshot.value.suppliers.map((item) =>
+      item.supplierId === current.supplierId
+        ? {
+            ...item,
+            ...editForm.value,
+            updatedAt
+          }
+        : item
+    )
+  }
+  activeSupplierId.value = current.supplierId
+  editDialogVisible.value = false
+  ElMessage.success('供应商信息已更新')
+}
+
 function supplyTypeLabel(type: SupplierSupplyRecord['supplyType']) {
   if (type === 'material') return '物料'
   if (type === 'tooling') return '模具/治具'
@@ -116,8 +260,9 @@ onMounted(loadSnapshot)
     description="按优化文档收敛为统一入口：列表看基础信息，详情只看供应记录、参与项目与资质文件，不展示内部报价审批内容。"
   >
     <template #actions>
+      <el-button type="primary" @click="openCreateDialog">新增供应商</el-button>
       <el-button @click="router.push('/inventories')">物料 / 模具</el-button>
-      <el-button type="primary" @click="router.push('/products')">产品管理</el-button>
+      <el-button @click="router.push('/products')">产品管理</el-button>
     </template>
 
     <section class="metric-grid" v-loading="loading">
@@ -135,47 +280,29 @@ onMounted(loadSnapshot)
       @reset="table.resetQuery({ keyword: '', category: '', status: '' })"
     />
 
-    <section class="split-grid">
-      <article class="page-panel">
+    <section class="split-grid supplier-split-grid">
+      <article class="page-panel supplier-list-panel">
         <div class="toolbar-row">
           <div>
             <h3 class="section-title">供应商列表</h3>
-            <p class="page-panel-desc">点击任意行切换右侧详情与供应记录。</p>
+            <p class="page-panel-desc">点击卡片切换右侧详情。</p>
           </div>
-          <el-tag effect="light">统一入口</el-tag>
         </div>
-        <el-table
-          :data="table.pagedRows.value"
-          border
-          stripe
-          highlight-current-row
-          v-loading="loading"
-          @row-click="(row: SupplierDetail) => selectSupplier(row)"
-        >
-          <el-table-column prop="supplierCode" label="供应商编码" min-width="170" />
-          <el-table-column label="供应商" min-width="220">
-            <template #default="{ row }">
-              <div class="cell-stack">
-                <strong>{{ row.supplierName }}</strong>
-                <span class="subtle-text">{{ row.shortName }} / {{ row.region }}</span>
-              </div>
-            </template>
-          </el-table-column>
-          <el-table-column label="供应品类" min-width="180">
-            <template #default="{ row }">
-              <div class="tag-wrap">
-                <el-tag v-for="item in row.supplyCategories" :key="item" effect="light">{{ item }}</el-tag>
-              </div>
-            </template>
-          </el-table-column>
-          <el-table-column prop="contactPerson" label="联系人" width="120" />
-          <el-table-column prop="contactPhone" label="联系电话" min-width="150" />
-          <el-table-column label="状态" width="120">
-            <template #default="{ row }">
-              <StatusTag :status="row.status" object-type="customer" />
-            </template>
-          </el-table-column>
-        </el-table>
+        <div class="supplier-card-list" v-loading="loading">
+          <button
+            v-for="row in table.pagedRows.value"
+            :key="row.supplierId"
+            class="supplier-card"
+            :class="{ 'is-active': activeSupplierId === row.supplierId }"
+            type="button"
+            @click="selectSupplier(row)"
+          >
+            <strong>{{ row.supplierName }}</strong>
+            <div class="tag-wrap">
+              <el-tag v-for="item in row.supplyCategories" :key="item" effect="light" size="small">{{ item }}</el-tag>
+            </div>
+          </button>
+        </div>
       </article>
 
       <article v-if="activeSupplier" class="page-panel">
@@ -185,6 +312,7 @@ onMounted(loadSnapshot)
             <p class="page-panel-desc">{{ activeSupplier.supplierCode }} / {{ activeSupplier.cooperationLevel }}</p>
           </div>
           <StatusTag :status="activeSupplier.status" object-type="customer" />
+          <el-button size="small" type="primary" plain @click="openEditSupplier(activeSupplier)">编辑</el-button>
         </div>
 
         <section class="detail-grid">
@@ -290,6 +418,116 @@ onMounted(loadSnapshot)
         </button>
       </div>
     </section>
+
+    <!-- create dialog -->
+    <el-dialog v-model="createDialogVisible" title="新增供应商" width="720px">
+      <el-form ref="createFormRef" :model="createForm" :rules="createRules" label-width="100px">
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="供应商名称" prop="supplierName">
+              <el-input v-model="createForm.supplierName" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="简称" prop="shortName">
+              <el-input v-model="createForm.shortName" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="联系人" prop="contactPerson">
+              <el-input v-model="createForm.contactPerson" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="联系电话" prop="contactPhone">
+              <el-input v-model="createForm.contactPhone" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="联系邮箱" prop="contactEmail">
+              <el-input v-model="createForm.contactEmail" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="区域" prop="region">
+              <el-input v-model="createForm.region" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="24">
+            <el-form-item label="供应品类" prop="supplyCategories">
+              <el-select v-model="createForm.supplyCategories" multiple style="width: 100%">
+                <el-option label="原材料" value="原材料" />
+                <el-option label="功能件" value="功能件" />
+                <el-option label="板材" value="板材" />
+                <el-option label="包材" value="包材" />
+                <el-option label="模具" value="模具" />
+                <el-option label="治具" value="治具" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
+      </el-form>
+
+      <template #footer>
+        <el-button @click="createDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="submitCreateForm">确认新增</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- edit dialog -->
+    <el-dialog v-model="editDialogVisible" title="编辑供应商" width="720px">
+      <el-form ref="editFormRef" :model="editForm" :rules="createRules" label-width="100px">
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="供应商名称" prop="supplierName">
+              <el-input v-model="editForm.supplierName" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="简称" prop="shortName">
+              <el-input v-model="editForm.shortName" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="联系人" prop="contactPerson">
+              <el-input v-model="editForm.contactPerson" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="联系电话" prop="contactPhone">
+              <el-input v-model="editForm.contactPhone" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="联系邮箱" prop="contactEmail">
+              <el-input v-model="editForm.contactEmail" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="区域" prop="region">
+              <el-input v-model="editForm.region" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="24">
+            <el-form-item label="供应品类" prop="supplyCategories">
+              <el-select v-model="editForm.supplyCategories" multiple style="width: 100%">
+                <el-option label="原材料" value="原材料" />
+                <el-option label="功能件" value="功能件" />
+                <el-option label="板材" value="板材" />
+                <el-option label="包材" value="包材" />
+                <el-option label="模具" value="模具" />
+                <el-option label="治具" value="治具" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
+      </el-form>
+
+      <template #footer>
+        <el-button @click="editDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="submitEditSupplier">保存</el-button>
+      </template>
+    </el-dialog>
   </PageContainer>
 </template>
 
@@ -333,6 +571,20 @@ onMounted(loadSnapshot)
   border-radius: var(--plm-radius-base);
   background: #fff;
 }
+
+.supplier-split-grid {
+  grid-template-columns: minmax(260px, 0.72fr) minmax(620px, 1.28fr);
+}
+
+.supplier-list-panel { min-width: 0; }
+
+.supplier-card-list { display: flex; flex-direction: column; gap: 8px; }
+
+.supplier-card { display: flex; flex-direction: column; gap: 6px; width: 100%; padding: 14px; border: 1px solid var(--plm-color-border-light); border-radius: var(--plm-radius-base); background: #fff; text-align: left; cursor: pointer; transition: border-color 0.16s; }
+
+.supplier-card:hover { border-color: var(--plm-color-primary); }
+
+.supplier-card.is-active { border-color: var(--plm-color-primary); background: rgba(37,99,235,0.05); }
 
 .section-gap {
   margin-top: var(--plm-space-4);

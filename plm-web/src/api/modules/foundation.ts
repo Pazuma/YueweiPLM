@@ -4,9 +4,9 @@ import {
   getFoundationProducts,
   getInventoryCenterSnapshot,
   getProductPresentation,
-  getReportCenterSnapshot,
   getTestCenterSnapshot
 } from '@/mock/foundation'
+import { getReportCenterSnapshot } from '@/mock/report-center'
 
 export {
   getFoundationProducts,

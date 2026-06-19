@@ -74,6 +74,11 @@ function handleReset() {
           :placeholder="field.placeholder || `请选择${field.label}`"
         />
       </el-form-item>
+
+      <div v-if="$slots.extra" class="search-form__extra">
+        <slot name="extra" />
+      </div>
+
       <el-form-item class="search-form__actions">
         <el-button type="primary" @click="handleSearch">搜索</el-button>
         <el-button @click="handleReset">重置</el-button>
@@ -97,7 +102,15 @@ function handleReset() {
   margin-bottom: 12px;
 }
 
-.search-form__actions {
+.search-form__extra {
+  display: flex;
+  align-items: center;
   margin-left: auto;
+  margin-right: 12px;
+  margin-bottom: 12px;
+}
+
+.search-form__actions {
+  margin-left: 0;
 }
 </style>

@@ -511,21 +511,21 @@ export const dashboardData: DashboardSnapshot = {
   risks: [
     {
       title: '文件与质量资料未冻结',
-      level: '高',
+      level: 'high',
       owner: '工程 / 品质',
       action: '先补齐 SOP、SIP、检验标准和客户确认件，再提交发布。',
       targetPath: '/products?frozen=unfrozen'
     },
     {
       title: '客户确认资料未归档',
-      level: '中',
+      level: 'medium',
       owner: '销售',
       action: '补传签样确认书并挂接到当前 Product 版本。',
       targetPath: '/products/103'
     },
     {
       title: 'BOM 替代料待确认',
-      level: '中',
+      level: 'medium',
       owner: '采购',
       action: '确认黑色 TPU 替代料价格、交期和适用范围。',
       targetPath: '/bom?risk=substitute'
@@ -674,6 +674,78 @@ export const productList: ProductSummary[] = [
     estimatedCostCurrency: 'CNY',
     testItemCount: testItemsByProduct[103].length,
     activeBomVersion: 'PACK-B.1'
+  },
+  {
+    productId: 301,
+    parentProductId: null,
+    productCode: 'PRD-CD30-ARCH-001',
+    productName: '超队 3.0',
+    productType: 'product_line',
+    seriesName: '超队',
+    model: '--',
+    color: '--',
+    material: 'TPU + 磁吸组件',
+    ownerUserName: '张经理',
+    versionNo: 'A.3',
+    status: 'archived',
+    currentStage: '已归档',
+    currentStepNo: 22,
+    customerName: '北美渠道 A',
+    frozenFlag: true,
+    releasedAt: '2026-05-30T10:00:00+08:00',
+    completionRate: 1,
+    estimatedCost: 35.0,
+    estimatedCostCurrency: 'CNY',
+    testItemCount: 8,
+    activeBomVersion: 'EBOM-A.3'
+  },
+  {
+    productId: 302,
+    parentProductId: 301,
+    productCode: 'SKU-CD30-IP18-BLK',
+    productName: '超队 3.0 iPhone18 黑色',
+    productType: 'model_variant',
+    seriesName: '超队',
+    model: 'iPhone18',
+    color: '黑色',
+    material: 'TPU + PC',
+    ownerUserName: '刘浩',
+    versionNo: 'A.1',
+    status: 'archived',
+    currentStage: '已归档',
+    currentStepNo: 16,
+    customerName: '北美渠道 A',
+    frozenFlag: true,
+    releasedAt: '2026-06-02T15:00:00+08:00',
+    completionRate: 1,
+    estimatedCost: 13.8,
+    estimatedCostCurrency: 'CNY',
+    testItemCount: 5,
+    activeBomVersion: 'MBOM-A.1'
+  },
+  {
+    productId: 303,
+    parentProductId: 301,
+    productCode: 'SKU-CD30-IP18-TRS',
+    productName: '超队 3.0 iPhone18 透明',
+    productType: 'model_variant',
+    seriesName: '超队',
+    model: 'iPhone18',
+    color: '透明',
+    material: 'TPU',
+    ownerUserName: '刘浩',
+    versionNo: 'A.1',
+    status: 'archived',
+    currentStage: '已归档',
+    currentStepNo: 16,
+    customerName: '北美渠道 A',
+    frozenFlag: true,
+    releasedAt: '2026-06-03T09:00:00+08:00',
+    completionRate: 1,
+    estimatedCost: 12.5,
+    estimatedCostCurrency: 'CNY',
+    testItemCount: 4,
+    activeBomVersion: 'MBOM-A.1'
   }
 ]
 
@@ -742,8 +814,16 @@ function makeVersionHistory(summary: ProductSummary) {
 }
 
 function makeProductDetail(summary: ProductSummary): ProductDetail {
-  const costBreakdown = costBreakdownByProduct[summary.productId]
-  const testItems = testItemsByProduct[summary.productId]
+  const costBreakdown =
+    costBreakdownByProduct[summary.productId] ?? [
+      {
+        category: '基础成本',
+        amount: summary.estimatedCost,
+        ratio: 1,
+        note: '由产品列表估算成本生成的默认明细'
+      }
+    ]
+  const testItems = testItemsByProduct[summary.productId] ?? []
 
   return {
     productId: summary.productId,
@@ -1051,7 +1131,7 @@ export const supplierCenterData: SupplierCenterSnapshot = {
       updatedAt: '2026-06-08T09:30:00+08:00',
       cooperationLevel: '核心供应',
       paymentTerm: '月结 45 天',
-      deliveryRisk: '中',
+      deliveryRisk: 'medium',
       supplyRecords: [
         { recordId: 1, supplyType: 'material', itemCode: 'INV-MATERIAL-0023', itemName: 'TPU 原料 85A', relatedProduct: '超星 3.0', unitPrice: 25.5, currency: 'CNY', lastDeliveryDate: '2026-06-05', status: 'available', targetPath: '/products/101' },
         { recordId: 2, supplyType: 'material', itemCode: 'INV-MAG-0045', itemName: 'N52 磁吸组件', relatedProduct: '超星 3.0 iPhone18 黑色', unitPrice: 3.6, currency: 'CNY', lastDeliveryDate: '2026-06-03', status: 'reserved', targetPath: '/products/102' }
@@ -1079,7 +1159,7 @@ export const supplierCenterData: SupplierCenterSnapshot = {
       updatedAt: '2026-06-07T18:10:00+08:00',
       cooperationLevel: '重点合作',
       paymentTerm: '月结 30 天',
-      deliveryRisk: '高',
+      deliveryRisk: 'high',
       supplyRecords: [
         { recordId: 3, supplyType: 'packaging', itemCode: 'INV-PACK-0102', itemName: '渠道彩盒', relatedProduct: '亮甲 3.0 iPhone18 粉色', unitPrice: 1.4, currency: 'CNY', lastDeliveryDate: '2026-05-26', status: 'available', targetPath: '/products/103' },
         { recordId: 4, supplyType: 'material', itemCode: 'INV-BOARD-0091', itemName: 'PC 背板', relatedProduct: '超星 3.0 iPhone18 黑色', unitPrice: 6.8, currency: 'CNY', lastDeliveryDate: '2026-06-02', status: 'reserved', targetPath: '/products/102' }
@@ -1106,7 +1186,7 @@ export const supplierCenterData: SupplierCenterSnapshot = {
       updatedAt: '2026-06-06T14:00:00+08:00',
       cooperationLevel: '待评估',
       paymentTerm: '预付 30%',
-      deliveryRisk: '中',
+      deliveryRisk: 'medium',
       supplyRecords: [
         { recordId: 5, supplyType: 'tooling', itemCode: 'INV-MOLD-0201', itemName: '超星 3.0 注塑模', relatedProduct: '超星 3.0', unitPrice: 18000, currency: 'CNY', lastDeliveryDate: '2026-05-18', status: 'in_use', targetPath: '/products/101' }
       ],

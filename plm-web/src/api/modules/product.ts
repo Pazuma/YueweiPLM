@@ -114,6 +114,7 @@ function buildNewProductLineTimeline(currentStepNo: number, released: boolean): 
     return {
       stepNo,
       title,
+      time: null,
       phase: phases[index],
       status: buildStatus(stepNo, currentStepNo, released),
       gate: gates.has(stepNo),
@@ -202,6 +203,7 @@ function buildNewModelVariantTimeline(currentStepNo: number, moldAction: MoldAct
     return {
       stepNo,
       title,
+      time: null,
       phase: phases[index],
       status: moldSkipped ? 'skipped' : buildStatus(stepNo, currentStepNo, released),
       gate: gates.has(stepNo),

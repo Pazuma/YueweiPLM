@@ -11,11 +11,24 @@ const router = useRouter()
 const appStore = useAppStore()
 const userStore = useUserStore()
 
-const breadcrumbItems = computed(() =>
-  route.matched
+const breadcrumbItems = computed(() => {
+  const configured = route.meta?.breadcrumb as string[] | undefined
+  if (configured?.length) {
+    return configured.map((title, index) => ({
+      key: `${index}-${title}`,
+      title
+    }))
+  }
+
+  return route.matched
     .filter((item) => item.meta?.title)
-    .map((item) => ({ path: item.path, title: String(item.meta.title) }))
-)
+    .map((item, index) => ({
+      key: `${index}-${String(item.meta.title)}`,
+      title: String(item.meta.title)
+    }))
+})
+
+const routeSubtitle = computed(() => String(route.meta?.subtitle || ''))
 
 function handleLogout() {
   userStore.logout()
@@ -27,11 +40,14 @@ function handleLogout() {
   <header class="navbar">
     <div class="navbar__left">
       <el-button circle :icon="appStore.sidebarCollapsed ? Expand : Fold" @click="appStore.toggleSidebar()" />
-      <el-breadcrumb separator="/">
-        <el-breadcrumb-item v-for="item in breadcrumbItems" :key="item.path">
-          {{ item.title }}
-        </el-breadcrumb-item>
-      </el-breadcrumb>
+      <div class="navbar__route">
+        <el-breadcrumb separator="/">
+          <el-breadcrumb-item v-for="item in breadcrumbItems" :key="item.key">
+            {{ item.title }}
+          </el-breadcrumb-item>
+        </el-breadcrumb>
+        <span v-if="routeSubtitle" class="navbar__route-subtitle">{{ routeSubtitle }}</span>
+      </div>
     </div>
     <div class="navbar__right">
       <div class="navbar__user">
@@ -60,6 +76,21 @@ function handleLogout() {
   display: flex;
   align-items: center;
   gap: 14px;
+  min-width: 0;
+}
+
+.navbar__route {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.navbar__route-subtitle {
+  color: var(--plm-color-text-secondary);
+  font-size: 13px;
+  white-space: nowrap;
 }
 
 .navbar__user {
@@ -72,5 +103,16 @@ function handleLogout() {
 .navbar__user span {
   color: var(--plm-color-text-secondary);
   font-size: 12px;
+}
+
+@media (max-width: 960px) {
+  .navbar {
+    flex-wrap: wrap;
+  }
+
+  .navbar__right {
+    width: 100%;
+    justify-content: flex-end;
+  }
 }
 </style>

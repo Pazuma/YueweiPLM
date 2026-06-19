@@ -1,0 +1,1 @@
+import{K as n}from"./index-BmGqVCM_.js";function f(r,t="YYYY-MM-DD"){return r?n(r).format(t):"--"}function o(r){return r?n(r).format("YYYY-MM-DD HH:mm"):"--"}function a(r,t="CNY"){return r==null?"--":new Intl.NumberFormat("zh-CN",{style:"currency",currency:t,minimumFractionDigits:2}).format(r)}export{f as a,o as b,a as f};

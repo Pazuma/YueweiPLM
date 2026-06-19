@@ -1,4 +1,4 @@
-import { mockAccounts, rolePermissions } from '@/mock/data'
+import { mockAccounts, rolePermissions } from '@/mock/users'
 import type { UserProfile } from '@/types/common'
 import { mockResolve } from '../request'
 

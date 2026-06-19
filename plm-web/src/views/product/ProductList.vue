@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
@@ -26,13 +26,13 @@ const loading = ref(false)
 
 const lifecycleOptions: LifecycleOption[] = [
   { key: 'all', label: '全部产品', hint: '统一查看新产品线、新型号线与已发布版本。' },
-  { key: 'initiation', label: '立项确认', hint: '需求来源、立项入口、子版本建立与负责人确认。' },
+  { key: 'initiation', label: '立项确认', hint: '需求来源、立项入口、子版本建立与责任人确认。' },
   { key: 'design', label: '设计差异', hint: '图纸、外观、差异结构与供应商可行性确认。' },
   { key: 'tooling', label: '模具处理', hint: '开模、改模、试模与模具风险收口。' },
   { key: 'sampling', label: '样品签核', hint: '签样、红样、差异样与样品确认。' },
-  { key: 'process', label: '工艺/BOM', hint: '工艺路线、组件、BOM、资料整理与冻结准备。' },
+  { key: 'process', label: '工艺 / BOM', hint: '工艺路线、组件、BOM、资料整理与冻结准备。' },
   { key: 'pilot', label: '小批验证', hint: '小批量、产线节拍、不良率与量产准备。' },
-  { key: 'mx', label: 'MX验证', hint: '运模、MX验收、墨西哥端小批验证。' },
+  { key: 'mx', label: 'MX 验证', hint: '运模、MX 验收、墨西哥端小批验证。' },
   { key: 'release', label: '冻结发布', hint: '版本冻结、正式发布与历史追溯。' }
 ]
 
@@ -51,32 +51,32 @@ const lifecycleTitleMap: Record<LifecycleKey, { title: string; description: stri
   },
   tooling: {
     title: '模具处理阶段',
-    description: '区分新产品线完整开模和新型号线改模/新开模/跳过三种分支。'
+    description: '区分新产品线完整开模和新型号线改模 / 新开模 / 跳过三种分支。'
   },
   sampling: {
     title: '样品签核阶段',
     description: '聚焦签样、红样、差异样与关键验证节点。'
   },
   process: {
-    title: '工艺与BOM阶段',
-    description: '聚焦工艺路线、组件确认、BOM、SIP/SOP与资料冻结前准备。'
+    title: '工艺与 BOM 阶段',
+    description: '聚焦工艺路线、组件确认、BOM、SIP / SOP 与冻结前准备。'
   },
   pilot: {
     title: '小批验证阶段',
     description: '聚焦产线跑通、节拍、不良率、治具与工人熟练度。'
   },
   mx: {
-    title: 'MX验证阶段',
-    description: '聚焦运模、MX验收、墨西哥端试产与小批量验证。'
+    title: 'MX 验证阶段',
+    description: '聚焦运模、MX 验收、墨西哥端试产与小批量验证。'
   },
   release: {
     title: '冻结发布阶段',
-    description: '统一查看版本冻结、正式发布和已沉淀版本。'
+    description: '统一查看版本冻结、正式发布和历史沉淀版本。'
   }
 }
 
 const searchFields: SearchField[] = [
-  { prop: 'keyword', label: '关键字', type: 'input', placeholder: '编码 / 名称 / 系列 / 机型 / 颜色 / 负责人' },
+  { prop: 'keyword', label: '关键词', type: 'input', placeholder: '编码 / 名称 / 系列 / 机型 / 颜色 / 负责人' },
   {
     prop: 'productType',
     label: '产品类型',
@@ -111,7 +111,7 @@ function getFlowLabel(item: ProductSummary) {
 }
 
 function getFlowHint(item: ProductSummary) {
-  return item.productType === 'product_line' ? '完整22步研发链路' : '16步差异扩展链路'
+  return item.productType === 'product_line' ? '完整 22 步研发链路' : '基于父产品的 16 步差异链路'
 }
 
 function getMoldActionLabel(item: ProductSummary) {
@@ -246,9 +246,37 @@ onMounted(async () => {
 <template>
   <PageContainer :title="lifecycleTitleMap[currentLifecycle.key].title" :description="lifecycleTitleMap[currentLifecycle.key].description">
     <template #actions>
-      <el-button @click="router.push('/sku-view')">SKU视图</el-button>
+      <el-button @click="router.push('/sku-view')">SKU 视图</el-button>
       <el-button type="primary" @click="router.push('/products/create')">新建产品</el-button>
     </template>
+
+    <section class="metric-grid product-summary-grid">
+      <div class="metric-card product-summary-card">
+        <p class="metric-card__label">当前队列</p>
+        <p class="metric-card__value">{{ stageStats.total }}</p>
+        <span class="metric-card__trend">当前阶段筛选结果</span>
+      </div>
+      <button class="metric-card summary-button product-summary-card" type="button" @click="setProductType('product_line')">
+        <p class="metric-card__label">新产品线</p>
+        <p class="metric-card__value">{{ stageStats.productLines }}</p>
+        <span class="metric-card__trend">完整 22 步研发流程</span>
+      </button>
+      <button class="metric-card summary-button product-summary-card" type="button" @click="setProductType('model_variant')">
+        <p class="metric-card__label">新型号线</p>
+        <p class="metric-card__value">{{ stageStats.modelVariants }}</p>
+        <span class="metric-card__trend">基于父产品的 16 步差异流程</span>
+      </button>
+      <div class="metric-card product-summary-card">
+        <p class="metric-card__label">待冻结资料</p>
+        <p class="metric-card__value">{{ stageStats.pendingFreeze }}</p>
+        <span class="metric-card__trend">图纸 / SOP / SIP / 质量资料缺口</span>
+      </div>
+      <div class="metric-card product-summary-card">
+        <p class="metric-card__label">平均总成本</p>
+        <p class="metric-card__value metric-card__value--small">{{ formatAmount(stageStats.avgCost) }}</p>
+        <span class="metric-card__trend">按当前队列口径展示</span>
+      </div>
+    </section>
 
     <section class="page-panel lifecycle-panel">
       <div class="toolbar-row">
@@ -272,34 +300,6 @@ onMounted(async () => {
           <strong class="lifecycle-button__value">{{ lifecycleCounters[item.key] }}</strong>
           <span class="subtle-text">{{ item.hint }}</span>
         </button>
-      </div>
-    </section>
-
-    <section class="metric-grid">
-      <div class="metric-card">
-        <p class="metric-card__label">当前队列</p>
-        <p class="metric-card__value">{{ stageStats.total }}</p>
-        <span class="metric-card__trend">当前阶段筛选结果</span>
-      </div>
-      <button class="metric-card summary-button" type="button" @click="setProductType('product_line')">
-        <p class="metric-card__label">新产品线</p>
-        <p class="metric-card__value">{{ stageStats.productLines }}</p>
-        <span class="metric-card__trend">完整22步研发流程</span>
-      </button>
-      <button class="metric-card summary-button" type="button" @click="setProductType('model_variant')">
-        <p class="metric-card__label">新型号线</p>
-        <p class="metric-card__value">{{ stageStats.modelVariants }}</p>
-        <span class="metric-card__trend">基于父产品的16步差异流程</span>
-      </button>
-      <div class="metric-card">
-        <p class="metric-card__label">待冻结资料</p>
-        <p class="metric-card__value">{{ stageStats.pendingFreeze }}</p>
-        <span class="metric-card__trend">图纸 / SOP / SIP / 质量资料缺口</span>
-      </div>
-      <div class="metric-card">
-        <p class="metric-card__label">平均总成本</p>
-        <p class="metric-card__value metric-card__value--small">{{ formatAmount(stageStats.avgCost) }}</p>
-        <span class="metric-card__trend">按当前队列口径展示</span>
       </div>
     </section>
 
@@ -395,7 +395,7 @@ onMounted(async () => {
               <span class="subtle-text">{{ getMoldActionLabel(row) }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="activeBomVersion" label="BOM主版本" width="130" />
+          <el-table-column prop="activeBomVersion" label="BOM 主版本" width="130" />
           <el-table-column label="总成本" width="140">
             <template #default="{ row }">{{ formatAmount(row.totalCost || row.estimatedCost, row.estimatedCostCurrency) }}</template>
           </el-table-column>
@@ -483,6 +483,30 @@ onMounted(async () => {
   font-size: 20px;
 }
 
+.product-summary-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.product-summary-card {
+  min-height: 104px;
+  padding: 14px 16px;
+}
+
+.product-summary-card .metric-card__label {
+  margin-bottom: 8px;
+}
+
+.product-summary-card .metric-card__value {
+  font-size: 18px;
+  line-height: 1.1;
+}
+
+.product-summary-card .metric-card__trend {
+  display: block;
+  margin-top: 6px;
+}
+
 .product-grid {
   grid-template-columns: minmax(320px, 0.85fr) minmax(0, 1.55fr);
 }
@@ -517,24 +541,31 @@ onMounted(async () => {
 }
 
 @media (max-width: 1600px) {
+  .product-summary-grid,
   .lifecycle-grid {
     grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 1200px) {
+  .product-summary-grid,
   .lifecycle-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 960px) {
+  .product-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .product-grid {
     grid-template-columns: 1fr;
   }
 }
 
 @media (max-width: 640px) {
+  .product-summary-grid,
   .lifecycle-grid {
     grid-template-columns: 1fr;
   }

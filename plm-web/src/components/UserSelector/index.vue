@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
-import { mockUsers } from '@/mock/data'
+import { mockUsers } from '@/mock/users'
 
 const props = withDefaults(
   defineProps<{

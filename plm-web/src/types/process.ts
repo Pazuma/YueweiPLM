@@ -40,11 +40,13 @@ export interface ProcessRouteListItem {
   riskLevel: ProcessRiskLevel
   hasExternalOperation: boolean
   hasDifferenceOperation: boolean
+  updatedAt?: string
   targetPath: string
 }
 
 export interface ProcessOperationRecord {
   operationId: number
+  operationCode?: string
   sequenceNo: number
   operationName: string
   operationType: string
@@ -59,6 +61,8 @@ export interface ProcessOperationRecord {
   isExternalOperation: boolean
   isDifferenceOperation: boolean
   changedInCurrentVersion: boolean
+  confirmerName?: string
+  confirmerRole?: string
 }
 
 export interface ProcessConfirmationRecord {
@@ -76,6 +80,7 @@ export interface ProcessGateCheck {
 }
 
 export interface ProcessAttachmentSummary {
+  operationId?: number
   operationName: string
   sopCount: number
   sipCount: number
@@ -83,6 +88,8 @@ export interface ProcessAttachmentSummary {
   qualitySpecCount: number
   status: ProcessAttachmentStatus
   updatedAt: string
+  previewPath?: string
+  canAdd?: boolean
 }
 
 export interface ProcessChangeRecord {
@@ -94,6 +101,8 @@ export interface ProcessChangeRecord {
   leadDayDelta: number
   ownerName: string
   changedAt: string
+  canFinalize?: boolean
+  canApplyChange?: boolean
 }
 
 export interface ProcessImpactLink {
@@ -121,6 +130,8 @@ export interface ProcessRouteDetail {
   differenceOperationCount: number
   inheritedFrom: string | null
   overviewNote: string
+  canFinalize?: boolean
+  canApplyChange?: boolean
   operations: ProcessOperationRecord[]
   confirmations: ProcessConfirmationRecord[]
   gateChecks: ProcessGateCheck[]

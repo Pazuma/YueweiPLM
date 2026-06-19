@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { computed, reactive, resolveDynamicComponent } from 'vue'
+import { computed, reactive, ref, resolveDynamicComponent, watch } from 'vue'
 import { ArrowDown, ArrowLeftBold, ArrowRightBold, ArrowUp } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import { useAppStore } from '@/stores/app'
 import { useUserStore } from '@/stores/user'
-import type { MenuGroup } from '@/types/common'
+import type { MenuGroup, MenuItem } from '@/types/common'
 
 const route = useRoute()
 const router = useRouter()
@@ -18,43 +18,46 @@ const menuGroups: MenuGroup[] = [
     items: [{ path: '/dashboard', title: '首页总览', icon: 'Odometer', permission: 'dashboard:view' }]
   },
   {
-    title: '基础资料管理',
+    title: '基础资料',
     items: [
-      { path: '/files', title: '文件管理', icon: 'FolderOpened', permission: 'product:view' },
-      { path: '/production-orders', title: '测试管理', icon: 'Finished', permission: 'production-order:view' },
-      { path: '/bom', title: 'BOM 管理', icon: 'List', permission: 'product:view' },
-      { path: '/suppliers', title: '供应商管理', icon: 'Van', permission: 'supplier:view' },
+      { path: '/files', title: '文件中心', icon: 'FolderOpened', permission: 'product:view' },
       { path: '/processes', title: '工艺路线', icon: 'Connection', permission: 'process:view' },
+      { path: '/bom', title: 'BOM 管理', icon: 'List', permission: 'product:view' },
+      { path: '/production-orders', title: '测试管理', icon: 'Finished', permission: 'production-order:view' },
+      { path: '/suppliers', title: '供应商管理', icon: 'Van', permission: 'supplier:view' },
       { path: '/inventories', title: '物料库存', icon: 'Box', permission: 'inventory:view' },
       { path: '/orders', title: '需求订单', icon: 'Document', permission: 'order:view' }
     ]
   },
   {
-    title: 'SKU 管理',
-    items: [{ path: '/sku-view', title: 'SKU 视图', icon: 'Tickets', permission: 'product:view' }]
-  },
-  {
     title: '产品管理',
     items: [
-      { path: '/products?lifecycle=initiation', title: '立项中', icon: 'Flag', permission: 'product:view' },
-      { path: '/products?lifecycle=sampling', title: '打样中', icon: 'Promotion', permission: 'product:view' },
-      { path: '/products?lifecycle=tooling', title: '模具阶段', icon: 'Tools', permission: 'product:view' },
-      { path: '/products?lifecycle=semi_finished', title: '半成品', icon: 'Box', permission: 'product:view' },
-      { path: '/products?lifecycle=finished', title: '成品阶段', icon: 'Goods', permission: 'product:view' },
-      { path: '/products?lifecycle=released', title: '已发布', icon: 'CircleCheck', permission: 'product:view' }
+      { path: '/products', title: '产品列表', icon: 'Grid', permission: 'product:view' },
+      { path: '/products?lifecycle=initiation', title: '立项确认', icon: 'Flag', permission: 'product:view' },
+      { path: '/products?lifecycle=design', title: '设计差异', icon: 'EditPen', permission: 'product:view' },
+      { path: '/products?lifecycle=tooling', title: '模具处理', icon: 'Tools', permission: 'product:view' },
+      { path: '/products?lifecycle=sampling', title: '样品签核', icon: 'Promotion', permission: 'product:view' },
+      { path: '/products?lifecycle=process', title: '工艺与 BOM', icon: 'Operation', permission: 'product:view' },
+      { path: '/products?lifecycle=pilot', title: '小批验证', icon: 'Box', permission: 'product:view' },
+      { path: '/products?lifecycle=mx', title: 'MX 验证', icon: 'Ship', permission: 'product:view' },
+      { path: '/products?lifecycle=release', title: '冻结发布', icon: 'CircleCheck', permission: 'product:view' }
     ]
   },
   {
     title: '项目管理',
     items: [
       { path: '/projects?tab=in_progress', title: '进行中', icon: 'Management', permission: 'project:view' },
-      { path: '/projects?tab=completed', title: '已完成', icon: 'Select', permission: 'project:view' },
+      { path: '/projects?tab=archived&archiveView=overview', title: '已归档', icon: 'Select', permission: 'project:view', children: [
+        { path: '/projects?tab=archived&archiveView=overview', title: '已归档', icon: 'Collection', permission: 'project:view' },
+        { path: '/projects?tab=archived&archiveView=product', title: '产品管理', icon: 'Grid', permission: 'project:view' },
+        { path: '/projects?tab=archived&archiveView=sku', title: 'SKU管理', icon: 'Tickets', permission: 'project:view' }
+      ]},
       { path: '/projects?tab=abandoned', title: '已放弃', icon: 'RemoveFilled', permission: 'project:view' }
     ]
   },
   {
-    title: '报表',
-    items: [{ path: '/reports', title: '报表中心', icon: 'DataAnalysis', permission: 'report:view' }]
+    title: '报表中心',
+    items: [{ path: '/reports', title: '报表入口', icon: 'DataAnalysis', permission: 'report:view' }]
   },
   {
     title: '系统管理',
@@ -67,16 +70,6 @@ const menuGroups: MenuGroup[] = [
     ]
   }
 ]
-
-const groupState = reactive<Record<string, boolean>>({
-  工作台: true,
-  基础资料管理: true,
-  'SKU 管理': true,
-  产品管理: true,
-  项目管理: true,
-  报表: false,
-  系统管理: false
-})
 
 const visibleMenus = computed(() =>
   menuGroups
@@ -91,26 +84,85 @@ function normalizePath(path: string) {
   return path.replace(/\/+$/, '')
 }
 
-function navigate(path: string) {
-  router.push(path)
-}
-
 function isActive(path: string) {
   return normalizePath(route.fullPath) === normalizePath(path) || normalizePath(route.path) === normalizePath(path)
 }
 
 function groupHasActiveItem(group: MenuGroup) {
-  return group.items.some((item) => isActive(item.path))
+  return group.items.some((item) => isActive(item.path) || hasActiveChild(item))
 }
+
+const activeGroupTitle = ref('')
+
+function syncActiveGroup() {
+  const matched = visibleMenus.value.find((group) => groupHasActiveItem(group))
+  activeGroupTitle.value = matched?.title || visibleMenus.value[0]?.title || ''
+
+  matched?.items.forEach((item) => {
+    if (hasActiveChild(item)) {
+      subMenuState[item.path] = true
+    }
+  })
+}
+
+watch(
+  () => [route.fullPath, visibleMenus.value.map((group) => group.title).join('|')],
+  () => {
+    syncActiveGroup()
+  },
+  { immediate: true }
+)
 
 function isGroupOpen(group: MenuGroup) {
   if (appStore.sidebarCollapsed) return false
-  return groupState[group.title] ?? true
+  return activeGroupTitle.value === group.title
+}
+
+const subMenuState = reactive<Record<string, boolean>>({})
+
+function isSubMenuOpen(path: string) {
+  return subMenuState[path] ?? false
+}
+
+function toggleSubMenu(path: string) {
+  subMenuState[path] = !subMenuState[path]
+}
+
+function hasActiveChild(item: MenuItem) {
+  if (!item.children?.length) return false
+  return item.children.some((child) => isActive(child.path))
 }
 
 function toggleGroup(title: string) {
-  if (appStore.sidebarCollapsed) return
-  groupState[title] = !groupState[title]
+  if (appStore.sidebarCollapsed) {
+    appStore.setSidebarCollapsed(false)
+    activeGroupTitle.value = title
+    return
+  }
+
+  activeGroupTitle.value = activeGroupTitle.value === title ? '' : title
+}
+
+function handleGroupClick(group: MenuGroup) {
+  const nextOpen = activeGroupTitle.value !== group.title
+  toggleGroup(group.title)
+
+  if (nextOpen && group.items[0]?.path) {
+    navigate(group.items[0].path, group.title)
+  }
+}
+
+function navigate(path: string, groupTitle: string) {
+  activeGroupTitle.value = groupTitle
+  router.push(path)
+}
+
+function handleMenuItemClick(item: MenuItem, groupTitle: string) {
+  if (item.children?.length) {
+    subMenuState[item.path] = true
+  }
+
+  navigate(item.path, groupTitle)
 }
 </script>
 
@@ -125,12 +177,12 @@ function toggleGroup(title: string) {
     </div>
 
     <div class="sidebar__menus">
-      <section v-for="group in visibleMenus" :key="group.title" class="sidebar__group">
+      <section v-for="group in visibleMenus" :key="group.title" class="sidebar__group" :class="{ 'is-active-group': groupHasActiveItem(group) }">
         <button
           class="sidebar__group-trigger"
           :class="{ 'is-open': isGroupOpen(group), 'is-active': groupHasActiveItem(group) }"
           type="button"
-          @click="toggleGroup(group.title)"
+          @click="handleGroupClick(group)"
         >
           <span v-if="!appStore.sidebarCollapsed" class="sidebar__group-label">{{ group.title }}</span>
           <el-icon v-else class="sidebar__group-icon">
@@ -142,17 +194,33 @@ function toggleGroup(title: string) {
         </button>
 
         <div v-if="isGroupOpen(group)" class="sidebar__group-items">
-          <button
-            v-for="item in group.items"
-            :key="item.path"
-            class="sidebar__item"
-            :class="{ 'is-active': isActive(item.path) }"
-            type="button"
-            @click="navigate(item.path)"
-          >
-            <el-icon class="sidebar__item-icon"><component :is="resolveDynamicComponent(item.icon)" /></el-icon>
-            <span v-if="!appStore.sidebarCollapsed">{{ item.title }}</span>
-          </button>
+          <template v-for="item in group.items" :key="item.path">
+            <button
+              class="sidebar__item"
+              :class="{ 'is-active': isActive(item.path) || hasActiveChild(item) }"
+              type="button"
+              @click="handleMenuItemClick(item, group.title)"
+            >
+              <el-icon class="sidebar__item-icon"><component :is="resolveDynamicComponent(item.icon)" /></el-icon>
+              <span v-if="!appStore.sidebarCollapsed">{{ item.title }}</span>
+              <el-icon v-if="item.children?.length && !appStore.sidebarCollapsed" class="sidebar__item-arrow">
+                <component :is="isSubMenuOpen(item.path) ? ArrowUp : ArrowDown" />
+              </el-icon>
+            </button>
+
+            <div v-if="item.children?.length && isSubMenuOpen(item.path) && !appStore.sidebarCollapsed" class="sidebar__sub-items">
+              <button
+                v-for="child in item.children"
+                :key="child.path"
+                class="sidebar__sub-item"
+                :class="{ 'is-active': isActive(child.path) }"
+                type="button"
+                @click="navigate(child.path, group.title)"
+              >
+                <span>{{ child.title }}</span>
+              </button>
+            </div>
+          </template>
         </div>
       </section>
     </div>
@@ -174,9 +242,10 @@ function toggleGroup(title: string) {
   flex-direction: column;
   width: 248px;
   min-width: 248px;
-  padding: 14px 12px;
-  border-right: 1px solid #d8dee9;
-  background: #eef2f6;
+  height: 100%;
+  padding: 14px 10px 12px;
+  border-right: 1px solid rgba(148, 163, 184, 0.16);
+  background: #f3f5f7;
   color: #1f2937;
   transition: width 0.2s ease, min-width 0.2s ease;
 }
@@ -190,7 +259,7 @@ function toggleGroup(title: string) {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 8px 8px 18px;
+  padding: 8px 10px 18px;
 }
 
 .sidebar__logo {
@@ -198,8 +267,8 @@ function toggleGroup(title: string) {
   place-items: center;
   width: 40px;
   height: 40px;
-  border-radius: 8px;
-  background: #dbe7ff;
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.14), rgba(14, 165, 233, 0.12));
   color: #1d4ed8;
   font-weight: 700;
 }
@@ -219,15 +288,21 @@ function toggleGroup(title: string) {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   min-height: 0;
   overflow-y: auto;
+  padding-right: 4px;
 }
 
 .sidebar__group {
-  overflow: hidden;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.62);
+  overflow: visible;
+  border-radius: 0;
+  background: transparent;
+  transition: background 0.2s ease;
+}
+
+.sidebar__group.is-active-group {
+  background: transparent;
 }
 
 .sidebar__group-trigger {
@@ -235,30 +310,33 @@ function toggleGroup(title: string) {
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  padding: 14px 16px;
+  padding: 11px 12px;
   border: 0;
   background: transparent;
-  color: inherit;
+  border-radius: 10px;
+  color: #475569;
   cursor: pointer;
   text-align: left;
+  transition: background 0.2s ease, color 0.2s ease;
 }
 
 .sidebar__group-trigger.is-active,
 .sidebar__group-trigger:hover {
-  background: rgba(255, 255, 255, 0.85);
+  background: rgba(148, 163, 184, 0.1);
+  color: #1f2937;
 }
 
 .sidebar__group-trigger.is-open {
-  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(148, 163, 184, 0.12);
 }
 
 .sidebar__group-label {
-  font-size: 15px;
-  font-weight: 500;
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .sidebar__group-arrow {
-  color: #4b5563;
+  color: #64748b;
 }
 
 .sidebar__group-icon {
@@ -266,7 +344,8 @@ function toggleGroup(title: string) {
 }
 
 .sidebar__group-items {
-  padding: 6px 10px 10px;
+  margin-top: 4px;
+  padding: 2px 0 6px;
 }
 
 .sidebar__item {
@@ -274,32 +353,78 @@ function toggleGroup(title: string) {
   align-items: center;
   gap: 10px;
   width: 100%;
-  margin-top: 6px;
-  padding: 12px 14px;
+  margin-top: 4px;
+  padding: 11px 14px 11px 16px;
   border: 0;
-  border-radius: 6px;
+  border-radius: 10px;
   background: transparent;
-  color: #374151;
+  color: #475569;
   text-align: left;
   cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
 }
 
 .sidebar__item:hover {
-  background: #f8fafc;
+  background: rgba(148, 163, 184, 0.1);
+  color: #1f2937;
 }
 
 .sidebar__item.is-active {
-  background: #e3ebf8;
-  color: #1f2937;
+  position: relative;
+  background: rgba(37, 99, 235, 0.08);
+  color: #1d4ed8;
   font-weight: 600;
+}
+
+.sidebar__item.is-active::before {
+  content: '';
+  position: absolute;
+  left: 6px;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 999px;
+  background: #2563eb;
 }
 
 .sidebar__item-icon {
   color: #64748b;
 }
 
+.sidebar__item-arrow {
+  color: #94a3b8;
+  margin-left: auto;
+}
+
+.sidebar__sub-items {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 4px 0 6px 28px;
+  padding-left: 10px;
+  border-left: 1px solid rgba(148, 163, 184, 0.22);
+}
+
+.sidebar__sub-item {
+  width: 100%;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #64748b;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sidebar__sub-item:hover,
+.sidebar__sub-item.is-active {
+  background: rgba(37, 99, 235, 0.08);
+  color: #1d4ed8;
+  font-weight: 600;
+}
+
 .sidebar__footer {
-  padding-top: 12px;
+  padding-top: 10px;
 }
 
 .sidebar__collapse-trigger {
@@ -308,18 +433,18 @@ function toggleGroup(title: string) {
   justify-content: center;
   gap: 10px;
   width: 100%;
-  padding: 12px 14px;
-  border: 1px solid #d8dee9;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.78);
+  padding: 11px 14px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.56);
   color: #334155;
   cursor: pointer;
   transition: background 0.2s ease, border-color 0.2s ease;
 }
 
 .sidebar__collapse-trigger:hover {
-  background: #ffffff;
-  border-color: #c3cedb;
+  background: rgba(255, 255, 255, 0.88);
+  border-color: rgba(148, 163, 184, 0.3);
 }
 
 .sidebar__collapse-icon {
@@ -333,7 +458,7 @@ function toggleGroup(title: string) {
 .sidebar--collapsed .sidebar__group-trigger {
   justify-content: center;
   padding: 12px 0;
-  border-radius: 8px;
+  border-radius: 10px;
 }
 
 .sidebar--collapsed .sidebar__group-items {

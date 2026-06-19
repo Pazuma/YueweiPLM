@@ -1,7 +1,7 @@
 import { computed, reactive, type Ref } from 'vue'
 import { usePagination } from './usePagination'
 
-export function useTable<T extends Record<string, unknown>>(
+export function useTable<T extends object>(
   sourceRows: Ref<T[]>,
   searchableKeys: Array<keyof T>,
   extraFilter?: (row: T, filters: Record<string, unknown>) => boolean

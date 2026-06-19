@@ -42,6 +42,16 @@ export interface BomCompareRow {
   delta: number
 }
 
+export interface BomCostSummary {
+  materialCost: number
+  processCost: number
+  packageCost: number
+  laborCost: number
+  toolingCost: number
+  lossCost: number
+  totalCost: number
+}
+
 export interface ProductBomItemRow {
   inventoryCode: string
   inventoryName: string
@@ -49,6 +59,25 @@ export interface ProductBomItemRow {
   stockUom: string
   supplierName: string
   unitCost: number
+  changeType?: 'new' | 'replace' | 'inherit' | 'remove'
+}
+
+export type ProductBomItemsByVersion = Record<string, ProductBomItemRow[]>
+
+export interface ProductTimelineNode {
+  nodeKey: string
+  nodeName: string
+  status: 'completed' | 'current' | 'pending'
+  ownerRole: string
+  plannedDate?: string
+  actualDate?: string
+  summary: string
+  nextAction?: string
+  riskNote?: string
+  canAdvance?: boolean
+  canReject?: boolean
+  gateLabel?: string
+  detailLines?: string[]
 }
 
 export interface ProductMaterialCategoryItem {
@@ -63,6 +92,14 @@ export interface ProductMaterialCategory {
   categoryKey: string
   categoryName: string
   items: ProductMaterialCategoryItem[]
+}
+
+export interface ProductToolingSummary {
+  totalCount: number
+  availableCount: number
+  trialCount: number
+  toolingNames: string[]
+  targetPath?: string
 }
 
 export interface ProductSupplierSummary {
@@ -95,8 +132,13 @@ export interface ProductDetailPresentation {
   nextNode: string
   summary: string
   costPanel: ProductCostPanel
+  timeline: ProductTimelineNode[]
   bomCompareRows: BomCompareRow[]
+  bomCostSummary?: BomCostSummary
   bomItems: ProductBomItemRow[]
+  bomItemsByVersion: ProductBomItemsByVersion
+  defaultBomVersion?: string
+  toolingSummary: ProductToolingSummary
   materialCategories: ProductMaterialCategory[]
   suppliers: ProductSupplierSummary[]
   documents: ProductDocumentSummary[]
@@ -111,6 +153,8 @@ export interface FileRecord {
   uploadedAt: string
   versionNo: string
   productId: number
+  stageKey?: string
+  stageLabel?: string
 }
 
 export interface FileProjectGroup {
@@ -120,8 +164,13 @@ export interface FileProjectGroup {
   productId: number
   owner: string
   updatedAt: string
+  productType?: 'product' | 'variant'
   files: FileRecord[]
 }
+
+export type FileDateRange = '7d' | '30d' | '180d'
+
+export type FileProductTypeFilter = 'all' | 'product' | 'variant'
 
 export interface FileSection {
   key: 'product_files' | 'variant_files'
@@ -149,9 +198,14 @@ export interface TestRecordItem {
   note: string
 }
 
+export type InventoryTreeNodeType = 'category' | 'product' | 'product-group' | 'product-model' | 'tooling-group' | 'tooling-leaf'
+
 export interface InventoryTreeNode {
   nodeId: string
   label: string
+  nodeType: InventoryTreeNodeType
+  count?: number
+  groupCode?: string
   children?: InventoryTreeNode[]
 }
 
@@ -162,9 +216,31 @@ export interface InventoryListRow {
   name: string
   spec: string
   stock: string
+  inventoryType: string
+  productName?: string
+  phoneModel?: string
   status: 'available' | 'reserved' | 'consumed' | 'in_use'
   supplierName: string
   updatedAt: string
+  projectDate?: string
+}
+
+export interface InventoryItemCreatePayload {
+  nodeId: string
+  productName?: string
+  phoneModel?: string
+  item_code: string
+  item_name: string
+  item_group: string
+  stock_uom: string
+  custom_specifications?: string
+  custom_external_code?: string
+  custom_short_name?: string
+  custom_mnemonic_code?: string
+  custom_dpci?: string
+  is_stock_item?: 0 | 1
+  is_sales_item?: 0 | 1
+  is_purchase_item?: 0 | 1
 }
 
 export interface BomCenterRow {
@@ -203,15 +279,33 @@ export interface ReportDistributionItem {
   hint: string
 }
 
+export interface ReportMetricDetailItem {
+  itemId: string
+  title: string
+  subtitle: string
+  owner: string
+  currentNode: string
+  durationText: string
+  riskText?: string
+  targetPath: string
+}
+
+export interface ReportMetricItem {
+  key: string
+  label: string
+  value: string
+  hint: string
+  targetPath?: string
+  detailTitle: string
+  detailSummary: string
+  detailItems: ReportMetricDetailItem[]
+}
+
 export interface ReportDetailSection {
   key: string
   title: string
   summary: string
-  metrics: Array<{
-    label: string
-    value: string
-    hint: string
-  }>
+  metrics: ReportMetricItem[]
   alerts: ReportAlertItem[]
   distribution: ReportDistributionItem[]
 }

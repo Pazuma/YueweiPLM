@@ -17,13 +17,15 @@ import Sidebar from './Sidebar.vue'
 <style scoped>
 .layout-shell {
   display: flex;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .layout-shell__main {
   display: flex;
   flex: 1;
   min-width: 0;
+  min-height: 0;
   flex-direction: column;
 }
 </style>

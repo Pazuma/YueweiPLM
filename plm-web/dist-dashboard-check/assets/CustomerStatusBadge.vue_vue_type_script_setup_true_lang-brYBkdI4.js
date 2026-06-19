@@ -1,0 +1,1 @@
+import{_ as s}from"./index.vue_vue_type_script_setup_true_lang-DfFFXQuo.js";import{d as e,o as a,l as o}from"./index-BmGqVCM_.js";const m=e({__name:"CustomerStatusBadge",props:{status:{}},setup(t){return(r,c)=>(a(),o(s,{status:t.status,"object-type":"customer"},null,8,["status"]))}});export{m as _};

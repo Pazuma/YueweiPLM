@@ -106,6 +106,7 @@ export interface MenuItem {
   title: string
   icon: string
   permission: string
+  children?: MenuItem[]
 }
 
 export interface MenuGroup {
@@ -187,9 +188,72 @@ export interface ApprovalTask {
   targetPath?: string
 }
 
+export type ApprovalTemplateStatus = 'draft' | 'active' | 'inactive'
+
+export interface ApprovalTemplateNode {
+  nodeId: number
+  stepNo: number
+  nodeName: string
+  approverRole: string
+  approverUserId?: number
+  approverUserName: string
+  isGate: boolean
+  note: string
+}
+
+export interface ApprovalTemplate {
+  templateId: number
+  templateName: string
+  objectType: 'product' | 'order' | 'process'
+  flowType: string
+  status: ApprovalTemplateStatus
+  description: string
+  updatedAt: string
+  nodes: ApprovalTemplateNode[]
+}
+
 export interface UserOption {
   userId: number
   userName: string
   roleName: string
   department: string
+}
+
+export type SystemRecordStatus = 'active' | 'inactive'
+
+export interface SystemUserItem {
+  userId: number
+  userName: string
+  loginName: string
+  departmentName: string
+  roleNames: string[]
+  status: SystemRecordStatus
+  isSuperAdmin: boolean
+  lastLoginAt: string
+  currentProjectCount: number
+  pendingApprovalCount: number
+  phone?: string
+  email?: string
+  note?: string
+}
+
+export interface SystemRoleItem {
+  roleId: number
+  roleName: string
+  roleCode: string
+  status: SystemRecordStatus
+  memberCount: number
+  description: string
+  dataScopeLabel: string
+  permissions: string[]
+  memberNames: string[]
+}
+
+export interface SystemPermissionGroup {
+  groupKey: string
+  groupName: string
+  options: Array<{
+    label: string
+    value: string
+  }>
 }

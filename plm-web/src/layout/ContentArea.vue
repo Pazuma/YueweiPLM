@@ -7,7 +7,9 @@
 <style scoped>
 .content-area {
   flex: 1;
+  min-height: 0;
   padding: 20px;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 </style>

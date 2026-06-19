@@ -19,6 +19,7 @@ const routeList: ProcessRouteListItem[] = [
     riskLevel: 'medium',
     hasExternalOperation: true,
     hasDifferenceOperation: false,
+    updatedAt: '2026-06-08',
     targetPath: '/products/101'
   },
   {
@@ -39,6 +40,7 @@ const routeList: ProcessRouteListItem[] = [
     riskLevel: 'high',
     hasExternalOperation: true,
     hasDifferenceOperation: true,
+    updatedAt: '2026-06-10',
     targetPath: '/products/102'
   },
   {
@@ -59,11 +61,12 @@ const routeList: ProcessRouteListItem[] = [
     riskLevel: 'low',
     hasExternalOperation: false,
     hasDifferenceOperation: true,
+    updatedAt: '2026-05-27',
     targetPath: '/products/103'
   }
 ]
 
-const routeDetails: Record<number, ProcessRouteDetail> = {
+const routeDetails = {
   501: {
     routeId: 501,
     routeCode: 'PROC-SC30-A',
@@ -719,7 +722,54 @@ const routeDetails: Record<number, ProcessRouteDetail> = {
       { label: '文件中心', summary: '查看已冻结的增量资料。', targetPath: '/files' }
     ]
   }
+} as unknown as Record<number, ProcessRouteDetail>
+
+function resolveOperationConfirmer(detail: ProcessRouteDetail, operation: ProcessRouteDetail['operations'][number]) {
+  const isQualityOperation = operation.operationType.includes('质量') || operation.operationName.includes('检验') || operation.operationName.includes('测试')
+  const isPurchaseOperation = operation.isExternalOperation || Boolean(operation.supplierName)
+
+  if (isQualityOperation) {
+    return {
+      confirmerName: '王质',
+      confirmerRole: '品质确认'
+    }
+  }
+
+  if (isPurchaseOperation) {
+    return {
+      confirmerName: '李采',
+      confirmerRole: '采购确认'
+    }
+  }
+
+  return {
+    confirmerName: detail.owner,
+    confirmerRole: '工程确认'
+  }
 }
+
+Object.values(routeDetails).forEach((detail) => {
+  detail.canFinalize = detail.status !== 'released'
+  detail.canApplyChange = detail.status === 'locked' || detail.status === 'released'
+  detail.operations = detail.operations.map((operation) => ({
+    ...operation,
+    ...resolveOperationConfirmer(detail, operation)
+  }))
+  detail.attachments = detail.attachments.map((attachment) => {
+    const operation = detail.operations.find((item) => item.operationName === attachment.operationName)
+    return {
+      ...attachment,
+      operationId: operation?.operationId,
+      previewPath: `/files?processRouteId=${detail.routeId}&operationId=${operation?.operationId || ''}`,
+      canAdd: true
+    }
+  })
+  detail.changes = detail.changes.map((change) => ({
+    ...change,
+    canFinalize: detail.canFinalize,
+    canApplyChange: detail.canApplyChange
+  }))
+})
 
 export const processCenterData: ProcessCenterSnapshot = {
   metrics: [

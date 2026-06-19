@@ -102,6 +102,10 @@ const foundationProducts: FoundationProductRef[] = [
   }
 ]
 
+function clone<T>(value: T): T {
+  return structuredClone(value)
+}
+
 const productDetailPresentationMap: Record<number, ProductDetailPresentation> = {
   101: {
     productId: 101,
@@ -109,15 +113,15 @@ const productDetailPresentationMap: Record<number, ProductDetailPresentation> = 
     flowLabel: '新产品线',
     currentNode: '红样测试',
     nextNode: '整理生产资料',
-    summary: '按完整新产品线流程推进，当前重点是红样测试收口、BOM 版本确认和生产资料冻结准备。',
+    summary: '当前围绕完整新产品线流程推进，重点收口红样测试、BOM 版本确认和生产资料冻结准备。',
     costPanel: {
       showEstimated: true,
       estimatedTotal: 35,
       estimatedLines: [
         { label: '材料成本', amount: 12.8, note: 'TPU 主材、PC 背板、磁吸组件' },
-        { label: '模具成本', amount: 9.6, note: '注塑模与修模预估分摊' },
+        { label: '模具成本', amount: 9.6, note: '注塑模与修模分摊' },
         { label: '工艺加工', amount: 6.1, note: '喷油、贴磁、组装与全检' },
-        { label: '包装测试', amount: 3.2, note: '彩盒、标签、跌落与耐磨测试' },
+        { label: '包装测试', amount: 3.2, note: '彩盒、标签与跌落测试' },
         { label: '损耗预估', amount: 3.3, note: '试产损耗与波动缓冲' }
       ],
       actualTotal: 32.3,
@@ -129,54 +133,109 @@ const productDetailPresentationMap: Record<number, ProductDetailPresentation> = 
         { label: '研发验证', amount: 3.1, note: '红样与小批验证投入' }
       ]
     },
+    timeline: [
+      {
+        nodeKey: 'project-setup',
+        nodeName: '产品立项',
+        status: 'completed',
+        ownerRole: '项目经理 / 管理层',
+        actualDate: '2026-05-29',
+        summary: '立项说明书、目标机型、成本与风险点已确认。',
+        canAdvance: true,
+        detailLines: ['产品名称、目标机型、预期工艺已录入。', '供应商比价与开发方式已完成初判。']
+      },
+      {
+        nodeKey: 'mold-request',
+        nodeName: '申请开模',
+        status: 'completed',
+        ownerRole: '工程 / 管理层',
+        actualDate: '2026-06-02',
+        summary: '开模前门禁已达标，进入模具制作。',
+        gateLabel: '关键门禁',
+        canAdvance: true,
+        detailLines: ['结构方案明确。', '关键 BOM、关键工艺路径和包装测试要求已确认。']
+      },
+      {
+        nodeKey: 'red-sample-test',
+        nodeName: '红样测试',
+        status: 'current',
+        ownerRole: '品质 / 工程',
+        plannedDate: '2026-06-11',
+        summary: '正在验证跌落、耐磨、酒精与磁吸力等关键指标。',
+        nextAction: '补齐红样测试结论，并确认是否进入生产资料整理。',
+        riskNote: 'LOGO 区域酒精测试曾出现掉漆，需要复测确认。',
+        canAdvance: false,
+        detailLines: ['跌落测试已通过。', '酒精测试复测中。', '磁吸力稳定性仍在验证。']
+      },
+      {
+        nodeKey: 'sop-freeze',
+        nodeName: '整理生产资料',
+        status: 'pending',
+        ownerRole: '工程 / 生产',
+        plannedDate: '2026-06-13',
+        summary: '待红样测试通过后冻结 SOP、SIP 和检验标准。',
+        canAdvance: false
+      },
+      {
+        nodeKey: 'pilot-run',
+        nodeName: '小批量测试',
+        status: 'pending',
+        ownerRole: '生产 / 项目经理',
+        plannedDate: '2026-06-16',
+        summary: '验证物料到位、工序节拍和不良率。',
+        gateLabel: '产线门禁',
+        canAdvance: false
+      }
+    ],
     bomCompareRows: [
       { versionNo: 'A.1', statusLabel: '已归档', materialCost: 27.8, processCost: 6.3, totalCost: 34.1, delta: 0 },
       { versionNo: 'A.2', statusLabel: '已归档', materialCost: 28.6, processCost: 6.8, totalCost: 35.4, delta: 1.3 },
       { versionNo: 'A.3', statusLabel: '当前', materialCost: 26.9, processCost: 5.4, totalCost: 32.3, delta: -3.1 }
     ],
+    bomCostSummary: {
+      materialCost: 26.9,
+      processCost: 5.4,
+      packageCost: 1.4,
+      laborCost: 1.8,
+      toolingCost: 1.9,
+      lossCost: 0.9,
+      totalCost: 38.3
+    },
     bomItems: [
-      { inventoryCode: 'INV-MAT-023', inventoryName: 'TPU 原料 85A', quantity: 1.2, stockUom: 'kg', supplierName: '东莞塑胶 A', unitCost: 25.5 },
-      { inventoryCode: 'INV-MAG-045', inventoryName: 'N52 磁吸组件', quantity: 1, stockUom: 'set', supplierName: '惠州材料 C', unitCost: 3.6 },
-      { inventoryCode: 'INV-PAK-102', inventoryName: '渠道彩盒', quantity: 1, stockUom: 'pcs', supplierName: '深圳包材 D', unitCost: 1.4 }
+      { inventoryCode: 'INV-MAT-023', inventoryName: 'TPU 原料 85A', quantity: 1.2, stockUom: 'kg', supplierName: '东莞塑胶 A', unitCost: 25.5, changeType: 'inherit' },
+      { inventoryCode: 'INV-MAG-045', inventoryName: 'N52 磁吸组件', quantity: 1, stockUom: 'set', supplierName: '惠州材料 C', unitCost: 3.6, changeType: 'inherit' },
+      { inventoryCode: 'INV-PAK-102', inventoryName: '渠道彩盒', quantity: 1, stockUom: 'pcs', supplierName: '深圳包材 D', unitCost: 1.4, changeType: 'replace' }
     ],
-    materialCategories: [
-      {
-        categoryKey: 'raw',
-        categoryName: '原材料',
-        items: [
-          { itemCode: 'INV-MAT-023', itemName: 'TPU 原料 85A', spec: '25kg / 袋', supplierName: '东莞塑胶 A', note: '主体包胶' },
-          { itemCode: 'INV-MAT-045', itemName: 'PC 背板', spec: '0.8mm', supplierName: '深圳板材 B', note: '背板支撑' }
-        ]
-      },
-      {
-        categoryKey: 'component',
-        categoryName: '功能件',
-        items: [
-          { itemCode: 'INV-MAG-045', itemName: 'N52 磁吸组件', spec: '1 set', supplierName: '惠州材料 C', note: '磁吸功能核心件' },
-          { itemCode: 'INV-DEC-010', itemName: '装饰环', spec: '黑钛色', supplierName: '深圳五金 E', note: '提升外观层次' }
-        ]
-      },
-      {
-        categoryKey: 'package',
-        categoryName: '包材',
-        items: [
-          { itemCode: 'INV-PAK-102', itemName: '渠道彩盒', spec: '单盒', supplierName: '深圳包材 D', note: '北美渠道版' },
-          { itemCode: 'INV-PAK-118', itemName: '标签贴纸', spec: '黑白标签', supplierName: '深圳包材 D', note: '版本条码' }
-        ]
-      },
-      {
-        categoryKey: 'tooling',
-        categoryName: '模具治具',
-        items: [
-          { itemCode: 'INV-MOLD-201', itemName: '超队 3.0 注塑模', spec: '1 套', supplierName: '东莞模具 C', note: '试模完成待最终验收' },
-          { itemCode: 'INV-JIG-005', itemName: '热压治具', spec: '1 套', supplierName: '东莞模具 C', note: '用于贴磁定位' }
-        ]
-      }
-    ],
+    bomItemsByVersion: {
+      'A.1': [
+        { inventoryCode: 'INV-MAT-023', inventoryName: 'TPU 原料 85A', quantity: 1.2, stockUom: 'kg', supplierName: '东莞塑胶 A', unitCost: 25.5, changeType: 'inherit' },
+        { inventoryCode: 'INV-MAG-040', inventoryName: 'N48 磁吸组件', quantity: 1, stockUom: 'set', supplierName: '惠州材料 C', unitCost: 4.1, changeType: 'inherit' },
+        { inventoryCode: 'INV-PAK-090', inventoryName: '基础彩盒', quantity: 1, stockUom: 'pcs', supplierName: '深圳包材 D', unitCost: 1.2, changeType: 'inherit' }
+      ],
+      'A.2': [
+        { inventoryCode: 'INV-MAT-023', inventoryName: 'TPU 原料 85A', quantity: 1.2, stockUom: 'kg', supplierName: '东莞塑胶 A', unitCost: 25.5, changeType: 'inherit' },
+        { inventoryCode: 'INV-MAG-045', inventoryName: 'N52 磁吸组件', quantity: 1, stockUom: 'set', supplierName: '惠州材料 C', unitCost: 3.6, changeType: 'replace' },
+        { inventoryCode: 'INV-PAK-090', inventoryName: '基础彩盒', quantity: 1, stockUom: 'pcs', supplierName: '深圳包材 D', unitCost: 1.2, changeType: 'inherit' }
+      ],
+      'A.3': [
+        { inventoryCode: 'INV-MAT-023', inventoryName: 'TPU 原料 85A', quantity: 1.2, stockUom: 'kg', supplierName: '东莞塑胶 A', unitCost: 25.5, changeType: 'inherit' },
+        { inventoryCode: 'INV-MAG-045', inventoryName: 'N52 磁吸组件', quantity: 1, stockUom: 'set', supplierName: '惠州材料 C', unitCost: 3.6, changeType: 'inherit' },
+        { inventoryCode: 'INV-PAK-102', inventoryName: '渠道彩盒', quantity: 1, stockUom: 'pcs', supplierName: '深圳包材 D', unitCost: 1.4, changeType: 'replace' }
+      ]
+    },
+    defaultBomVersion: 'A.3',
+    toolingSummary: {
+      totalCount: 3,
+      availableCount: 2,
+      trialCount: 1,
+      toolingNames: ['超队 3.0 注塑模', '热压治具', '包边治具'],
+      targetPath: '/inventories'
+    },
+    materialCategories: [],
     suppliers: [
-      { supplierName: '东莞塑胶 A', role: '主材供应', statusLabel: '已锁价', note: 'TPU 主材稳定供货' },
-      { supplierName: '惠州材料 C', role: '磁吸组件', statusLabel: '待备选', note: '需要补二供风险预案' },
-      { supplierName: '深圳包材 D', role: '彩盒 / 标签', statusLabel: '已确认', note: '渠道版包装已定稿' }
+      { supplierName: '东莞塑胶 A', role: '主材供应', statusLabel: '已锁价', note: 'TPU 主材供应稳定。' },
+      { supplierName: '惠州材料 C', role: '磁吸组件', statusLabel: '待备选', note: '需要补二供风险预案。' },
+      { supplierName: '深圳包材 D', role: '彩盒 / 标签', statusLabel: '已确认', note: '渠道包装版本已定稿。' }
     ],
     documents: [
       { fileName: 'PRD-CD30 结构图纸 V3.pdf', category: '工程图纸', versionNo: 'V3', updatedAt: '2026-06-01' },
@@ -184,9 +243,9 @@ const productDetailPresentationMap: Record<number, ProductDetailPresentation> = 
       { fileName: 'PRD-CD30 注塑 SOP V1.pdf', category: '生产资料', versionNo: 'V1', updatedAt: '2026-06-08' }
     ],
     qualityRecords: [
-      { testItem: '跌落测试', resultLabel: '通过', owner: '品质部', testedAt: '2026-06-05', note: '边角无裂纹' },
-      { testItem: '酒精测试', resultLabel: '复测中', owner: '品质部', testedAt: '2026-06-08', note: 'LOGO 区域掉漆，已调喷油参数' },
-      { testItem: '磁吸力测试', resultLabel: '进行中', owner: '工程 / 品质', testedAt: '2026-06-09', note: '验证 N52 稳定性' }
+      { testItem: '跌落测试', resultLabel: '通过', owner: '品质部', testedAt: '2026-06-05', note: '边角无裂纹。' },
+      { testItem: '酒精测试', resultLabel: '复测中', owner: '品质部', testedAt: '2026-06-08', note: 'LOGO 区域掉漆，已调整喷油参数。' },
+      { testItem: '磁吸力测试', resultLabel: '进行中', owner: '工程 / 品质', testedAt: '2026-06-09', note: '验证 N52 方案稳定性。' }
     ]
   },
   102: {
@@ -195,63 +254,126 @@ const productDetailPresentationMap: Record<number, ProductDetailPresentation> = 
     flowLabel: '新型号线',
     currentNode: '差异测试验证',
     nextNode: '生产资料整理',
-    summary: '该版本继承父产品的大部分 BOM、工艺与测试框架，当前只管理机型孔位、黑色色母与差异测试结果。',
+    summary: '当前围绕父产品继承边界管理新型号差异，重点处理孔位、黑色色母、改模和差异测试结果。',
     costPanel: {
       showEstimated: false,
       actualTotal: 12.3,
       actualLines: [
-        { label: '改模成本', amount: 4.2, note: 'iPhone18 孔位与摄像头位置修模' },
-        { label: '差异材料', amount: 3.6, note: '黑色 TPU 色母与标签差异件' },
-        { label: '差异工艺', amount: 2.1, note: '注塑参数调整与试产确认' },
-        { label: '差异测试', amount: 1.4, note: '孔位匹配、按键手感、外观验证' },
-        { label: '资料整理', amount: 1.0, note: 'SIP / SOP 增量修改' }
+        { label: '改模成本', amount: 4.2, note: 'iPhone18 孔位与摄像头位置修模。' },
+        { label: '差异材料', amount: 3.6, note: '黑色色母与差异标签。' },
+        { label: '差异工艺', amount: 2.1, note: '注塑参数调整与试产确认。' },
+        { label: '差异测试', amount: 1.4, note: '孔位匹配、按键手感、外观验证。' },
+        { label: '资料整理', amount: 1.0, note: 'SIP / SOP 增量修改。' }
       ]
     },
+    timeline: [
+      {
+        nodeKey: 'variant-setup',
+        nodeName: '新型号需求确认',
+        status: 'completed',
+        ownerRole: '项目经理',
+        actualDate: '2026-06-02',
+        summary: '确认需求来源为客户新增 iPhone18 黑色版本。',
+        canAdvance: true,
+        detailLines: ['无需完整立项说明书。', '工艺、BOM 与测试框架默认继承父产品。']
+      },
+      {
+        nodeKey: 'sub-product',
+        nodeName: '子版本建立',
+        status: 'completed',
+        ownerRole: '工程',
+        actualDate: '2026-06-03',
+        summary: '已在超队 3.0 下创建子 Product，版本从 A 开始。',
+        gateLabel: '扩展入口',
+        canAdvance: true
+      },
+      {
+        nodeKey: 'mold-branch',
+        nodeName: '改模申请',
+        status: 'completed',
+        ownerRole: '模具工程师',
+        actualDate: '2026-06-04',
+        summary: '确认走改模分支，不需要新开整套模具。',
+        gateLabel: '模具分支',
+        canAdvance: true,
+        detailLines: ['已有模具增加 iPhone18 穴位。', '周期短于全新开模。']
+      },
+      {
+        nodeKey: 'variant-test',
+        nodeName: '差异测试验证',
+        status: 'current',
+        ownerRole: '品质 / 工程',
+        plannedDate: '2026-06-10',
+        summary: '当前只验证变化部分，不跑完整测试套件。',
+        nextAction: '补齐磁吸力与按键手感测试，确认是否可进入资料整理。',
+        riskNote: '磁吸力仍偏弱，需要继续验证色母和结构公差影响。',
+        canAdvance: false,
+        detailLines: ['孔位匹配已通过。', '外观确认已通过。', '磁吸力测试未通过。']
+      },
+      {
+        nodeKey: 'variant-docs',
+        nodeName: '生产资料整理',
+        status: 'pending',
+        ownerRole: '工程 / 生产',
+        plannedDate: '2026-06-12',
+        summary: '基于父产品 SIP / SOP 做增量修改。',
+        canAdvance: false
+      },
+      {
+        nodeKey: 'variant-freeze',
+        nodeName: '版本冻结',
+        status: 'pending',
+        ownerRole: '品质主管 / 管理层',
+        plannedDate: '2026-06-14',
+        summary: '锁定该型号 BOM、工艺和差异图纸。',
+        gateLabel: '冻结门禁',
+        canAdvance: false
+      }
+    ],
     bomCompareRows: [
       { versionNo: 'A.1', statusLabel: '已归档', materialCost: 8.9, processCost: 3.1, totalCost: 12.0, delta: 0 },
       { versionNo: 'A.2', statusLabel: '当前', materialCost: 9.2, processCost: 3.1, totalCost: 12.3, delta: 0.3 }
     ],
+    bomCostSummary: {
+      materialCost: 9.2,
+      processCost: 3.1,
+      packageCost: 0.6,
+      laborCost: 0.9,
+      toolingCost: 1.4,
+      lossCost: 0.2,
+      totalCost: 15.4
+    },
     bomItems: [
-      { inventoryCode: 'INV-MAT-067', inventoryName: '黑色色母', quantity: 0.1, stockUom: 'kg', supplierName: '东莞塑胶 A', unitCost: 18.2 },
-      { inventoryCode: 'INV-ACC-118', inventoryName: 'iPhone18 孔位治具', quantity: 1, stockUom: 'set', supplierName: '东莞模具 C', unitCost: 1.8 },
-      { inventoryCode: 'INV-PAK-156', inventoryName: '黑色标签贴纸', quantity: 1, stockUom: 'pcs', supplierName: '深圳包材 D', unitCost: 0.6 }
+      { inventoryCode: 'INV-MAT-067', inventoryName: '黑色色母', quantity: 0.1, stockUom: 'kg', supplierName: '东莞塑胶 A', unitCost: 18.2, changeType: 'new' },
+      { inventoryCode: 'INV-ACC-118', inventoryName: 'iPhone18 孔位治具', quantity: 1, stockUom: 'set', supplierName: '东莞模具 C', unitCost: 1.8, changeType: 'new' },
+      { inventoryCode: 'INV-PAK-156', inventoryName: '黑色标签贴纸', quantity: 1, stockUom: 'pcs', supplierName: '深圳包材 D', unitCost: 0.6, changeType: 'replace' }
     ],
-    materialCategories: [
-      {
-        categoryKey: 'raw',
-        categoryName: '原材料',
-        items: [
-          { itemCode: 'INV-MAT-067', itemName: '黑色色母', spec: '5kg / 箱', supplierName: '东莞塑胶 A', note: '仅此版本新增' },
-          { itemCode: 'INV-MAT-023', itemName: 'TPU 原料 85A', spec: '25kg / 袋', supplierName: '东莞塑胶 A', note: '沿用父产品' }
-        ]
-      },
-      {
-        categoryKey: 'component',
-        categoryName: '功能件',
-        items: [
-          { itemCode: 'INV-MAG-045', itemName: 'N52 磁吸组件', spec: '1 set', supplierName: '惠州材料 C', note: '沿用父产品' },
-          { itemCode: 'INV-ACC-118', itemName: 'iPhone18 孔位治具', spec: '1 set', supplierName: '东莞模具 C', note: '用于差异验证' }
-        ]
-      },
-      {
-        categoryKey: 'package',
-        categoryName: '包材',
-        items: [
-          { itemCode: 'INV-PAK-156', itemName: '黑色标签贴纸', spec: '单枚', supplierName: '深圳包材 D', note: '版本差异标签' }
-        ]
-      },
-      {
-        categoryKey: 'tooling',
-        categoryName: '模具治具',
-        items: [
-          { itemCode: 'INV-MOLD-201', itemName: '父产品注塑模', spec: '沿用', supplierName: '东莞模具 C', note: '本次仅改模' }
-        ]
-      }
-    ],
+    bomItemsByVersion: {
+      'A.1': [
+        { inventoryCode: 'INV-MAT-023', inventoryName: 'TPU 原料 85A', quantity: 1.2, stockUom: 'kg', supplierName: '东莞塑胶 A', unitCost: 25.5, changeType: 'inherit' },
+        { inventoryCode: 'INV-MAG-045', inventoryName: 'N52 磁吸组件', quantity: 1, stockUom: 'set', supplierName: '惠州材料 C', unitCost: 3.6, changeType: 'inherit' },
+        { inventoryCode: 'INV-PAK-118', inventoryName: '标签贴纸', quantity: 1, stockUom: 'pcs', supplierName: '深圳包材 D', unitCost: 0.5, changeType: 'inherit' }
+      ],
+      'A.2': [
+        { inventoryCode: 'INV-MAT-067', inventoryName: '黑色色母', quantity: 0.1, stockUom: 'kg', supplierName: '东莞塑胶 A', unitCost: 18.2, changeType: 'new' },
+        { inventoryCode: 'INV-MAG-045', inventoryName: 'N52 磁吸组件', quantity: 1, stockUom: 'set', supplierName: '惠州材料 C', unitCost: 3.6, changeType: 'inherit' },
+        { inventoryCode: 'INV-ACC-118', inventoryName: 'iPhone18 孔位治具', quantity: 1, stockUom: 'set', supplierName: '东莞模具 C', unitCost: 1.8, changeType: 'new' },
+        { inventoryCode: 'INV-PAK-156', inventoryName: '黑色标签贴纸', quantity: 1, stockUom: 'pcs', supplierName: '深圳包材 D', unitCost: 0.6, changeType: 'replace' }
+      ]
+    },
+    defaultBomVersion: 'A.2',
+    toolingSummary: {
+      totalCount: 1,
+      availableCount: 0,
+      trialCount: 1,
+      toolingNames: ['iPhone18 改模注塑模'],
+      targetPath: '/inventories'
+    },
+    materialCategories: [],
     suppliers: [
-      { supplierName: '东莞塑胶 A', role: '色母 / TPU', statusLabel: '待确认', note: '黑色色母报价已回签，需补批次验证' },
-      { supplierName: '东莞模具 C', role: '改模 / 治具', statusLabel: '进行中', note: '差异孔位改模中' },
-      { supplierName: '深圳包材 D', role: '标签贴纸', statusLabel: '已确认', note: '渠道差异标签已定稿' }
+      { supplierName: '东莞塑胶 A', role: '色母 / TPU', statusLabel: '待确认', note: '黑色色母报价已回复，待补批次验证。' },
+      { supplierName: '东莞模具 C', role: '改模 / 治具', statusLabel: '进行中', note: '差异孔位改模中。' },
+      { supplierName: '深圳包材 D', role: '标签贴纸', statusLabel: '已确认', note: '渠道差异标签已定稿。' }
     ],
     documents: [
       { fileName: 'PRD-CD30-IP18 孔位差异图.pdf', category: '差异图纸', versionNo: 'A.2', updatedAt: '2026-06-03' },
@@ -259,9 +381,9 @@ const productDetailPresentationMap: Record<number, ProductDetailPresentation> = 
       { fileName: 'PRD-CD30-IP18 差异测试记录.xlsx', category: '测试资料', versionNo: 'A.1', updatedAt: '2026-06-09' }
     ],
     qualityRecords: [
-      { testItem: '孔位匹配', resultLabel: '通过', owner: '工程部', testedAt: '2026-06-08', note: '摄像头与按键位置正常' },
-      { testItem: '外观确认', resultLabel: '通过', owner: '项目部', testedAt: '2026-06-09', note: '客户确认黑色色差可接受' },
-      { testItem: '磁吸力', resultLabel: '不通过', owner: '品质部', testedAt: '2026-06-09', note: '吸力偏弱，需继续验证' }
+      { testItem: '孔位匹配', resultLabel: '通过', owner: '工程部', testedAt: '2026-06-08', note: '按键与摄像头位置正常。' },
+      { testItem: '外观确认', resultLabel: '通过', owner: '项目部', testedAt: '2026-06-08', note: '黑色外观已确认。' },
+      { testItem: '磁吸力', resultLabel: '不通过', owner: '品质部', testedAt: '2026-06-09', note: '吸力偏弱，需要继续验证。' }
     ]
   },
   104: {
@@ -269,71 +391,110 @@ const productDetailPresentationMap: Record<number, ProductDetailPresentation> = 
     title: '亮甲 3.0 镜面手机壳',
     flowLabel: '新产品线',
     currentNode: '正式发布',
-    nextNode: '历史追溯',
-    summary: '该产品线已完成发布，当前页面用于复盘 BOM 成本版本、冻结资料与供应商复用情况。',
+    nextNode: '版本追溯',
+    summary: '该产品线已发布，当前页面主要用于回溯版本、资料冻结结果和供应商复用情况。',
     costPanel: {
       showEstimated: true,
       estimatedTotal: 36.2,
       estimatedLines: [
-        { label: '材料成本', amount: 14.1, note: '镜面片、TPU、装饰件' },
-        { label: '模具成本', amount: 8.8, note: '贴合相关治具与模具' },
-        { label: '工艺加工', amount: 6.9, note: '贴合、喷涂与全检' },
-        { label: '包装测试', amount: 3.1, note: '零售包装与渠道测试' },
-        { label: '损耗预估', amount: 3.3, note: '良率与返工缓冲' }
+        { label: '材料成本', amount: 13.4, note: '镜面片、TPU 主材与装饰件。' },
+        { label: '模具成本', amount: 8.8, note: '贴合相关治具与模具。' },
+        { label: '工艺加工', amount: 7.3, note: '镜面贴合、注塑与外观处理。' },
+        { label: '包装测试', amount: 3.1, note: '零售包装与渠道测试。' },
+        { label: '损耗预估', amount: 3.6, note: '试产损耗与备料波动。' }
       ],
       actualTotal: 33.5,
       actualLines: [
-        { label: '材料成本', amount: 13.6, note: '镜面片降价后回落' },
-        { label: '模具成本', amount: 7.9, note: '模具稳定后返修成本下降' },
-        { label: '工艺加工', amount: 6.1, note: '贴合参数收敛' },
-        { label: '包装测试', amount: 2.9, note: '资料一次性通过' },
-        { label: '研发验证', amount: 3.0, note: '黄样与 MX 验证投入' }
+        { label: '材料成本', amount: 12.9, note: '镜面片采购价格低于预估。' },
+        { label: '模具成本', amount: 7.9, note: '模具稳定后返修成本下降。' },
+        { label: '工艺加工', amount: 6.7, note: '贴合良率高于目标。' },
+        { label: '包装测试', amount: 2.9, note: '零售包装一次通过。' },
+        { label: '验证投入', amount: 3.1, note: '量产前验证收口。' }
       ]
     },
+    timeline: [
+      {
+        nodeKey: 'setup',
+        nodeName: '产品立项',
+        status: 'completed',
+        ownerRole: '项目经理 / 管理层',
+        actualDate: '2026-04-18',
+        summary: '镜面产品线已通过立项。',
+        canAdvance: true
+      },
+      {
+        nodeKey: 'sample-signoff',
+        nodeName: '签样确认',
+        status: 'completed',
+        ownerRole: '项目经理 / 客户',
+        actualDate: '2026-05-06',
+        summary: '产品外观和样品版本已冻结。',
+        gateLabel: '重要门禁',
+        canAdvance: true
+      },
+      {
+        nodeKey: 'mx-pilot',
+        nodeName: 'MX 小批量测试',
+        status: 'completed',
+        ownerRole: '生产 / 项目经理',
+        actualDate: '2026-05-28',
+        summary: '墨西哥端小批量验证已跑通。',
+        canAdvance: true
+      },
+      {
+        nodeKey: 'release',
+        nodeName: '正式发布',
+        status: 'current',
+        ownerRole: '管理层',
+        actualDate: '2026-05-29',
+        summary: '当前已正式发布，详情页用于回溯版本和资料。',
+        nextAction: '根据历史版本与资料冻结记录，支持后续型号扩展复用。',
+        canAdvance: true
+      }
+    ],
     bomCompareRows: [
       { versionNo: 'A.4', statusLabel: '已归档', materialCost: 28.8, processCost: 6.0, totalCost: 34.8, delta: 0 },
       { versionNo: 'B.1', statusLabel: '当前', materialCost: 27.4, processCost: 6.1, totalCost: 33.5, delta: -1.3 }
     ],
+    bomCostSummary: {
+      materialCost: 27.4,
+      processCost: 6.1,
+      packageCost: 1.9,
+      laborCost: 1.6,
+      toolingCost: 2.3,
+      lossCost: 0.8,
+      totalCost: 40.1
+    },
     bomItems: [
-      { inventoryCode: 'INV-MAT-081', inventoryName: '镜面片', quantity: 1, stockUom: 'pcs', supplierName: '深圳板材 B', unitCost: 6.8 },
-      { inventoryCode: 'INV-MAT-024', inventoryName: 'TPU 原料 90A', quantity: 1.1, stockUom: 'kg', supplierName: '东莞塑胶 A', unitCost: 24.6 },
-      { inventoryCode: 'INV-PAK-188', inventoryName: '零售吊卡包装', quantity: 1, stockUom: 'pcs', supplierName: '深圳包材 D', unitCost: 1.9 }
+      { inventoryCode: 'INV-MAT-081', inventoryName: '镜面片', quantity: 1, stockUom: 'pcs', supplierName: '深圳板材 B', unitCost: 6.8, changeType: 'inherit' },
+      { inventoryCode: 'INV-MAT-024', inventoryName: 'TPU 原料 90A', quantity: 1.1, stockUom: 'kg', supplierName: '东莞塑胶 A', unitCost: 24.6, changeType: 'inherit' },
+      { inventoryCode: 'INV-PAK-188', inventoryName: '零售吊卡包装', quantity: 1, stockUom: 'pcs', supplierName: '深圳包材 D', unitCost: 1.9, changeType: 'replace' }
     ],
-    materialCategories: [
-      {
-        categoryKey: 'raw',
-        categoryName: '原材料',
-        items: [
-          { itemCode: 'INV-MAT-081', itemName: '镜面片', spec: '高亮镜面', supplierName: '深圳板材 B', note: '核心外观件' },
-          { itemCode: 'INV-MAT-024', itemName: 'TPU 原料 90A', spec: '25kg / 袋', supplierName: '东莞塑胶 A', note: '主体包胶' }
-        ]
-      },
-      {
-        categoryKey: 'component',
-        categoryName: '功能件',
-        items: [
-          { itemCode: 'INV-DEC-022', itemName: '装饰边环', spec: '香槟金', supplierName: '深圳五金 E', note: '提升外观质感' }
-        ]
-      },
-      {
-        categoryKey: 'package',
-        categoryName: '包材',
-        items: [
-          { itemCode: 'INV-PAK-188', itemName: '零售吊卡包装', spec: '单套', supplierName: '深圳包材 D', note: '零售渠道' }
-        ]
-      },
-      {
-        categoryKey: 'tooling',
-        categoryName: '模具治具',
-        items: [
-          { itemCode: 'INV-JIG-011', itemName: '镜面贴合治具', spec: '1 套', supplierName: '东莞模具 C', note: '贴合工艺专用' }
-        ]
-      }
-    ],
+    bomItemsByVersion: {
+      'A.4': [
+        { inventoryCode: 'INV-MAT-081', inventoryName: '镜面片', quantity: 1, stockUom: 'pcs', supplierName: '深圳板材 B', unitCost: 7.1, changeType: 'inherit' },
+        { inventoryCode: 'INV-MAT-024', inventoryName: 'TPU 原料 90A', quantity: 1.1, stockUom: 'kg', supplierName: '东莞塑胶 A', unitCost: 24.6, changeType: 'inherit' },
+        { inventoryCode: 'INV-PAK-166', inventoryName: '标准包装', quantity: 1, stockUom: 'pcs', supplierName: '深圳包材 D', unitCost: 1.7, changeType: 'inherit' }
+      ],
+      'B.1': [
+        { inventoryCode: 'INV-MAT-081', inventoryName: '镜面片', quantity: 1, stockUom: 'pcs', supplierName: '深圳板材 B', unitCost: 6.8, changeType: 'replace' },
+        { inventoryCode: 'INV-MAT-024', inventoryName: 'TPU 原料 90A', quantity: 1.1, stockUom: 'kg', supplierName: '东莞塑胶 A', unitCost: 24.6, changeType: 'inherit' },
+        { inventoryCode: 'INV-PAK-188', inventoryName: '零售吊卡包装', quantity: 1, stockUom: 'pcs', supplierName: '深圳包材 D', unitCost: 1.9, changeType: 'replace' }
+      ]
+    },
+    defaultBomVersion: 'B.1',
+    toolingSummary: {
+      totalCount: 2,
+      availableCount: 2,
+      trialCount: 0,
+      toolingNames: ['亮甲 3.0 注塑模', '镜面贴合治具'],
+      targetPath: '/inventories'
+    },
+    materialCategories: [],
     suppliers: [
-      { supplierName: '深圳板材 B', role: '镜面外观件', statusLabel: '稳定合作', note: '镜面片已转量产供应' },
-      { supplierName: '东莞塑胶 A', role: 'TPU 主材', statusLabel: '稳定合作', note: '月结 45 天' },
-      { supplierName: '深圳包材 D', role: '零售包装', statusLabel: '已冻结', note: '包装版本可直接复用' }
+      { supplierName: '深圳板材 B', role: '镜面外观件', statusLabel: '稳定合作', note: '镜面片已转量产供应。' },
+      { supplierName: '东莞塑胶 A', role: 'TPU 主材', statusLabel: '稳定合作', note: '月结 45 天。' },
+      { supplierName: '深圳包材 D', role: '零售包装', statusLabel: '已冻结', note: '包装版本可直接复用。' }
     ],
     documents: [
       { fileName: 'PRD-LJ30 外观确认稿 V2.pdf', category: '设计稿件', versionNo: 'V2', updatedAt: '2026-05-10' },
@@ -341,9 +502,9 @@ const productDetailPresentationMap: Record<number, ProductDetailPresentation> = 
       { fileName: 'PRD-LJ30 黄样确认记录.pdf', category: '样品资料', versionNo: 'B.1', updatedAt: '2026-05-25' }
     ],
     qualityRecords: [
-      { testItem: '百格测试', resultLabel: '通过', owner: '品质部', testedAt: '2026-05-21', note: '镜面层附着力合格' },
-      { testItem: '跌落测试', resultLabel: '通过', owner: '品质部', testedAt: '2026-05-20', note: '边框无开裂' },
-      { testItem: 'MX 小批验证', resultLabel: '通过', owner: '项目部', testedAt: '2026-05-28', note: '墨西哥端产线已跑通' }
+      { testItem: '百格测试', resultLabel: '通过', owner: '品质部', testedAt: '2026-05-21', note: '镜面层附着力合格。' },
+      { testItem: '跌落测试', resultLabel: '通过', owner: '品质部', testedAt: '2026-05-20', note: '边框无开裂。' },
+      { testItem: 'MX 小批验证', resultLabel: '通过', owner: '项目部', testedAt: '2026-05-28', note: '墨西哥端产线已跑通。' }
     ]
   }
 }
@@ -352,7 +513,7 @@ const fileSections: FileSection[] = [
   {
     key: 'product_files',
     title: '产品文件',
-    description: '新产品线的图纸、SOP、测试计划和量产资料，按产品线归档。',
+    description: '新产品线图纸、SOP、测试计划和量产资料按产品线归档。',
     groups: [
       {
         groupId: 'product-101',
@@ -361,10 +522,11 @@ const fileSections: FileSection[] = [
         productId: 101,
         owner: '张敏',
         updatedAt: '2026-06-08',
+        productType: 'product',
         files: [
-          { fileId: 'f-101-1', fileName: 'PRD-CD30 结构图纸 V3.pdf', category: '工程图纸', owner: '工程部', uploadedAt: '2026-06-01', versionNo: 'V3', productId: 101 },
-          { fileId: 'f-101-2', fileName: 'PRD-CD30 红样测试计划.xlsx', category: '测试资料', owner: '品质部', uploadedAt: '2026-06-05', versionNo: 'A.1', productId: 101 },
-          { fileId: 'f-101-3', fileName: 'PRD-CD30 注塑 SOP V1.pdf', category: '生产资料', owner: '工程部', uploadedAt: '2026-06-08', versionNo: 'V1', productId: 101 }
+          { fileId: 'f-101-1', fileName: 'PRD-CD30 结构图纸 V3.pdf', category: '工程图纸', owner: '工程部', uploadedAt: '2026-06-01', versionNo: 'V3', productId: 101, stageKey: 'engineering', stageLabel: '工程图纸' },
+          { fileId: 'f-101-2', fileName: 'PRD-CD30 红样测试计划.xlsx', category: '测试资料', owner: '品质部', uploadedAt: '2026-06-05', versionNo: 'A.1', productId: 101, stageKey: 'testing', stageLabel: '测试资料' },
+          { fileId: 'f-101-3', fileName: 'PRD-CD30 注塑 SOP V1.pdf', category: '生产资料', owner: '工程部', uploadedAt: '2026-06-08', versionNo: 'V1', productId: 101, stageKey: 'production', stageLabel: '生产资料' }
         ]
       }
     ]
@@ -381,10 +543,11 @@ const fileSections: FileSection[] = [
         productId: 102,
         owner: '刘浩',
         updatedAt: '2026-06-09',
+        productType: 'variant',
         files: [
-          { fileId: 'f-102-1', fileName: 'PRD-CD30-IP18 孔位差异图.pdf', category: '差异图纸', owner: '工程部', uploadedAt: '2026-06-03', versionNo: 'A.2', productId: 102 },
-          { fileId: 'f-102-2', fileName: 'PRD-CD30-IP18 黑色外观确认.pdf', category: '客户确认件', owner: '销售部', uploadedAt: '2026-06-06', versionNo: 'A.1', productId: 102 },
-          { fileId: 'f-102-3', fileName: 'PRD-CD30-IP18 差异测试记录.xlsx', category: '测试资料', owner: '品质部', uploadedAt: '2026-06-09', versionNo: 'A.1', productId: 102 }
+          { fileId: 'f-102-1', fileName: 'PRD-CD30-IP18 孔位差异图.pdf', category: '差异图纸', owner: '工程部', uploadedAt: '2026-06-03', versionNo: 'A.2', productId: 102, stageKey: 'variant', stageLabel: '差异资料' },
+          { fileId: 'f-102-2', fileName: 'PRD-CD30-IP18 黑色外观确认.pdf', category: '客户确认件', owner: '销售部', uploadedAt: '2026-06-06', versionNo: 'A.1', productId: 102, stageKey: 'customer_confirm', stageLabel: '客户确认件' },
+          { fileId: 'f-102-3', fileName: 'PRD-CD30-IP18 差异测试记录.xlsx', category: '测试资料', owner: '品质部', uploadedAt: '2026-06-09', versionNo: 'A.1', productId: 102, stageKey: 'testing', stageLabel: '测试资料' }
         ]
       }
     ]
@@ -399,55 +562,168 @@ const testCategories: TestCategoryItem[] = [
 ]
 
 const testRecords: TestRecordItem[] = [
-  { recordId: 'tr-001', productId: 101, productName: '超队 3.0 磁吸手机壳', testCategory: '跌落测试', result: '通过', owner: '品质部', testedAt: '2026-06-05', note: '边角无裂纹' },
-  { recordId: 'tr-002', productId: 101, productName: '超队 3.0 磁吸手机壳', testCategory: '酒精测试', result: '复测中', owner: '品质部', testedAt: '2026-06-08', note: 'LOGO 区域掉漆，已调参数' },
-  { recordId: 'tr-003', productId: 102, productName: '超队 3.0 iPhone18 黑色', testCategory: '孔位匹配', result: '通过', owner: '工程部', testedAt: '2026-06-08', note: '按键与摄像头位置正常' }
+  { recordId: 'tr-001', productId: 101, productName: '超队 3.0 磁吸手机壳', testCategory: '跌落测试', result: '通过', owner: '品质部', testedAt: '2026-06-05', note: '边角无裂纹。' },
+  { recordId: 'tr-002', productId: 101, productName: '超队 3.0 磁吸手机壳', testCategory: '酒精测试', result: '复测中', owner: '品质部', testedAt: '2026-06-08', note: 'LOGO 区域掉漆，已调整参数。' },
+  { recordId: 'tr-003', productId: 102, productName: '超队 3.0 iPhone18 黑色', testCategory: '孔位匹配', result: '通过', owner: '工程部', testedAt: '2026-06-08', note: '按键与摄像头位置正常。' }
 ]
 
 const inventoryTree: InventoryTreeNode[] = [
   {
+    nodeId: 'semi-finished',
+    label: '半成品组',
+    nodeType: 'category',
+    count: 2,
+    children: [
+      {
+        nodeId: 'semi-product-cd30',
+        label: 'NHC 超队 3.0',
+        nodeType: 'product',
+        groupCode: 'NHC',
+        count: 2,
+        children: [
+          {
+            nodeId: 'semi-group-cd30-inkjet',
+            label: 'NHC01 超队 3.0 喷墨',
+            nodeType: 'product-group',
+            groupCode: 'NHC01',
+            count: 1,
+            children: [
+              {
+                nodeId: 'semi-model-cd30-inkjet-ip18',
+                label: 'NHC011111 超队 3.0 喷墨 iPhone18',
+                nodeType: 'product-model',
+                groupCode: 'NHC011111',
+                count: 1
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
     nodeId: 'raw',
     label: '原材料',
+    nodeType: 'category',
+    count: 4,
     children: [
-      { nodeId: 'raw-tpu', label: 'TPU' },
-      { nodeId: 'raw-pc', label: 'PC' },
-      { nodeId: 'raw-color', label: '色母' }
+      { nodeId: 'raw-tpu', label: 'TPU', nodeType: 'category', count: 2 },
+      { nodeId: 'raw-pc', label: 'PC', nodeType: 'category', count: 1 },
+      { nodeId: 'raw-color', label: '色母', nodeType: 'category', count: 1 }
     ]
   },
   {
     nodeId: 'component',
     label: '功能件',
+    nodeType: 'category',
+    count: 3,
     children: [
-      { nodeId: 'component-magnet', label: '磁吸组件' },
-      { nodeId: 'component-deco', label: '装饰件' }
+      { nodeId: 'component-magnet', label: '磁吸组件', nodeType: 'category', count: 1 },
+      { nodeId: 'component-deco', label: '装饰件', nodeType: 'category', count: 1 },
+      { nodeId: 'component-functional', label: '结构辅件', nodeType: 'category', count: 1 }
     ]
   },
   {
     nodeId: 'package',
     label: '包材',
+    nodeType: 'category',
+    count: 3,
     children: [
-      { nodeId: 'package-box', label: '彩盒' },
-      { nodeId: 'package-inlay', label: '内托' },
-      { nodeId: 'package-label', label: '标签' }
+      { nodeId: 'package-box', label: '彩盒', nodeType: 'category', count: 1 },
+      { nodeId: 'package-inlay', label: '内托', nodeType: 'category', count: 1 },
+      { nodeId: 'package-label', label: '标签', nodeType: 'category', count: 1 }
     ]
   },
   {
     nodeId: 'tooling',
     label: '模具治具',
+    nodeType: 'category',
+    count: 6,
     children: [
-      { nodeId: 'tooling-mold', label: '模具' },
-      { nodeId: 'tooling-jig', label: '治具' }
+      {
+        nodeId: 'tooling-product-cd30',
+        label: 'MHC 超队 3.0',
+        nodeType: 'product',
+        groupCode: 'MHC',
+        count: 4,
+        children: [
+          {
+            nodeId: 'tooling-group-cd30-mold',
+            label: 'MHC01 超队 3.0 注塑模',
+            nodeType: 'tooling-group',
+            groupCode: 'MHC01',
+            count: 2,
+            children: [
+              {
+                nodeId: 'tooling-leaf-cd30-ip18-mold',
+                label: 'MHC011111 超队 3.0 iPhone18 注塑模',
+                nodeType: 'tooling-leaf',
+                groupCode: 'MHC011111',
+                count: 1
+              }
+            ]
+          },
+          {
+            nodeId: 'tooling-group-cd30-hotpress',
+            label: 'MHC02 超队 3.0 热压治具',
+            nodeType: 'tooling-group',
+            groupCode: 'MHC02',
+            count: 1
+          },
+          {
+            nodeId: 'tooling-group-cd30-edge',
+            label: 'MHC03 超队 3.0 包边治具',
+            nodeType: 'tooling-group',
+            groupCode: 'MHC03',
+            count: 1
+          }
+        ]
+      },
+      {
+        nodeId: 'tooling-product-lj30',
+        label: 'MHC 亮甲 3.0',
+        nodeType: 'product',
+        groupCode: 'MHC',
+        count: 2,
+        children: [
+          {
+            nodeId: 'tooling-group-lj30-mold',
+            label: 'MHC04 亮甲 3.0 注塑模',
+            nodeType: 'tooling-group',
+            groupCode: 'MHC04',
+            count: 1
+          },
+          {
+            nodeId: 'tooling-group-lj30-mirror',
+            label: 'MHC05 亮甲 3.0 镜面贴合治具',
+            nodeType: 'tooling-group',
+            groupCode: 'MHC05',
+            count: 1
+          }
+        ]
+      }
     ]
   }
 ]
 
 const inventoryItems: InventoryListRow[] = [
-  { itemId: 'inv-001', nodeId: 'raw-tpu', code: 'INV-MAT-023', name: 'TPU 原料 85A', spec: '25kg / 袋', stock: '500kg', status: 'available', supplierName: '东莞塑胶 A', updatedAt: '2026-06-08' },
-  { itemId: 'inv-002', nodeId: 'raw-pc', code: 'INV-MAT-045', name: 'PC 背板', spec: '0.8mm', stock: '320pcs', status: 'reserved', supplierName: '深圳板材 B', updatedAt: '2026-06-07' },
-  { itemId: 'inv-003', nodeId: 'raw-color', code: 'INV-MAT-067', name: '黑色色母', spec: '5kg / 箱', stock: '20kg', status: 'available', supplierName: '东莞塑胶 A', updatedAt: '2026-06-09' },
-  { itemId: 'inv-004', nodeId: 'component-magnet', code: 'INV-MAG-045', name: 'N52 磁吸组件', spec: '1 set', stock: '200set', status: 'reserved', supplierName: '惠州材料 C', updatedAt: '2026-06-08' },
-  { itemId: 'inv-005', nodeId: 'package-box', code: 'INV-PAK-102', name: '渠道彩盒', spec: '1pcs', stock: '3000pcs', status: 'available', supplierName: '深圳包材 D', updatedAt: '2026-06-05' },
-  { itemId: 'inv-006', nodeId: 'tooling-mold', code: 'INV-MOLD-201', name: '超队 3.0 注塑模', spec: '1 套', stock: '1 套', status: 'in_use', supplierName: '东莞模具 C', updatedAt: '2026-06-04' }
+  { itemId: 'inv-020', nodeId: 'semi-model-cd30-inkjet-ip18', code: 'INV-SEMI-118', name: '超队 3.0 半成品', spec: '喷墨', stock: '86pcs', inventoryType: '半成品', productName: '超队 3.0', phoneModel: 'iPhone18', status: 'reserved', supplierName: '内部半成品组', updatedAt: '2026-06-09' },
+  { itemId: 'inv-001', nodeId: 'raw-tpu', code: 'INV-MAT-023', name: 'TPU 原料 85A', spec: '25kg / 包', stock: '500kg', inventoryType: '原材料', status: 'available', supplierName: '东莞塑胶 A', updatedAt: '2026-06-08' },
+  { itemId: 'inv-002', nodeId: 'raw-tpu', code: 'INV-MAT-024', name: 'TPU 原料 90A', spec: '25kg / 包', stock: '280kg', inventoryType: '原材料', status: 'reserved', supplierName: '东莞塑胶 A', updatedAt: '2026-06-07' },
+  { itemId: 'inv-003', nodeId: 'raw-pc', code: 'INV-MAT-045', name: 'PC 背板', spec: '0.8mm', stock: '320pcs', inventoryType: '原材料', status: 'reserved', supplierName: '深圳板材 B', updatedAt: '2026-06-07' },
+  { itemId: 'inv-004', nodeId: 'raw-color', code: 'INV-MAT-067', name: '黑色色母', spec: '5kg / 箱', stock: '20kg', inventoryType: '原材料', status: 'available', supplierName: '东莞塑胶 A', updatedAt: '2026-06-09' },
+  { itemId: 'inv-005', nodeId: 'component-magnet', code: 'INV-MAG-045', name: 'N52 磁吸组件', spec: '1 set', stock: '200set', inventoryType: '功能件', status: 'reserved', supplierName: '惠州材料 C', updatedAt: '2026-06-08' },
+  { itemId: 'inv-006', nodeId: 'component-deco', code: 'INV-DEC-010', name: '装饰环', spec: '黑钛色', stock: '1200pcs', inventoryType: '功能件', status: 'available', supplierName: '深圳五金 E', updatedAt: '2026-06-06' },
+  { itemId: 'inv-007', nodeId: 'component-functional', code: 'INV-ACC-118', name: 'iPhone18 孔位治具', spec: '1 set', stock: '2set', inventoryType: '功能件', status: 'in_use', supplierName: '东莞模具 C', updatedAt: '2026-06-09' },
+  { itemId: 'inv-008', nodeId: 'package-box', code: 'INV-PAK-102', name: '渠道彩盒', spec: '单盒', stock: '3000pcs', inventoryType: '包材', status: 'available', supplierName: '深圳包材 D', updatedAt: '2026-06-05' },
+  { itemId: 'inv-009', nodeId: 'package-inlay', code: 'INV-PAK-166', name: '标准内托', spec: '单套', stock: '1800pcs', inventoryType: '包材', status: 'available', supplierName: '深圳包材 D', updatedAt: '2026-06-03' },
+  { itemId: 'inv-010', nodeId: 'package-label', code: 'INV-PAK-156', name: '黑色标签贴纸', spec: '单枚', stock: '5000pcs', inventoryType: '包材', status: 'available', supplierName: '深圳包材 D', updatedAt: '2026-06-09' },
+  { itemId: 'inv-011', nodeId: 'tooling-group-cd30-mold', code: 'INV-MOLD-201', name: '超队 3.0 注塑模', spec: '1 套', stock: '1 套', inventoryType: '模具', productName: '超队 3.0', phoneModel: '', status: 'in_use', supplierName: '东莞模具 C', updatedAt: '2026-06-04' },
+  { itemId: 'inv-012', nodeId: 'tooling-group-cd30-hotpress', code: 'INV-JIG-005', name: '热压治具', spec: '1 套', stock: '1 套', inventoryType: '治具', productName: '超队 3.0', phoneModel: '', status: 'available', supplierName: '东莞模具 C', updatedAt: '2026-06-04' },
+  { itemId: 'inv-013', nodeId: 'tooling-group-cd30-edge', code: 'INV-JIG-008', name: '包边治具', spec: '1 套', stock: '1 套', inventoryType: '治具', productName: '超队 3.0', phoneModel: '', status: 'available', supplierName: '东莞模具 C', updatedAt: '2026-06-06' },
+  { itemId: 'inv-014', nodeId: 'tooling-leaf-cd30-ip18-mold', code: 'INV-MOLD-218', name: 'iPhone18 改模注塑模', spec: '1 套', stock: '1 套', inventoryType: '模具', productName: '超队 3.0', phoneModel: 'iPhone18', status: 'in_use', supplierName: '东莞模具 C', updatedAt: '2026-06-09' },
+  { itemId: 'inv-015', nodeId: 'tooling-group-lj30-mold', code: 'INV-MOLD-233', name: '亮甲 3.0 注塑模', spec: '1 套', stock: '1 套', inventoryType: '模具', productName: '亮甲 3.0', phoneModel: '', status: 'available', supplierName: '东莞模具 C', updatedAt: '2026-05-26' },
+  { itemId: 'inv-016', nodeId: 'tooling-group-lj30-mirror', code: 'INV-JIG-011', name: '镜面贴合治具', spec: '1 套', stock: '1 套', inventoryType: '治具', productName: '亮甲 3.0', phoneModel: '', status: 'available', supplierName: '东莞模具 C', updatedAt: '2026-05-27' }
 ]
 
 const bomCenterRows: BomCenterRow[] = [
@@ -461,7 +737,7 @@ const bomCenterRows: BomCenterRow[] = [
     materialCost: 26.9,
     processCost: 5.4,
     totalCost: 32.3,
-    supplierNote: '磁吸组件已锁主供，替代料待备案。',
+    supplierNote: '磁吸组件已锁主供，替代料待备选。',
     updatedAt: '2026-06-08'
   },
   {
@@ -495,48 +771,9 @@ const bomCenterRows: BomCenterRow[] = [
 const reportCenterSnapshot: ReportCenterSnapshot = {
   rangeLabel: '2026年6月',
   cards: [
-    {
-      key: 'development',
-      title: '开发进度报表',
-      icon: 'DataAnalysis',
-      questionLines: ['当前多少产品在开发？', '哪些阶段卡住了？', '有没有逾期的？'],
-      targetPath: '/reports?report=development'
-    },
-    {
-      key: 'mold',
-      title: '模具状态报表',
-      icon: 'Tools',
-      questionLines: ['模具都在什么状态？', '哪些快到期还没验收？', '试模成功率如何？'],
-      targetPath: '/reports?report=mold'
-    },
-    {
-      key: 'cost',
-      title: '成本分析报表',
-      icon: 'Money',
-      questionLines: ['各产品成本是多少？', '预估 vs 实际差多少？', '哪个环节成本超了？'],
-      targetPath: '/reports?report=cost'
-    },
-    {
-      key: 'sampling',
-      title: '打样统计报表',
-      icon: 'Histogram',
-      questionLines: ['本月打了多少样？', '一次通过率如何？', '平均几轮定版？'],
-      targetPath: '/reports?report=sampling'
-    },
-    {
-      key: 'change',
-      title: '变更统计报表',
-      icon: 'Refresh',
-      questionLines: ['本月有多少变更？', '变更原因怎么分布？', '影响了哪些产品？'],
-      targetPath: '/reports?report=change'
-    },
-    {
-      key: 'quality',
-      title: '质量分析报表',
-      icon: 'CircleCheck',
-      questionLines: ['测试通过率如何？', '哪些测试项经常挂？', '不良集中在哪？'],
-      targetPath: '/reports?report=quality'
-    }
+    { key: 'development', title: '开发进度报表', icon: 'DataAnalysis', questionLines: ['当前多少产品在开发？', '哪些阶段卡住了？', '有没有逾期项目？'], targetPath: '/reports?report=development' },
+    { key: 'mold', title: '模具状态报表', icon: 'Tools', questionLines: ['模具都在什么状态？', '哪些快到期还没验收？', '试模成功率如何？'], targetPath: '/reports?report=mold' },
+    { key: 'cost', title: '成本分析报表', icon: 'Money', questionLines: ['各产品成本是多少？', '预计和实际差多少？', '哪个环节超了？'], targetPath: '/reports?report=cost' }
   ],
   details: [
     {
@@ -544,154 +781,89 @@ const reportCenterSnapshot: ReportCenterSnapshot = {
       title: '开发进度报表',
       summary: '先看逾期与卡点，再看阶段分布。',
       metrics: [
-        { label: '立项中', value: '6', hint: '平均停留 5 天' },
-        { label: '模具阶段', value: '4', hint: '平均停留 15 天，当前最长' },
-        { label: '半成品阶段', value: '8', hint: '平均停留 10 天' }
+        { key: 'development-setup', label: '立项中', value: '6', hint: '平均停留 5 天', targetPath: '/products?report_status=project_setup', detailTitle: '立项中项目', detailSummary: '查看正在立项确认阶段的项目。', detailItems: [] },
+        { key: 'development-mold', label: '模具阶段', value: '4', hint: '平均停留 15 天', targetPath: '/products?report_status=mold_stage', detailTitle: '模具阶段项目', detailSummary: '查看正在开模、试模、验模的项目。', detailItems: [] },
+        { key: 'development-semi-finished', label: '半成品阶段', value: '8', hint: '平均停留 10 天', targetPath: '/products?report_status=semi_finished_stage', detailTitle: '半成品阶段项目', detailSummary: '查看样品、工艺和半成品确认相关项目。', detailItems: [] }
       ],
       alerts: [
-        { title: '超队 3.0 iPhone18 黑色', subtitle: '半成品阶段已停留 12 天', owner: '张经理', level: 'medium', targetPath: '/products/102' },
-        { title: '亮甲 3.0', subtitle: '模具阶段已停留 18 天', owner: '李工程', level: 'high', targetPath: '/products/104' }
+        { title: '超队 3.0 iPhone18 黑色', subtitle: '差异测试卡住 2 天', owner: '张经理', level: 'medium', targetPath: '/products/102' },
+        { title: '亮甲 3.0', subtitle: '版本已发布，可复用', owner: '李工程', level: 'low', targetPath: '/products/104' }
       ],
       distribution: [
-        { label: '立项中', value: 6, hint: '5 天' },
-        { label: '模具', value: 4, hint: '15 天' },
-        { label: '半成品', value: 8, hint: '10 天' },
-        { label: '成品', value: 3, hint: '7 天' }
+        { label: '立项中', value: 6, hint: '平均 5 天' },
+        { label: '模具', value: 4, hint: '平均 15 天' },
+        { label: '半成品', value: 8, hint: '平均 10 天' }
       ]
     },
     {
       key: 'mold',
       title: '模具状态报表',
-      summary: '看逾期模具、供应商周期与试模成功率。',
+      summary: '看逾期模具、供应商周期和试模成功率。',
       metrics: [
-        { label: '开模中', value: '3', hint: '待开模验收' },
-        { label: '试模中', value: '5', hint: '当前重点跟进' },
-        { label: '已验收', value: '18', hint: '可复用' }
+        { key: 'mold-opening', label: '开模中', value: '3', hint: '待开模验收', targetPath: '/inventories?report_status=tooling_opening', detailTitle: '开模中模具', detailSummary: '查看正在开模和等待验收的模具。', detailItems: [] },
+        { key: 'mold-trial', label: '试模中', value: '5', hint: '当前重点跟进', targetPath: '/inventories?report_status=tooling_trial', detailTitle: '试模中模具', detailSummary: '查看正在试模验证的模具。', detailItems: [] },
+        { key: 'mold-accepted', label: '已验收', value: '18', hint: '可复用', targetPath: '/inventories?report_status=tooling_accepted', detailTitle: '已验收模具', detailSummary: '查看已经验收并可复用的模具。', detailItems: [] }
       ],
       alerts: [
-        { title: 'INV-MOLD-0205', subtitle: '亮甲 3.0 试模中，逾期 5 天', owner: '模具供应商 C', level: 'high', targetPath: '/products/104' },
-        { title: 'INV-MOLD-0189', subtitle: '骑士 2.0 开模中，逾期 2 天', owner: '模具供应商 E', level: 'medium', targetPath: '/products/101' }
+        { title: 'INV-MOLD-218', subtitle: 'iPhone18 改模注塑模正在验证', owner: '东莞模具 C', level: 'high', targetPath: '/products/102' }
       ],
       distribution: [
         { label: '开模中', value: 3, hint: '平均 12 天' },
         { label: '试模中', value: 5, hint: '平均 7 天' },
-        { label: '已验收', value: 18, hint: '稳定' },
-        { label: '维修中', value: 2, hint: '需排产' }
+        { label: '已验收', value: 18, hint: '稳定' }
       ]
     },
     {
       key: 'cost',
       title: '成本分析报表',
-      summary: '看偏差最大的产品，再看成本构成。',
+      summary: '先看偏差最大的产品，再看成本构成。',
       metrics: [
-        { label: '超队 3.0', value: '¥82,300', hint: '比预估低 3.2%' },
-        { label: '亮甲 3.0', value: '¥68,500', hint: '比预估高 10.5%' },
-        { label: '单品均摊', value: '¥42.62', hint: '含模具均摊' }
+        { key: 'cost-chaodui', label: '超队 3.0', value: '￥82,300', hint: '比预计低 3.2%', targetPath: '/products/101', detailTitle: '超队 3.0 成本明细', detailSummary: '查看超队 3.0 的成本构成和偏差。', detailItems: [] },
+        { key: 'cost-liangjia', label: '亮甲 3.0', value: '￥68,500', hint: '比预计低 7.5%', targetPath: '/products/104', detailTitle: '亮甲 3.0 成本明细', detailSummary: '查看亮甲 3.0 的成本构成和偏差。', detailItems: [] },
+        { key: 'cost-average', label: '单品均摊', value: '￥42.62', hint: '含模具分摊', targetPath: '/costs', detailTitle: '单品均摊成本', detailSummary: '查看单品均摊口径和模具分摊情况。', detailItems: [] }
       ],
       alerts: [
-        { title: '亮甲 3.0', subtitle: '喷涂参数调整导致加工成本抬升', owner: '工程 / 采购', level: 'high', targetPath: '/products/104' },
-        { title: '超队 3.0', subtitle: '材料成本稳定，已进入冻结确认', owner: '工程', level: 'low', targetPath: '/products/101' }
+        { title: '超队 3.0', subtitle: '成本已进入冻结确认', owner: '工程', level: 'low', targetPath: '/products/101' }
       ],
       distribution: [
-        { label: '模具', value: 8000, hint: '占比最高' },
-        { label: '材料', value: 7000, hint: '稳定' },
-        { label: '打样', value: 3500, hint: '可控' },
-        { label: '测试', value: 1800, hint: '正常' }
-      ]
-    },
-    {
-      key: 'sampling',
-      title: '打样统计报表',
-      summary: '先看一次通过率，再看失败原因。',
-      metrics: [
-        { label: '本月打样', value: '12 次', hint: '覆盖 4 条产品线' },
-        { label: '一次通过率', value: '42%', hint: '低于目标' },
-        { label: '平均定版轮次', value: '2.3 轮', hint: '仍需压缩' }
-      ],
-      alerts: [
-        { title: '超队 3.0', subtitle: '打样 5 次，一次通过率仅 20%', owner: '工程 / 品质', level: 'high', targetPath: '/products/101' },
-        { title: '圣殿 Case', subtitle: '打样通过率 100%，可复用流程', owner: '项目部', level: 'low', targetPath: '/products/104' }
-      ],
-      distribution: [
-        { label: '外观不良', value: 40, hint: '占比最高' },
-        { label: '尺寸不符', value: 25, hint: '需改结构' },
-        { label: '颜色偏差', value: 15, hint: '需校色' },
-        { label: '结构问题', value: 10, hint: '少量' }
-      ]
-    },
-    {
-      key: 'change',
-      title: '变更统计报表',
-      summary: '看变更原因分布与最近影响产品。',
-      metrics: [
-        { label: '本月变更', value: '8 次', hint: '审批中 2 次' },
-        { label: '材料变更', value: '3 次', hint: '供应商切换 / 替代料' },
-        { label: '工艺变更', value: '3 次', hint: '参数调整 / 工序优化' }
-      ],
-      alerts: [
-        { title: '超队 3.0 iPhone18 黑色', subtitle: 'TPU 替代料已生效', owner: '工程 / 采购', level: 'medium', targetPath: '/products/102' },
-        { title: '亮甲 3.0', subtitle: '喷涂参数变更仍在审批中', owner: '工程', level: 'high', targetPath: '/products/104' }
-      ],
-      distribution: [
-        { label: '材料变更', value: 3, hint: '最多' },
-        { label: '工艺变更', value: 3, hint: '并列最多' },
-        { label: '设计变更', value: 1, hint: '客户需求' },
-        { label: '包装变更', value: 1, hint: '条码更新' }
-      ]
-    },
-    {
-      key: 'quality',
-      title: '质量分析报表',
-      summary: '先看失败测试项，再看不通过记录。',
-      metrics: [
-        { label: '本月测试', value: '45 次', hint: '通过 38 次' },
-        { label: '总体通过率', value: '84%', hint: '复测中 5 次' },
-        { label: '最低通过项', value: '磁吸力 70%', hint: '需持续跟踪' }
-      ],
-      alerts: [
-        { title: '超队 3.0 iPhone18 黑色', subtitle: '磁吸力不足，已列入差异验证', owner: '品质部', level: 'high', targetPath: '/products/102' },
-        { title: '亮甲 3.0', subtitle: '酒精测试不通过，涂层脱落', owner: '品质 / 工程', level: 'high', targetPath: '/products/104' }
-      ],
-      distribution: [
-        { label: '跌落', value: 92, hint: '通过率高' },
-        { label: '耐磨', value: 100, hint: '稳定' },
-        { label: '酒精', value: 78, hint: '需关注' },
-        { label: '磁吸力', value: 70, hint: '最低' }
+        { label: '模具', value: 80, hint: '占比最高' },
+        { label: '材料', value: 70, hint: '稳定' },
+        { label: '测试', value: 18, hint: '正常' }
       ]
     }
   ]
 }
 
 export function getFoundationProducts() {
-  return mockResolve(() => structuredClone(foundationProducts))
+  return mockResolve(() => clone(foundationProducts))
 }
 
 export function getFileSections() {
-  return mockResolve(() => structuredClone(fileSections))
+  return mockResolve(() => clone(fileSections))
 }
 
 export function getTestCenterSnapshot() {
   return mockResolve(() => ({
-    categories: structuredClone(testCategories),
-    records: structuredClone(testRecords)
+    categories: clone(testCategories),
+    records: clone(testRecords)
   }))
 }
 
 export function getInventoryCenterSnapshot() {
   return mockResolve(() => ({
-    tree: structuredClone(inventoryTree),
-    items: structuredClone(inventoryItems)
+    tree: clone(inventoryTree),
+    items: clone(inventoryItems)
   }))
 }
 
 export function getBomCenterRows() {
-  return mockResolve(() => structuredClone(bomCenterRows))
+  return mockResolve(() => clone(bomCenterRows))
 }
 
 export function getProductPresentation(productId: number) {
-  return mockResolve(() => structuredClone(productDetailPresentationMap[productId] || productDetailPresentationMap[101]))
+  return mockResolve(() => clone(productDetailPresentationMap[productId] || productDetailPresentationMap[101]))
 }
 
 export function getReportCenterSnapshot() {
-  return mockResolve(() => structuredClone(reportCenterSnapshot))
+  return mockResolve(() => clone(reportCenterSnapshot))
 }

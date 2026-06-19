@@ -1,19 +1,38 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import { getReportCenterSnapshot } from '@/api/modules/foundation'
 import PageContainer from '@/components/PageContainer/index.vue'
-import type { ReportCenterSnapshot } from '@/types/foundation'
+import type { ReportCenterSnapshot, ReportMetricItem } from '@/types/foundation'
 
 const route = useRoute()
 const router = useRouter()
 
 const loading = ref(false)
 const snapshot = ref<ReportCenterSnapshot | null>(null)
+const activeMetricKey = ref('')
 
-const currentReportKey = computed(() => String(route.query.report || ''))
+const currentReportKey = computed(() => String(route.query.report || snapshot.value?.cards[0]?.key || ''))
 const currentDetail = computed(() => snapshot.value?.details.find((item) => item.key === currentReportKey.value) || null)
+const activeMetric = computed<ReportMetricItem | null>(() => {
+  if (!currentDetail.value) return null
+  return currentDetail.value.metrics.find((item) => item.key === activeMetricKey.value) || currentDetail.value.metrics[0] || null
+})
+
+watch(
+  currentDetail,
+  (detail) => {
+    if (!detail) {
+      activeMetricKey.value = ''
+      return
+    }
+
+    const exists = detail.metrics.some((item) => item.key === activeMetricKey.value)
+    activeMetricKey.value = exists ? activeMetricKey.value : detail.metrics[0]?.key || ''
+  },
+  { immediate: true }
+)
 
 async function loadData() {
   loading.value = true
@@ -28,8 +47,13 @@ function openReport(targetPath: string) {
   router.push(targetPath)
 }
 
-function openTarget(targetPath: string) {
+function openTarget(targetPath: string | undefined) {
+  if (!targetPath) return
   router.push(targetPath)
+}
+
+function selectMetric(metricKey: string) {
+  activeMetricKey.value = metricKey
 }
 
 function getAlertType(level: 'high' | 'medium' | 'low') {
@@ -38,13 +62,19 @@ function getAlertType(level: 'high' | 'medium' | 'low') {
   return 'info'
 }
 
+function getAlertLabel(level: 'high' | 'medium' | 'low') {
+  if (level === 'high') return '高风险'
+  if (level === 'medium') return '关注'
+  return '可跟进'
+}
+
 onMounted(loadData)
 </script>
 
 <template>
   <PageContainer
     title="报表中心"
-    description="报表不是数据堆叠页，而是问题发现入口。先选问题，再看异常，再下钻到对应产品或节点。"
+    description="报表中心先回答“我要看什么问题”，再进入对应对象和节点，不再把首页做成拥挤的大屏。"
   >
     <template #actions>
       <el-select class="report-range" :model-value="snapshot?.rangeLabel || '2026年6月'" disabled>
@@ -52,25 +82,13 @@ onMounted(loadData)
       </el-select>
     </template>
 
-    <section class="report-card-grid page-panel" v-loading="loading">
-      <button
-        v-for="card in snapshot?.cards || []"
-        :key="card.key"
-        class="report-card"
-        type="button"
-        @click="openReport(card.targetPath)"
-      >
-        <div class="report-card__header">
-          <strong>{{ card.title }}</strong>
-          <el-tag effect="light" :type="currentReportKey === card.key ? 'primary' : 'info'">
-            {{ currentReportKey === card.key ? '当前' : '查看' }}
-          </el-tag>
-        </div>
-        <div class="report-card__questions">
-          <p v-for="line in card.questionLines" :key="line">{{ line }}</p>
-        </div>
-        <span class="report-card__cta">进入报表</span>
-      </button>
+    <section class="page-panel" v-loading="loading">
+      <div class="toolbar-row">
+        <h3 class="section-title">查看报表类型</h3>
+      </div>
+      <el-select v-model="currentReportKey" class="report-type-select" placeholder="选择报表类型" @change="(key: string) => openReport(`/reports?report=${key}`)">
+        <el-option v-for="card in snapshot?.cards || []" :key="card.key" :label="card.title" :value="card.key" />
+      </el-select>
     </section>
 
     <section v-if="currentDetail" class="page-panel report-detail">
@@ -83,19 +101,64 @@ onMounted(loadData)
       </div>
 
       <div class="metric-grid report-metrics">
-        <div v-for="metric in currentDetail.metrics" :key="metric.label" class="metric-card">
-          <p class="metric-card__label">{{ metric.label }}</p>
+        <button
+          v-for="metric in currentDetail.metrics"
+          :key="metric.key"
+          class="metric-card metric-card--action"
+          :class="{ 'is-active': activeMetric?.key === metric.key }"
+          type="button"
+          @click="selectMetric(metric.key)"
+        >
+          <div class="metric-card__top">
+            <p class="metric-card__label">{{ metric.label }}</p>
+            <span v-if="activeMetric?.key === metric.key" class="metric-card__state">当前展开</span>
+          </div>
           <p class="metric-card__value metric-card__value--small">{{ metric.value }}</p>
           <span class="metric-card__trend">{{ metric.hint }}</span>
-        </div>
+        </button>
       </div>
+
+      <section v-if="activeMetric" class="report-metric-detail">
+        <div class="toolbar-row">
+          <div>
+            <h4 class="section-title">{{ activeMetric.detailTitle }}</h4>
+            <p class="page-panel-desc">{{ activeMetric.detailSummary }}</p>
+          </div>
+        </div>
+
+        <div class="metric-detail-list">
+          <button
+            v-for="item in activeMetric.detailItems"
+            :key="item.itemId"
+            class="metric-detail-card"
+            type="button"
+            @click="openTarget(item.targetPath)"
+          >
+            <div class="metric-detail-card__head">
+              <div class="metric-detail-card__title">
+                <strong>{{ item.title }}</strong>
+                <span class="subtle-text">{{ item.subtitle }}</span>
+              </div>
+              <el-button link type="primary" @click.stop="openTarget(item.targetPath)">查看</el-button>
+            </div>
+
+            <div class="metric-detail-card__meta">
+              <span>当前节点：{{ item.currentNode }}</span>
+              <span>负责人：{{ item.owner }}</span>
+              <span>停留：{{ item.durationText }}</span>
+            </div>
+
+            <p v-if="item.riskText" class="metric-detail-card__risk">{{ item.riskText }}</p>
+          </button>
+        </div>
+      </section>
 
       <div class="split-grid report-detail__body">
         <section class="report-section">
           <div class="toolbar-row">
             <div>
               <h4 class="section-title">需要关注的异常</h4>
-              <p class="page-panel-desc">优先处理风险项，再回到对象详情继续推进。</p>
+              <p class="page-panel-desc">先处理风险项，再回到对应产品或节点继续推进。</p>
             </div>
           </div>
 
@@ -110,7 +173,7 @@ onMounted(loadData)
               <div class="toolbar-row">
                 <strong>{{ alert.title }}</strong>
                 <el-tag :type="getAlertType(alert.level)" effect="light">
-                  {{ alert.level === 'high' ? '高风险' : alert.level === 'medium' ? '关注' : '可跟进' }}
+                  {{ getAlertLabel(alert.level) }}
                 </el-tag>
               </div>
               <p class="page-panel-desc">{{ alert.subtitle }}</p>
@@ -123,7 +186,7 @@ onMounted(loadData)
           <div class="toolbar-row">
             <div>
               <h4 class="section-title">分布与结构</h4>
-              <p class="page-panel-desc">用简化分布展示当前结构，不把报表做成复杂大屏。</p>
+              <p class="page-panel-desc">用简化分布帮助判断现状，不在这里展开复杂业务细节。</p>
             </div>
           </div>
 
@@ -150,6 +213,8 @@ onMounted(loadData)
   width: 160px;
 }
 
+.report-type-select { width: 280px; }
+
 .report-card-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -172,7 +237,9 @@ onMounted(loadData)
 }
 
 .report-card:hover,
-.alert-card:hover {
+.alert-card:hover,
+.metric-card--action:hover,
+.metric-detail-card:hover {
   border-color: var(--plm-color-primary);
   box-shadow: var(--plm-shadow-md);
   transform: translateY(-1px);
@@ -212,8 +279,89 @@ onMounted(loadData)
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.metric-card__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .metric-card__value--small {
   font-size: 20px;
+}
+
+.metric-card--action {
+  width: 100%;
+  border: 1px solid var(--plm-color-border-light);
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.metric-card--action.is-active {
+  border-color: #1d4ed8;
+  background: rgba(37, 99, 235, 0.08);
+  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.12);
+}
+
+.metric-card__state {
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.report-metric-detail {
+  padding: 16px;
+  border: 1px solid var(--plm-color-border-light);
+  border-radius: var(--plm-radius-base);
+  background: #fff;
+}
+
+.metric-detail-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.metric-detail-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--plm-color-border-light);
+  border-radius: var(--plm-radius-base);
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+}
+
+.metric-detail-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.metric-detail-card__title {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.metric-detail-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  color: var(--plm-color-text-secondary);
+  font-size: var(--plm-font-size-sm);
+}
+
+.metric-detail-card__risk {
+  margin: 0;
+  color: var(--el-color-danger);
+  font-size: var(--plm-font-size-sm);
 }
 
 .report-detail__body {
@@ -291,8 +439,14 @@ onMounted(loadData)
 
 @media (max-width: 768px) {
   .report-card-grid,
-  .report-metrics {
+  .report-metrics,
+  .report-detail__body {
     grid-template-columns: 1fr;
+  }
+
+  .metric-detail-card__head {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }
 </style>
