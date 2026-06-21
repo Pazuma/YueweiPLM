@@ -47,11 +47,17 @@ const menuGroups: MenuGroup[] = [
     title: '项目管理',
     items: [
       { path: '/projects?tab=in_progress', title: '进行中', icon: 'Management', permission: 'project:view' },
-      { path: '/projects?tab=archived&archiveView=overview', title: '已归档', icon: 'Select', permission: 'project:view', children: [
-        { path: '/projects?tab=archived&archiveView=overview', title: '已归档', icon: 'Collection', permission: 'project:view' },
-        { path: '/projects?tab=archived&archiveView=product', title: '产品管理', icon: 'Grid', permission: 'project:view' },
-        { path: '/projects?tab=archived&archiveView=sku', title: 'SKU管理', icon: 'Tickets', permission: 'project:view' }
-      ]},
+      {
+        path: '/projects?tab=archived&archiveView=overview',
+        title: '已归档',
+        icon: 'Select',
+        permission: 'project:view',
+        children: [
+          { path: '/projects?tab=archived&archiveView=overview', title: '已归档', icon: 'Collection', permission: 'project:view' },
+          { path: '/projects?tab=archived&archiveView=product', title: '产品管理', icon: 'Grid', permission: 'project:view' },
+          { path: '/projects?tab=archived&archiveView=sku', title: 'SKU管理', icon: 'Tickets', permission: 'project:view' }
+        ]
+      },
       { path: '/projects?tab=abandoned', title: '已放弃', icon: 'RemoveFilled', permission: 'project:view' }
     ]
   },
@@ -88,11 +94,17 @@ function isActive(path: string) {
   return normalizePath(route.fullPath) === normalizePath(path) || normalizePath(route.path) === normalizePath(path)
 }
 
+function hasActiveChild(item: MenuItem) {
+  if (!item.children?.length) return false
+  return item.children.some((child) => isActive(child.path))
+}
+
 function groupHasActiveItem(group: MenuGroup) {
   return group.items.some((item) => isActive(item.path) || hasActiveChild(item))
 }
 
 const activeGroupTitle = ref('')
+const subMenuState = reactive<Record<string, boolean>>({})
 
 function syncActiveGroup() {
   const matched = visibleMenus.value.find((group) => groupHasActiveItem(group))
@@ -118,19 +130,12 @@ function isGroupOpen(group: MenuGroup) {
   return activeGroupTitle.value === group.title
 }
 
-const subMenuState = reactive<Record<string, boolean>>({})
-
 function isSubMenuOpen(path: string) {
   return subMenuState[path] ?? false
 }
 
 function toggleSubMenu(path: string) {
   subMenuState[path] = !subMenuState[path]
-}
-
-function hasActiveChild(item: MenuItem) {
-  if (!item.children?.length) return false
-  return item.children.some((child) => isActive(child.path))
 }
 
 function toggleGroup(title: string) {
