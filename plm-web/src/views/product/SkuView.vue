@@ -26,6 +26,15 @@ const detailSku = ref<SkuDisplayRow | null>(null)
 const detailPresentation = ref<ProductDetailPresentation | null>(null)
 const detailBomVersion = ref('')
 
+type SkuDetailSectionKey = 'basic' | 'cost' | 'bom' | 'process'
+const activeDetailSection = ref<SkuDetailSectionKey>('basic')
+const skuDetailSections = [
+  { key: 'basic' as const, label: '基础信息' },
+  { key: 'cost' as const, label: '成本' },
+  { key: 'bom' as const, label: '当前版本 BOM' },
+  { key: 'process' as const, label: '工艺路线' }
+]
+
 const detailBomItems = computed<ProductBomItemRow[]>(() => {
   if (!detailPresentation.value || !detailBomVersion.value) return []
   return detailPresentation.value.bomItemsByVersion[detailBomVersion.value] || []
@@ -116,6 +125,7 @@ function deleteSelectedSkus() {
 
 async function openSkuDetail(row: SkuDisplayRow) {
   detailSku.value = row
+  activeDetailSection.value = 'basic'
   detailVisible.value = true
   detailLoading.value = true
   try {
@@ -246,7 +256,20 @@ onMounted(loadData)
     <!-- detail dialog -->
     <el-dialog v-model="detailVisible" title="SKU 详情" width="1080px">
       <div v-loading="detailLoading" class="sku-detail-dialog">
-        <section class="sku-detail-section">
+        <nav class="sku-detail-breadcrumb" aria-label="SKU详情导航">
+          <span class="sku-detail-breadcrumb__root">SKU 详情</span>
+          <template v-for="section in skuDetailSections" :key="section.key">
+            <span class="sku-detail-breadcrumb__separator">/</span>
+            <button
+              class="sku-detail-breadcrumb__item"
+              :class="{ 'is-active': activeDetailSection === section.key }"
+              type="button"
+              @click="activeDetailSection = section.key"
+            >{{ section.label }}</button>
+          </template>
+        </nav>
+
+        <section v-show="activeDetailSection === 'basic'" class="sku-detail-section">
           <h4 class="section-title">基础信息</h4>
           <div class="sku-detail-grid">
             <div class="info-card"><span class="subtle-text">SKU 编码</span><strong>{{ detailSku?.productCode }}</strong></div>
@@ -257,41 +280,24 @@ onMounted(loadData)
             <div class="info-card"><span class="subtle-text">项目来源</span><strong>{{ detailSku?.projectSource || '--' }}</strong></div>
             <div class="info-card"><span class="subtle-text">颜色</span><strong>{{ detailSku?.color }}</strong></div>
             <div class="info-card"><span class="subtle-text">版本</span><strong>{{ detailSku?.versionNo }}</strong></div>
-            <div class="info-card">
-              <span class="subtle-text">状态</span>
-              <StatusTag v-if="detailSku" :status="detailSku.status" object-type="product" />
-            </div>
+            <div class="info-card"><span class="subtle-text">状态</span><StatusTag v-if="detailSku" :status="detailSku.status" object-type="product" /></div>
           </div>
         </section>
 
-        <section class="sku-detail-section">
+        <section v-show="activeDetailSection === 'cost'" class="sku-detail-section">
           <h4 class="section-title">成本</h4>
           <div class="sku-detail-cost-grid">
-            <div class="info-card">
-              <span class="subtle-text">实际成本</span>
-              <strong>{{ formatAmount(detailPresentation?.costPanel.actualTotal || 0) }}</strong>
-            </div>
-            <div v-if="detailPresentation?.costPanel.showEstimated" class="info-card">
-              <span class="subtle-text">预计成本</span>
-              <strong>{{ formatAmount(detailPresentation?.costPanel.estimatedTotal || 0) }}</strong>
-            </div>
-            <div class="info-card">
-              <span class="subtle-text">当前阶段</span>
-              <strong>{{ detailSku?.currentStage }}</strong>
-            </div>
+            <div class="info-card"><span class="subtle-text">实际成本</span><strong>{{ formatAmount(detailPresentation?.costPanel.actualTotal || 0) }}</strong></div>
+            <div v-if="detailPresentation?.costPanel.showEstimated" class="info-card"><span class="subtle-text">预计成本</span><strong>{{ formatAmount(detailPresentation?.costPanel.estimatedTotal || 0) }}</strong></div>
+            <div class="info-card"><span class="subtle-text">当前阶段</span><strong>{{ detailSku?.currentStage }}</strong></div>
           </div>
         </section>
 
-        <section class="sku-detail-section">
+        <section v-show="activeDetailSection === 'bom'" class="sku-detail-section">
           <div class="toolbar-row">
-            <h4 class="section-title">当前版本 BOM</h4>
+            <div><h4 class="section-title">当前版本 BOM</h4><p class="page-panel-desc">BOM 作为 Product 的版本化资料展示。</p></div>
             <el-select v-model="detailBomVersion" style="width: 160px">
-              <el-option
-                v-for="row in detailPresentation?.bomCompareRows || []"
-                :key="row.versionNo"
-                :label="row.versionNo"
-                :value="row.versionNo"
-              />
+              <el-option v-for="row in detailPresentation?.bomCompareRows || []" :key="row.versionNo" :label="row.versionNo" :value="row.versionNo" />
             </el-select>
           </div>
           <el-table :data="detailBomItems" border stripe>
@@ -303,26 +309,17 @@ onMounted(loadData)
           </el-table>
         </section>
 
-        <section class="sku-detail-section">
-          <div class="toolbar-row">
-            <div>
-              <h4 class="section-title">简要流程</h4>
-              <p class="page-panel-desc">当前节点与下一步动作在弹窗内直接查看。</p>
-            </div>
-            <el-tag type="warning" effect="light">当前：{{ detailPresentation?.currentNode }}</el-tag>
-          </div>
+        <section v-show="activeDetailSection === 'process'" class="sku-detail-section">
+          <h4 class="section-title">工艺路线</h4>
+          <p class="page-panel-desc">工艺路线由 Process 承接，显示当前 SKU 对应的流程节点与进度。</p>
           <div class="sku-timeline-mini">
-            <div
-              v-for="node in (detailPresentation?.timeline || []).slice(0, 6)"
-              :key="node.nodeKey"
-              class="sku-timeline-mini__item"
-              :class="[`is-${node.status}`]"
-            >
+            <div v-for="node in (detailPresentation?.timeline || []).slice(0, 6)" :key="node.nodeKey" class="sku-timeline-mini__item" :class="[`is-${node.status}`]">
               <strong>{{ node.nodeName }}</strong>
               <span class="subtle-text">{{ node.summary }}</span>
             </div>
           </div>
         </section>
+
       </div>
     </el-dialog>
 
@@ -423,6 +420,13 @@ onMounted(loadData)
   font-weight: 600;
   overflow: hidden;
 }
+
+.sku-detail-breadcrumb { display: flex; align-items: center; gap: 0; padding-bottom: 14px; border-bottom: 1px solid rgba(148,163,184,0.2); }
+.sku-detail-breadcrumb__root { font-weight: 600; color: #0f172a; font-size: 14px; margin-right: 6px; }
+.sku-detail-breadcrumb__separator { color: #94a3b8; margin: 0 4px; font-size: 13px; }
+.sku-detail-breadcrumb__item { padding: 4px 8px; border: 0; border-radius: 4px; background: transparent; color: #64748b; font-size: 13px; cursor: pointer; transition: background 0.16s, color 0.16s; }
+.sku-detail-breadcrumb__item:hover { background: #f1f5f9; color: #334155; }
+.sku-detail-breadcrumb__item.is-active { background: #eff6ff; color: #1d4ed8; font-weight: 600; }
 
 .sku-detail-dialog {
   display: flex;

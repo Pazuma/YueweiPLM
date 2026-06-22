@@ -13,6 +13,7 @@ const loading = ref(false)
 const snapshot = ref<ReportCenterSnapshot | null>(null)
 const activeMetricKey = ref('')
 const reportMonth = ref('2026-06')
+const reportRange = ref('all')
 
 const currentReportKey = computed(() => String(route.query.report || snapshot.value?.cards[0]?.key || ''))
 const selectedReportKey = computed({
@@ -103,6 +104,15 @@ onMounted(loadData)
         <el-option label="2026年5月" value="2026-05" />
         <el-option label="2026年4月" value="2026-04" />
       </el-select>
+      <div class="report-control-actions">
+        <el-select v-model="reportRange" class="report-range-select" placeholder="时间范围">
+          <el-option label="全部时间" value="all" />
+          <el-option label="最近 7 天" value="7d" />
+          <el-option label="最近 30 天" value="30d" />
+          <el-option label="最近 90 天" value="90d" />
+        </el-select>
+        <el-button type="primary" plain>导出占位</el-button>
+      </div>
     </div>
 
     <section v-if="currentDetail" class="report-detail-flat" v-loading="loading">
@@ -111,7 +121,6 @@ onMounted(loadData)
           <h3>{{ currentDetail.title }}</h3>
           <p>{{ currentDetail.summary }}</p>
         </div>
-        <el-button type="primary" plain>导出占位</el-button>
       </div>
 
       <div class="report-metric-tabs">
@@ -155,7 +164,7 @@ onMounted(loadData)
               <span>负责人：{{ item.owner }}</span>
               <span>停留：{{ item.durationText }}</span>
             </div>
-            <p v-if="item.riskText" class="report-row__risk">{{ item.riskText }}</p>
+            <el-tag v-if="item.riskText" size="small" type="warning" effect="light">{{ item.riskText }}</el-tag>
           </button>
         </div>
       </section>
@@ -300,7 +309,8 @@ onMounted(loadData)
 .report-row__head, .report-row__title { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .report-row__title { flex-direction: column; gap: 4px; }
 .report-row__meta { display: flex; flex-wrap: wrap; gap: 16px; color: #64748b; font-size: 13px; }
-.report-row__risk { margin: 0; color: var(--el-color-danger); font-size: 12px; }
+.report-control-actions { display: flex; align-items: center; gap: 12px; margin-left: auto; }
+.report-range-select { width: 150px; }
 
 .report-detail-flat__body { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr); gap: 20px; }
 
