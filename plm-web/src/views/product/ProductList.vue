@@ -10,6 +10,7 @@ import { useTable } from '@/composables/useTable'
 import type { SearchField } from '@/types/common'
 import type { ProductSummary } from '@/types/product'
 import { formatAmount } from '@/utils/format'
+import { toArchivedProductRoute, toArchivedSkuRoute, toInProgressProjectRoute } from '@/utils/projectRoute'
 
 type LifecycleKey = 'all' | 'initiation' | 'design' | 'tooling' | 'sampling' | 'process' | 'pilot' | 'mx' | 'release'
 
@@ -223,7 +224,7 @@ function setProductType(type: '' | 'product_line' | 'model_variant') {
 }
 
 function openProduct(productId: number) {
-  router.push(`/products/${productId}`)
+  router.push(toArchivedProductRoute(productId))
 }
 
 watch(
@@ -246,8 +247,8 @@ onMounted(async () => {
 <template>
   <PageContainer :title="lifecycleTitleMap[currentLifecycle.key].title" :description="lifecycleTitleMap[currentLifecycle.key].description">
     <template #actions>
-      <el-button @click="router.push('/sku-view')">SKU 视图</el-button>
-      <el-button type="primary" @click="router.push('/products/create')">新建产品</el-button>
+      <el-button @click="router.push(toArchivedSkuRoute())">归档 SKU</el-button>
+      <el-button type="primary" @click="router.push(toInProgressProjectRoute())">新项目</el-button>
     </template>
 
     <section class="metric-grid product-summary-grid">
@@ -413,7 +414,7 @@ onMounted(async () => {
           <el-table-column label="操作" width="160" fixed="right">
             <template #default="{ row }">
               <el-button link type="primary" @click="openProduct(row.productId)">详情</el-button>
-              <el-button link @click="router.push(`/products/${row.productId}/edit`)">编辑</el-button>
+              <el-button link @click="router.push(toArchivedProductRoute(row.productId))">查看归档</el-button>
             </template>
           </el-table-column>
         </el-table>

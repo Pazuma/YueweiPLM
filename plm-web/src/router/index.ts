@@ -3,6 +3,7 @@ import type { RouteRecordRaw } from 'vue-router'
 
 import Layout from '@/layout/index.vue'
 import { useUserStore } from '@/stores/user'
+import { normalizeLegacyProductTarget, toArchivedProductRoute, toArchivedSkuRoute, toInProgressProjectRoute } from '@/utils/projectRoute'
 
 type RouteMetaConfig = {
   title: string
@@ -10,6 +11,10 @@ type RouteMetaConfig = {
   moduleKey?: string
   breadcrumb?: string[]
   subtitle?: string
+}
+
+function redirectLegacyProductList(to: { fullPath: string }) {
+  return normalizeLegacyProductTarget(to.fullPath)
 }
 
 const routes: RouteRecordRaw[] = [
@@ -39,23 +44,53 @@ const routes: RouteRecordRaw[] = [
         } satisfies RouteMetaConfig
       },
       {
+        path: 'products/create',
+        name: 'ProductCreate',
+        redirect: () => toInProgressProjectRoute(),
+        meta: {
+          title: '新项目',
+          permission: 'project:view',
+          breadcrumb: ['项目管理', '进行中']
+        } satisfies RouteMetaConfig
+      },
+      {
+        path: 'products/:id/edit',
+        name: 'ProductEdit',
+        redirect: (to) => toArchivedProductRoute(String(to.params.id)),
+        meta: {
+          title: '归档产品',
+          permission: 'project:view',
+          breadcrumb: ['项目管理', '已归档', '产品管理']
+        } satisfies RouteMetaConfig
+      },
+      {
+        path: 'products/:id',
+        name: 'ProductDetail',
+        redirect: (to) => toArchivedProductRoute(String(to.params.id)),
+        meta: {
+          title: '归档产品',
+          permission: 'project:view',
+          breadcrumb: ['项目管理', '已归档', '产品管理']
+        } satisfies RouteMetaConfig
+      },
+      {
         path: 'products',
         name: 'ProductList',
-        component: () => import('@/views/product/ProductList.vue'),
+        redirect: redirectLegacyProductList,
         meta: {
-          title: '产品列表',
-          permission: 'product:view',
-          breadcrumb: ['产品管理', '产品列表']
+          title: '归档产品',
+          permission: 'project:view',
+          breadcrumb: ['项目管理', '已归档', '产品管理']
         } satisfies RouteMetaConfig
       },
       {
         path: 'sku-view',
         name: 'SkuView',
-        component: () => import('@/views/product/SkuView.vue'),
+        redirect: () => toArchivedSkuRoute(),
         meta: {
-          title: 'SKU 视图',
-          permission: 'product:view',
-          breadcrumb: ['SKU 管理', 'SKU 视图']
+          title: '归档 SKU',
+          permission: 'project:view',
+          breadcrumb: ['项目管理', '已归档', 'SKU 管理']
         } satisfies RouteMetaConfig
       },
       {
@@ -66,36 +101,6 @@ const routes: RouteRecordRaw[] = [
           title: 'BOM 管理',
           permission: 'product:view',
           breadcrumb: ['基础资料', 'BOM 管理']
-        } satisfies RouteMetaConfig
-      },
-      {
-        path: 'products/create',
-        name: 'ProductCreate',
-        component: () => import('@/views/product/ProductEdit.vue'),
-        meta: {
-          title: '新建产品',
-          permission: 'product:create',
-          breadcrumb: ['产品管理', '新建产品']
-        } satisfies RouteMetaConfig
-      },
-      {
-        path: 'products/:id',
-        name: 'ProductDetail',
-        component: () => import('@/views/product/ProductDetail.vue'),
-        meta: {
-          title: '产品详情',
-          permission: 'product:view',
-          breadcrumb: ['产品管理', '产品详情']
-        } satisfies RouteMetaConfig
-      },
-      {
-        path: 'products/:id/edit',
-        name: 'ProductEdit',
-        component: () => import('@/views/product/ProductEdit.vue'),
-        meta: {
-          title: '编辑产品',
-          permission: 'product:edit',
-          breadcrumb: ['产品管理', '编辑产品']
         } satisfies RouteMetaConfig
       },
       {
@@ -284,15 +289,19 @@ const routes: RouteRecordRaw[] = [
         } satisfies RouteMetaConfig
       },
       {
-        path: 'system/dicts',
-        name: 'SystemDicts',
-        component: () => import('@/views/module/ModulePlaceholderView.vue'),
+        path: 'system/fields',
+        name: 'SystemFields',
+        component: () => import('@/views/system/SystemFieldManagementView.vue'),
         meta: {
-          title: '字典管理',
-          permission: 'admin:dict',
-          moduleKey: 'system-dict',
-          breadcrumb: ['系统管理', '字典管理']
+          title: '字段管理',
+          permission: 'admin:field',
+          moduleKey: 'system-field',
+          breadcrumb: ['系统管理', '字段管理']
         } satisfies RouteMetaConfig
+      },
+      {
+        path: 'system/dicts',
+        redirect: '/system/fields'
       },
       {
         path: 'system/operation-log',

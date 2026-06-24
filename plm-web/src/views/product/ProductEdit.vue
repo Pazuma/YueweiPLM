@@ -10,6 +10,7 @@ import { processCenterData } from '@/mock/process'
 import { mockUsers } from '@/mock/users'
 import type { MoldAction } from '@/types/common'
 import type { ProductFormPayload, ProductSummary, ProductTestItem } from '@/types/product'
+import { toArchivedProductRoute } from '@/utils/projectRoute'
 import { rules } from '@/utils/validate'
 
 const route = useRoute()
@@ -326,13 +327,13 @@ async function handleSubmit() {
     if (isEdit.value) {
       await updateProduct(productId.value, structuredClone(form))
       ElMessage.success('产品已更新')
-      router.push(`/products/${productId.value}`)
+      router.push(toArchivedProductRoute(productId.value))
       return
     }
 
     const created = await createProduct(structuredClone(form))
     ElMessage.success('产品已创建')
-    router.replace(`/products/${created.productId}`)
+    router.replace(toArchivedProductRoute(created.productId))
   } finally {
     submitting.value = false
   }

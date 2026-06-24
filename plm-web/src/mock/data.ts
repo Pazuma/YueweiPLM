@@ -1250,7 +1250,7 @@ export const sidebarMenus: MenuGroup[] = [
     items: [
       { path: '/system/users', title: '用户管理', icon: 'Avatar', permission: 'admin:user' },
       { path: '/system/roles', title: '角色管理', icon: 'Key', permission: 'admin:role' },
-      { path: '/system/dicts', title: '字典管理', icon: 'Collection', permission: 'admin:dict' },
+      { path: '/system/fields', title: '字段管理', icon: 'SetUp', permission: 'admin:field' },
       { path: '/system/operation-log', title: '操作日志', icon: 'Tickets', permission: 'admin:log' },
       { path: '/system/import', title: '数据导入', icon: 'Upload', permission: 'admin:import' }
     ]
@@ -1312,7 +1312,7 @@ export const rolePermissions: Record<string, string[]> = {
     'quality:edit',
     'admin:user',
     'admin:role',
-    'admin:dict',
+    'admin:field',
     'admin:log',
     'admin:import'
   ],

@@ -30,20 +30,6 @@ const menuGroups: MenuGroup[] = [
     ]
   },
   {
-    title: '产品管理',
-    items: [
-      { path: '/products', title: '产品列表', icon: 'Grid', permission: 'product:view' },
-      { path: '/products?lifecycle=initiation', title: '立项确认', icon: 'Flag', permission: 'product:view' },
-      { path: '/products?lifecycle=design', title: '设计差异', icon: 'EditPen', permission: 'product:view' },
-      { path: '/products?lifecycle=tooling', title: '模具处理', icon: 'Tools', permission: 'product:view' },
-      { path: '/products?lifecycle=sampling', title: '样品签核', icon: 'Promotion', permission: 'product:view' },
-      { path: '/products?lifecycle=process', title: '工艺与 BOM', icon: 'Operation', permission: 'product:view' },
-      { path: '/products?lifecycle=pilot', title: '小批验证', icon: 'Box', permission: 'product:view' },
-      { path: '/products?lifecycle=mx', title: 'MX 验证', icon: 'Ship', permission: 'product:view' },
-      { path: '/products?lifecycle=release', title: '冻结发布', icon: 'CircleCheck', permission: 'product:view' }
-    ]
-  },
-  {
     title: '项目管理',
     items: [
       { path: '/projects?tab=in_progress', title: '进行中', icon: 'Management', permission: 'project:view' },
@@ -55,7 +41,7 @@ const menuGroups: MenuGroup[] = [
         children: [
           { path: '/projects?tab=archived&archiveView=overview', title: '已归档', icon: 'Collection', permission: 'project:view' },
           { path: '/projects?tab=archived&archiveView=product', title: '产品管理', icon: 'Grid', permission: 'project:view' },
-          { path: '/projects?tab=archived&archiveView=sku', title: 'SKU管理', icon: 'Tickets', permission: 'project:view' }
+          { path: '/projects?tab=archived&archiveView=sku', title: 'SKU 管理', icon: 'Tickets', permission: 'project:view' }
         ]
       },
       { path: '/projects?tab=abandoned', title: '已放弃', icon: 'RemoveFilled', permission: 'project:view' }
@@ -71,7 +57,7 @@ const menuGroups: MenuGroup[] = [
       { path: '/approval-tasks', title: '审批中心', icon: 'Checked', permission: 'approval:view' },
       { path: '/system/users', title: '用户管理', icon: 'Avatar', permission: 'admin:user' },
       { path: '/system/roles', title: '角色管理', icon: 'Key', permission: 'admin:role' },
-      { path: '/system/dicts', title: '字典管理', icon: 'Collection', permission: 'admin:dict' },
+      { path: '/system/fields', title: '字段管理', icon: 'SetUp', permission: 'admin:field' },
       { path: '/system/import', title: '数据导入', icon: 'Upload', permission: 'admin:import' }
     ]
   }
@@ -132,10 +118,6 @@ function isGroupOpen(group: MenuGroup) {
 
 function isSubMenuOpen(path: string) {
   return subMenuState[path] ?? false
-}
-
-function toggleSubMenu(path: string) {
-  subMenuState[path] = !subMenuState[path]
 }
 
 function toggleGroup(title: string) {
@@ -340,11 +322,10 @@ function handleMenuItemClick(item: MenuItem, groupTitle: string) {
   font-weight: 600;
 }
 
-.sidebar__group-arrow {
-  color: #64748b;
-}
-
-.sidebar__group-icon {
+.sidebar__group-arrow,
+.sidebar__group-icon,
+.sidebar__item-icon,
+.sidebar__collapse-icon {
   color: #64748b;
 }
 
@@ -390,10 +371,6 @@ function handleMenuItemClick(item: MenuItem, groupTitle: string) {
   width: 3px;
   border-radius: 999px;
   background: #2563eb;
-}
-
-.sidebar__item-icon {
-  color: #64748b;
 }
 
 .sidebar__item-arrow {
@@ -450,10 +427,6 @@ function handleMenuItemClick(item: MenuItem, groupTitle: string) {
 .sidebar__collapse-trigger:hover {
   background: rgba(255, 255, 255, 0.88);
   border-color: rgba(148, 163, 184, 0.3);
-}
-
-.sidebar__collapse-icon {
-  color: #64748b;
 }
 
 .sidebar--collapsed .sidebar__group {

@@ -43,7 +43,7 @@ export const rolePermissions: Record<string, string[]> = {
     'admin:force-advance',
     'admin:user',
     'admin:role',
-    'admin:dict',
+    'admin:field',
     'admin:log',
     'admin:import'
   ],
@@ -243,7 +243,7 @@ export const systemPermissionGroups: SystemPermissionGroup[] = [
     options: [
       { label: '用户管理', value: 'admin:user' },
       { label: '角色管理', value: 'admin:role' },
-      { label: '字典管理', value: 'admin:dict' },
+      { label: '字段管理', value: 'admin:field' },
       { label: '操作日志', value: 'admin:log' },
       { label: '数据导入', value: 'admin:import' }
     ]
@@ -400,7 +400,7 @@ export const systemRoles: SystemRoleItem[] = [
       'admin:force-advance',
       'admin:user',
       'admin:role',
-      'admin:dict',
+      'admin:field',
       'admin:log',
       'admin:import'
     ],

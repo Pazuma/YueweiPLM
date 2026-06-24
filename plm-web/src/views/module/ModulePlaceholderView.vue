@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import PageContainer from '@/components/PageContainer/index.vue'
+import { normalizeLegacyProductTarget } from '@/utils/projectRoute'
 
 type ModuleKey =
   | 'bom'
@@ -286,7 +287,7 @@ const moduleKey = computed(() => (route.meta.moduleKey || 'order') as ModuleKey)
 const current = computed(() => configs[moduleKey.value])
 
 function openTarget(path: string) {
-  router.push(path)
+  router.push(normalizeLegacyProductTarget(path))
 }
 
 function tagType(text: string) {

@@ -242,29 +242,6 @@ onMounted(async () => {
     </template>
 
     <template v-if="activeView === 'tasks'">
-      <section class="metric-grid">
-        <button class="metric-card summary-button" type="button" @click="table.setQuery({ ...table.query, status: 'pending' })">
-          <p class="metric-card__label">待处理</p>
-          <p class="metric-card__value">{{ taskSummary.pending }}</p>
-          <span class="metric-card__trend">优先处理当前待审节点</span>
-        </button>
-        <button class="metric-card summary-button" type="button" @click="table.setQuery({ ...table.query, status: 'approved' })">
-          <p class="metric-card__label">已通过</p>
-          <p class="metric-card__value">{{ taskSummary.approved }}</p>
-          <span class="metric-card__trend">查看最近已完成的审批链路</span>
-        </button>
-        <button class="metric-card summary-button" type="button" @click="table.setQuery({ ...table.query, status: 'rejected' })">
-          <p class="metric-card__label">已驳回</p>
-          <p class="metric-card__value">{{ taskSummary.rejected }}</p>
-          <span class="metric-card__trend">定位异常节点和退回原因</span>
-        </button>
-        <button class="metric-card summary-button" type="button" @click="table.resetQuery({ keyword: '', status: '' })">
-          <p class="metric-card__label">全部任务</p>
-          <p class="metric-card__value">{{ taskRows.length }}</p>
-          <span class="metric-card__trend">恢复完整审批任务列表</span>
-        </button>
-      </section>
-
       <SearchBar
         :fields="searchFields"
         :model-value="table.query"
@@ -304,24 +281,6 @@ onMounted(async () => {
     </template>
 
     <template v-else>
-      <section class="metric-grid">
-        <div class="metric-card">
-          <p class="metric-card__label">模板总数</p>
-          <p class="metric-card__value">{{ templateSummary.total }}</p>
-          <span class="metric-card__trend">统一管理新产品线、新型号线与冻结发布流程</span>
-        </div>
-        <div class="metric-card">
-          <p class="metric-card__label">启用中</p>
-          <p class="metric-card__value">{{ templateSummary.active }}</p>
-          <span class="metric-card__trend">当前可直接被业务对象调用</span>
-        </div>
-        <div class="metric-card">
-          <p class="metric-card__label">草稿中</p>
-          <p class="metric-card__value">{{ templateSummary.draft }}</p>
-          <span class="metric-card__trend">尚未正式启用的流程模板</span>
-        </div>
-      </section>
-
       <section class="split-grid template-layout" v-loading="loading">
         <article class="page-panel">
           <div class="toolbar-row">

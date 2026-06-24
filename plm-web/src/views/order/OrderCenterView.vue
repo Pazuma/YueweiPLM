@@ -120,14 +120,6 @@ function statusTag(status: OrderStatus) {
 
 <template>
   <PageContainer title="需求订单">
-    <section class="metric-grid">
-      <div v-for="metric in metrics" :key="metric.label" class="metric-card">
-        <p class="metric-card__label">{{ metric.label }}</p>
-        <p class="metric-card__value">{{ metric.value }}</p>
-        <span class="metric-card__trend">{{ metric.hint }}</span>
-      </div>
-    </section>
-
     <section class="page-panel order-toolbar">
       <el-select v-model="progressFilter" class="order-toolbar__select" placeholder="选择订单阶段">
         <el-option label="全部" value="all" />

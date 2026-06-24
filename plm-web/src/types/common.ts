@@ -257,3 +257,56 @@ export interface SystemPermissionGroup {
     value: string
   }>
 }
+
+/* ========== 字段管理类型 ========== */
+
+export type SystemFieldScope =
+  | 'product'
+  | 'sku'
+  | 'order'
+  | 'project'
+  | 'bom'
+  | 'process'
+  | 'inventory'
+  | 'approval'
+  | 'system'
+
+export type SystemFieldInputType =
+  | 'text'
+  | 'select'
+  | 'multi_select'
+  | 'number'
+  | 'date'
+  | 'switch'
+  | 'textarea'
+
+export type SystemFieldStatus = 'active' | 'inactive'
+
+export interface SystemFieldOption {
+  optionId: number
+  label: string
+  value: string
+  sortNo: number
+  status: SystemFieldStatus
+  isSystem: boolean
+}
+
+export interface SystemFieldItem {
+  fieldId: number
+  fieldCode: string
+  fieldName: string
+  scope: SystemFieldScope
+  inputType: SystemFieldInputType
+  status: SystemFieldStatus
+  required: boolean
+  visibleInList: boolean
+  visibleInDetail: boolean
+  visibleInFilter: boolean
+  editable: boolean
+  sortNo: number
+  description: string
+  usageScenes: string[]
+  options: SystemFieldOption[]
+  isSystem: boolean
+  updatedAt: string
+}

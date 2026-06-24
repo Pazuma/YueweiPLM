@@ -189,29 +189,6 @@ onMounted(loadData)
       <el-button type="primary" @click="openCreateDrawer">新增用户</el-button>
     </template>
 
-    <section class="metric-grid">
-      <button class="metric-card summary-button" type="button" @click="query.status = 'active'">
-        <p class="metric-card__label">启用中</p>
-        <p class="metric-card__value">{{ summary.active }}</p>
-        <span class="metric-card__trend">优先查看当前仍参与流程推进的人员</span>
-      </button>
-      <button class="metric-card summary-button" type="button" @click="query.status = 'inactive'">
-        <p class="metric-card__label">停用中</p>
-        <p class="metric-card__value">{{ summary.inactive }}</p>
-        <span class="metric-card__trend">检查是否仍绑定角色或审批责任</span>
-      </button>
-      <button class="metric-card summary-button" type="button" @click="query.roleName = '超级管理员'">
-        <p class="metric-card__label">超级管理员</p>
-        <p class="metric-card__value">{{ summary.superAdmins }}</p>
-        <span class="metric-card__trend">可执行强制推进、越权审批和系统级操作</span>
-      </button>
-      <button class="metric-card summary-button" type="button" @click="resetQuery">
-        <p class="metric-card__label">全部用户</p>
-        <p class="metric-card__value">{{ summary.total }}</p>
-        <span class="metric-card__trend">恢复完整用户列表</span>
-      </button>
-    </section>
-
     <section class="page-panel filter-panel">
       <div class="filter-grid">
         <el-input v-model="query.keyword" clearable placeholder="搜索姓名 / 账号 / 部门 / 角色" />

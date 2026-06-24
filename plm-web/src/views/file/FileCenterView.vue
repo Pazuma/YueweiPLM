@@ -15,6 +15,7 @@ import type {
   FileSection
 } from '@/types/foundation'
 import { formatDate } from '@/utils/format'
+import { toArchivedProductRoute } from '@/utils/projectRoute'
 
 const router = useRouter()
 
@@ -135,7 +136,7 @@ function toggleGroup(groupId: string) {
 }
 
 function openProduct(productId: number) {
-  router.push(`/products/${productId}`)
+  router.push(toArchivedProductRoute(productId))
 }
 
 function previewFile(file: FileRecord) {

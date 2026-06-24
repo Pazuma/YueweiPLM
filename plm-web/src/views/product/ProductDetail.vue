@@ -4,6 +4,7 @@ import { ElMessage } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
 
 import { getFoundationProducts, getProductPresentation } from '@/api/modules/foundation'
+import FilePreview from '@/components/FilePreview/index.vue'
 import PageContainer from '@/components/PageContainer/index.vue'
 import StatusTag from '@/components/StatusTag/index.vue'
 import { useUserStore } from '@/stores/user'
@@ -12,9 +13,12 @@ import type {
   BomCompareRow,
   ProductBomItemRow,
   ProductDetailPresentation,
-  ProductTimelineNode
+  ProductDocumentSummary,
+  ProductTimelineNode,
+  ProductionDocumentPreviewFile
 } from '@/types/foundation'
 import { formatAmount, formatDate } from '@/utils/format'
+import { toArchivedSkuRoute } from '@/utils/projectRoute'
 
 type TimelineActionMode = 'advance' | 'force' | 'reject'
 type DetailSectionKey = 'basic' | 'timeline' | 'materials' | 'business' | 'quality'
@@ -35,6 +39,25 @@ const activeTimelineNodeKey = ref('')
 const activeSection = ref<DetailSectionKey>('timeline')
 const activeMaterialSection = ref<MaterialSectionKey>('bom')
 
+/* 生产资料预览 */
+const productionPreviewVisible = ref(false)
+const activeProductionDoc = ref<ProductionDocumentPreviewFile | null>(null)
+
+function openProductionDocPreview(doc: ProductDocumentSummary) {
+  activeProductionDoc.value = {
+    fileId: doc.fileId || '',
+    fileName: doc.fileName,
+    category: doc.category,
+    versionNo: doc.versionNo,
+    owner: doc.owner,
+    updatedAt: doc.updatedAt,
+    status: doc.status,
+    previewUrl: doc.previewUrl,
+    downloadUrl: doc.downloadUrl
+  }
+  productionPreviewVisible.value = true
+}
+
 const dialogState = reactive({
   visible: false,
   mode: 'advance' as TimelineActionMode,
@@ -46,7 +69,7 @@ const dialogState = reactive({
 
 const sectionOptions = [
   { label: '基础信息', value: 'basic' },
-  { label: '项目时间轴', value: 'timeline' },
+  { label: '项目流程', value: 'timeline' },
   { label: '资料区', value: 'materials' },
   { label: '商务区', value: 'business' },
   { label: '质量区', value: 'quality' }
@@ -253,7 +276,7 @@ onMounted(loadData)
   >
     <template #actions>
       <el-button @click="router.back()">返回</el-button>
-      <el-button @click="router.push('/sku-view')">返回 SKU 管理</el-button>
+      <el-button @click="router.push(toArchivedSkuRoute())">返回归档 SKU</el-button>
     </template>
 
     <section class="metric-grid" v-loading="loading">
@@ -325,8 +348,8 @@ onMounted(loadData)
       <section v-else-if="activeSection === 'timeline'" id="product-detail-timeline" class="page-panel detail-subpanel">
         <div class="toolbar-row">
           <div>
-            <h3 class="section-title">项目时间轴</h3>
-            <p class="page-panel-desc">把推进确认放在节点旁边，用户查看节点时就能直接推进、驳回或强制推进。</p>
+            <h3 class="section-title">项目流程</h3>
+            <p class="page-panel-desc">查看每个环节的经历内容、接收人、推动人和推动时间，可在当前节点直接执行推进、驳回或强制推进。</p>
           </div>
         </div>
 
@@ -349,6 +372,10 @@ onMounted(loadData)
                 <div class="detail-row">
                   <span>{{ node.ownerRole }}</span>
                   <span>{{ node.actualDate || node.plannedDate || '--' }}</span>
+                </div>
+                <div class="detail-row" v-if="node.receiverUserName || node.promoterUserName">
+                  <span v-if="node.receiverUserName">接收：{{ node.receiverUserName }}</span>
+                  <span v-if="node.promoterUserName">推动：{{ node.promoterUserName }}</span>
                 </div>
                 <p class="page-panel-desc">{{ node.summary }}</p>
               </button>
@@ -387,13 +414,40 @@ onMounted(loadData)
             </div>
 
             <div class="page-stack">
-              <div class="info-card">
-                <span class="subtle-text">责任角色</span>
-                <strong>{{ activeTimelineNode.ownerRole }}</strong>
+              <div v-if="activeTimelineNode.experienceSummary" class="info-card">
+                <span class="subtle-text">经历内容</span>
+                <strong>{{ activeTimelineNode.experienceSummary }}</strong>
+              </div>
+              <div class="detail-grid-2col">
+                <div class="info-card">
+                  <span class="subtle-text">责任角色</span>
+                  <strong>{{ activeTimelineNode.ownerRole }}</strong>
+                </div>
+                <div v-if="activeTimelineNode.actualDate || activeTimelineNode.plannedDate" class="info-card">
+                  <span class="subtle-text">计划 / 实际时间</span>
+                  <strong>{{ activeTimelineNode.actualDate || activeTimelineNode.plannedDate || '--' }}</strong>
+                </div>
+              </div>
+              <div class="detail-grid-2col">
+                <div class="info-card">
+                  <span class="subtle-text">接收人</span>
+                  <strong>{{ activeTimelineNode.receiverUserName || activeTimelineNode.receiverRole || '--' }}</strong>
+                  <span class="subtle-text" v-if="activeTimelineNode.receivedAt">接收时间：{{ activeTimelineNode.receivedAt }}</span>
+                </div>
+                <div class="info-card">
+                  <span class="subtle-text">推动人</span>
+                  <strong>{{ activeTimelineNode.promoterUserName || activeTimelineNode.promoterRole || activeTimelineNode.ownerRole }}</strong>
+                  <span class="subtle-text" v-if="activeTimelineNode.promotedAt">推动时间：{{ activeTimelineNode.promotedAt }}</span>
+                  <span class="subtle-text" v-else-if="activeTimelineNode.status === 'current'">当前节点推进中</span>
+                </div>
               </div>
               <div v-if="activeTimelineNode.nextAction" class="info-card">
                 <span class="subtle-text">下一步动作</span>
                 <strong>{{ activeTimelineNode.nextAction }}</strong>
+              </div>
+              <div v-if="activeTimelineNode.nextReceiverRole" class="info-card">
+                <span class="subtle-text">下一接收人</span>
+                <strong>{{ activeTimelineNode.nextReceiverUserName || activeTimelineNode.nextReceiverRole }}</strong>
               </div>
               <div v-if="activeTimelineNode.riskNote" class="info-card">
                 <span class="subtle-text">风险提示</span>
@@ -404,6 +458,10 @@ onMounted(loadData)
                 <ul class="detail-list">
                   <li v-for="line in activeTimelineNode.detailLines" :key="line">{{ line }}</li>
                 </ul>
+              </div>
+              <div v-if="activeTimelineNode.documentCount != null" class="info-card">
+                <span class="subtle-text">关联资料</span>
+                <strong>{{ activeTimelineNode.documentCount }} 份</strong>
               </div>
             </div>
           </div>
@@ -499,9 +557,21 @@ onMounted(loadData)
 
           <div class="document-list">
             <div v-for="doc in presentation.documents" :key="doc.fileName" class="document-card">
-              <strong>{{ doc.fileName }}</strong>
-              <span class="subtle-text">{{ doc.category }} / {{ doc.versionNo }}</span>
+              <div class="document-card__head">
+                <strong>{{ doc.fileName }}</strong>
+                <div class="row-actions">
+                  <el-tag v-if="doc.status" size="small" effect="light" :type="doc.status === '已冻结' ? 'success' : doc.status === '已归档' ? 'info' : 'warning'">
+                    {{ doc.status }}
+                  </el-tag>
+                </div>
+              </div>
+              <span class="subtle-text">{{ doc.category }} / 版本 {{ doc.versionNo }}</span>
+              <span class="subtle-text" v-if="doc.owner">负责人：{{ doc.owner }}</span>
               <span class="subtle-text">更新：{{ formatDate(doc.updatedAt) }}</span>
+              <div class="document-card__actions">
+                <el-button link type="primary" size="small" @click="openProductionDocPreview(doc)">预览</el-button>
+                <el-button link type="primary" size="small">下载</el-button>
+              </div>
             </div>
           </div>
         </section>
@@ -757,6 +827,12 @@ onMounted(loadData)
         </el-table>
       </div>
     </el-dialog>
+
+    <!-- 生产资料预览 -->
+    <FilePreview
+      v-model="productionPreviewVisible"
+      :file="activeProductionDoc"
+    />
   </PageContainer>
 </template>
 
@@ -966,6 +1042,26 @@ onMounted(loadData)
   flex-direction: column;
   gap: 8px;
   padding: 14px;
+}
+
+.document-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.document-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.detail-grid-2col {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
 }
 
 .cost-card {

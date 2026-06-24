@@ -144,29 +144,6 @@ onMounted(loadData)
       <el-button type="primary" @click="openCreateDrawer">新增角色</el-button>
     </template>
 
-    <section class="metric-grid">
-      <button class="metric-card summary-button" type="button" @click="query.status = 'active'">
-        <p class="metric-card__label">启用角色</p>
-        <p class="metric-card__value">{{ summary.active }}</p>
-        <span class="metric-card__trend">当前参与页面访问、节点推进和审批的角色集合</span>
-      </button>
-      <button class="metric-card summary-button" type="button" @click="query.keyword = '超级管理员'">
-        <p class="metric-card__label">强制推进角色</p>
-        <p class="metric-card__value">{{ summary.forceAdvance }}</p>
-        <span class="metric-card__trend">拥有强制推进权限的角色应保持最小化</span>
-      </button>
-      <button class="metric-card summary-button" type="button" @click="query.status = 'inactive'">
-        <p class="metric-card__label">停用角色</p>
-        <p class="metric-card__value">{{ summary.total - summary.active }}</p>
-        <span class="metric-card__trend">检查是否仍有绑定用户和残留权限</span>
-      </button>
-      <button class="metric-card summary-button" type="button" @click="query.keyword = ''; query.status = ''">
-        <p class="metric-card__label">全部角色</p>
-        <p class="metric-card__value">{{ summary.total }}</p>
-        <span class="metric-card__trend">恢复完整角色列表</span>
-      </button>
-    </section>
-
     <section class="page-panel filter-panel">
       <div class="filter-grid">
         <el-input v-model="query.keyword" clearable placeholder="搜索角色名称 / 编码 / 描述" />

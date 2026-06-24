@@ -8,6 +8,7 @@ import SearchBar from '@/components/SearchBar/index.vue'
 import type { SearchField } from '@/types/common'
 import type { TestCategoryItem, TestRecordItem } from '@/types/foundation'
 import { formatDate } from '@/utils/format'
+import { toArchivedProductRoute } from '@/utils/projectRoute'
 
 const router = useRouter()
 const loading = ref(false)
@@ -52,7 +53,7 @@ const metrics = computed(() => [
 ])
 
 function openProduct(productId: number) {
-  router.push(`/products/${productId}`)
+  router.push(toArchivedProductRoute(productId))
 }
 
 async function loadData() {

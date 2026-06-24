@@ -20,6 +20,7 @@ import type {
   ProcessRouteListItem
 } from '@/types/process'
 import { formatAmount } from '@/utils/format'
+import { normalizeLegacyProductTarget } from '@/utils/projectRoute'
 
 type DetailSectionKey = 'overview' | 'operations' | 'attachments' | 'changes' | 'impacts'
 
@@ -266,7 +267,7 @@ function syncViewMode(mode: ProcessCenterViewMode) {
 }
 
 function openTarget(path: string) {
-  router.push(path)
+  router.push(normalizeLegacyProductTarget(path))
 }
 
 function routeTypeLabel(type: ProcessRouteListItem['routeType']) {
@@ -360,14 +361,7 @@ onMounted(loadSnapshot)
 
       <el-table :data="table.filteredRows.value" border stripe class="route-table">
         <el-table-column prop="routeCode" label="编号" min-width="160" />
-        <el-table-column label="所属产品" min-width="230">
-          <template #default="{ row }">
-            <div class="cell-stack">
-              <strong>{{ row.productName }}</strong>
-              <span class="subtle-text">{{ row.productCode }}</span>
-            </div>
-          </template>
-        </el-table-column>
+        <el-table-column label="所属项目" min-width="230"><template #default="{ row }"><strong>{{ row.productName }}</strong></template></el-table-column>
         <el-table-column prop="routeName" label="名字" min-width="250" />
         <el-table-column label="状态" width="120">
           <template #default="{ row }">

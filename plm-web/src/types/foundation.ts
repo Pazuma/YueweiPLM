@@ -67,7 +67,7 @@ export type ProductBomItemsByVersion = Record<string, ProductBomItemRow[]>
 export interface ProductTimelineNode {
   nodeKey: string
   nodeName: string
-  status: 'completed' | 'current' | 'pending'
+  status: 'completed' | 'current' | 'pending' | 'rejected'
   ownerRole: string
   plannedDate?: string
   actualDate?: string
@@ -78,6 +78,19 @@ export interface ProductTimelineNode {
   canReject?: boolean
   gateLabel?: string
   detailLines?: string[]
+
+  /* 项目流程模块扩展字段 */
+  receiverRole?: string
+  receiverUserName?: string
+  receivedAt?: string
+  promoterRole?: string
+  promoterUserName?: string
+  promotedAt?: string
+  experienceSummary?: string
+  documentCount?: number
+  phaseName?: string
+  nextReceiverRole?: string
+  nextReceiverUserName?: string
 }
 
 export interface ProductMaterialCategoryItem {
@@ -110,10 +123,17 @@ export interface ProductSupplierSummary {
 }
 
 export interface ProductDocumentSummary {
+  fileId?: string
   fileName: string
   category: string
   versionNo: string
   updatedAt: string
+  owner?: string
+  status?: string
+  previewUrl?: string
+  downloadUrl?: string
+  stageKey?: string
+  stageLabel?: string
 }
 
 export interface ProductQualitySummary {
@@ -143,6 +163,7 @@ export interface ProductDetailPresentation {
   suppliers: ProductSupplierSummary[]
   documents: ProductDocumentSummary[]
   qualityRecords: ProductQualitySummary[]
+  processRoutes?: SkuProcessRouteRow[]
 }
 
 export interface FileRecord {
@@ -314,4 +335,61 @@ export interface ReportCenterSnapshot {
   rangeLabel: string
   cards: ReportCenterCard[]
   details: ReportDetailSection[]
+}
+
+/* ========== 项目流程模块类型 ========== */
+
+export type ProjectFlowStatus = 'completed' | 'current' | 'pending' | 'rejected'
+
+export interface ProjectFlowNode {
+  stepNo: number
+  nodeKey: string
+  nodeName: string
+  phaseName: string
+  status: ProjectFlowStatus
+  experienceSummary: string
+  receiverRole: string
+  receiverUserName?: string
+  receivedAt?: string
+  promoterRole: string
+  promoterUserName?: string
+  promotedAt?: string
+  plannedAt?: string
+  nextAction?: string
+  nextReceiverRole?: string
+  nextReceiverUserName?: string
+  gateLabel?: string
+  riskNote?: string
+  detailLines?: string[]
+  documentCount?: number
+}
+
+/* ========== 生产资料预览组件类型 ========== */
+
+export interface ProductionDocumentPreviewFile {
+  fileId: string
+  fileName: string
+  category: string
+  versionNo: string
+  owner?: string
+  updatedAt?: string
+  status?: string
+  previewUrl?: string
+  downloadUrl?: string
+}
+
+/* ========== SKU 工艺路线工序行 ========== */
+
+export interface SkuProcessRouteRow {
+  sequenceNo: number
+  processCode: string
+  processName: string
+  processType: string
+  inventoryCode?: string | null
+  inventoryName?: string | null
+  workstationName?: string | null
+  supplierName?: string | null
+  qualityRequirement?: string
+  outputType?: string
+  summary?: string
 }
