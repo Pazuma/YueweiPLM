@@ -43,8 +43,8 @@ public class ResponseVO<T> {
             .build();
     }
 
-    public static ResponseVO<Void> error(int code, String message, String requestId, OffsetDateTime timestamp) {
-        return ResponseVO.<Void>builder()
+    public static <T> ResponseVO<T> error(int code, String message, String requestId, OffsetDateTime timestamp) {
+        return ResponseVO.<T>builder()
             .code(code)
             .message(message)
             .requestId(requestId)

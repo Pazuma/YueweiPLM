@@ -10,11 +10,14 @@ import java.util.List;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 @Slf4j
 @RestControllerAdvice
@@ -22,7 +25,10 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(BusinessException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
-    public ResponseVO<Void> handleBusiness(BusinessException ex, HttpServletRequest request) {
+    public ResponseVO<Object> handleBusiness(BusinessException ex, HttpServletRequest request) {
+        if (ex.getData() != null) {
+            return ResponseVO.error(ex.getCode(), ex.getMessage(), ex.getData(), RequestIdUtil.getRequestId(request), OffsetDateTime.now());
+        }
         return ResponseVO.error(ex.getCode(), ex.getMessage(), RequestIdUtil.getRequestId(request), OffsetDateTime.now());
     }
 
@@ -50,6 +56,39 @@ public class GlobalExceptionHandler {
         return ResponseVO.error(
             ErrorCodeConstants.VALIDATION_ERROR,
             ex.getMessage(),
+            RequestIdUtil.getRequestId(request),
+            OffsetDateTime.now()
+        );
+    }
+
+    @ExceptionHandler(AuthenticationException.class)
+    @ResponseStatus(HttpStatus.UNAUTHORIZED)
+    public ResponseVO<Void> handleAuthentication(AuthenticationException ex, HttpServletRequest request) {
+        return ResponseVO.error(
+            ErrorCodeConstants.UNAUTHORIZED,
+            "未登录或登录已失效",
+            RequestIdUtil.getRequestId(request),
+            OffsetDateTime.now()
+        );
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    @ResponseStatus(HttpStatus.FORBIDDEN)
+    public ResponseVO<Void> handleAccessDenied(AccessDeniedException ex, HttpServletRequest request) {
+        return ResponseVO.error(
+            ErrorCodeConstants.FORBIDDEN,
+            "无权限访问",
+            RequestIdUtil.getRequestId(request),
+            OffsetDateTime.now()
+        );
+    }
+
+    @ExceptionHandler(NoResourceFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public ResponseVO<Void> handleNoResourceFound(NoResourceFoundException ex, HttpServletRequest request) {
+        return ResponseVO.error(
+            ErrorCodeConstants.RESOURCE_NOT_FOUND,
+            "资源不存在",
             RequestIdUtil.getRequestId(request),
             OffsetDateTime.now()
         );

@@ -3,20 +3,32 @@ package com.yuewei.plm.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.yuewei.plm.common.constant.ErrorCodeConstants;
 import com.yuewei.plm.common.constant.ProductStatusConstants;
 import com.yuewei.plm.common.exception.BusinessException;
+import com.yuewei.plm.common.security.CurrentUser;
+import com.yuewei.plm.common.security.CurrentUserContext;
 import com.yuewei.plm.common.util.ProductCodeGenerator;
 import com.yuewei.plm.common.vo.PageVO;
 import com.yuewei.plm.controller.dto.ProductCreateDTO;
+import com.yuewei.plm.controller.dto.ProductLifecycleActionDTO;
 import com.yuewei.plm.controller.dto.ProductQueryDTO;
 import com.yuewei.plm.controller.dto.ProductUpdateDTO;
+import com.yuewei.plm.module.operationlog.constant.OperationActionConstants;
+import com.yuewei.plm.module.operationlog.service.OperationLogCreateCommand;
+import com.yuewei.plm.module.operationlog.service.OperationLogService;
 import com.yuewei.plm.repository.ProductRepository;
 import com.yuewei.plm.repository.entity.Product;
+import com.yuewei.plm.service.ProductReleaseGateValidator;
 import com.yuewei.plm.service.ProductService;
 import com.yuewei.plm.service.vo.ProductCreateResultVO;
+import com.yuewei.plm.service.vo.ProductReleaseGateCheckVO;
 import com.yuewei.plm.service.vo.ProductVO;
+import jakarta.servlet.http.HttpServletRequest;
 import java.time.LocalDateTime;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,6 +40,9 @@ public class ProductServiceImpl implements ProductService {
 
     private final ProductRepository productRepository;
     private final ProductCodeGenerator productCodeGenerator;
+    private final OperationLogService operationLogService;
+    private final ObjectMapper objectMapper;
+    private final ProductReleaseGateValidator productReleaseGateValidator;
 
     @Override
     public PageVO<ProductVO> page(ProductQueryDTO queryDTO) {
@@ -142,27 +157,49 @@ public class ProductServiceImpl implements ProductService {
 
     @Override
     @Transactional
-    public void freeze(Long productId, String operator, String reason) {
+    public void freeze(Long productId, String reason, HttpServletRequest request) {
+        ProductLifecycleActionDTO dto = new ProductLifecycleActionDTO();
+        dto.setReason(reason);
+        freeze(productId, dto, request);
+    }
+
+    @Override
+    @Transactional
+    public ProductVO freeze(Long productId, ProductLifecycleActionDTO dto, HttpServletRequest request) {
+        // 冻结属于关键业务动作，操作人必须来自 token 上下文，不能由前端参数伪造。
+        CurrentUser currentUser = requireCurrentUser();
+        String operator = currentUser.displayName();
         Product product = getProductOrThrow(productId);
         if (ProductStatusConstants.RELEASED.equals(product.getStatus())) {
             throw new BusinessException(ErrorCodeConstants.VERSION_RELEASED, "已发布版本不可重复冻结");
         }
+        if (ProductStatusConstants.ARCHIVED.equals(product.getStatus())) {
+            throw new BusinessException(ErrorCodeConstants.STATUS_TRANSITION_ILLEGAL, "已归档项目不能冻结");
+        }
+        String reason = dto == null ? null : dto.getReason();
         product.setFrozenAt(LocalDateTime.now());
         product.setFrozenBy(operator);
         product.setFreezeReason(reason);
         product.setLockStatus("frozen");
         product.setLockReason(reason);
+        product.setLockOperatorUserId(currentUser.userId());
         product.setLockOperatorUserName(operator);
         product.setLockOperatedAt(LocalDateTime.now());
         product.setUpdatedAt(LocalDateTime.now());
         product.setUpdatedBy(operator);
         productRepository.updateById(product);
+        writeProductLog(product, OperationActionConstants.PRODUCT_FREEZE, reason, request);
+        return toVO(product);
     }
 
     @Override
     @Transactional
     public void publish(Long productId, String operator) {
         Product product = getProductOrThrow(productId);
+        ProductReleaseGateCheckVO gate = productReleaseGateValidator.check(product);
+        if (!Boolean.TRUE.equals(gate.getPassed())) {
+            throw new BusinessException(ErrorCodeConstants.RELEASE_GATE_NOT_PASSED, "发布门禁未通过", gate);
+        }
         validateStatusTransition(product.getStatus(), ProductStatusConstants.RELEASED);
         product.setStatus(ProductStatusConstants.RELEASED);
         product.setReleasedAt(LocalDateTime.now());
@@ -170,6 +207,83 @@ public class ProductServiceImpl implements ProductService {
         product.setUpdatedAt(LocalDateTime.now());
         product.setUpdatedBy(operator);
         productRepository.updateById(product);
+        writeProductLog(product, OperationActionConstants.PRODUCT_PUBLISH, "兼容旧产品发布接口", null);
+    }
+
+    @Override
+    public ProductReleaseGateCheckVO checkReleaseGate(Long productId) {
+        Product product = getProductOrThrow(productId);
+        return productReleaseGateValidator.check(product);
+    }
+
+    @Override
+    @Transactional
+    public ProductVO publish(Long productId, ProductLifecycleActionDTO dto, HttpServletRequest request) {
+        Product product = getProductOrThrow(productId);
+        CurrentUser currentUser = requireCurrentUser();
+        ProductReleaseGateCheckVO gate = productReleaseGateValidator.check(product);
+        if (!Boolean.TRUE.equals(gate.getPassed())) {
+            throw new BusinessException(ErrorCodeConstants.RELEASE_GATE_NOT_PASSED, "发布门禁未通过", gate);
+        }
+        validateStatusTransition(product.getStatus(), ProductStatusConstants.RELEASED);
+        product.setStatus(ProductStatusConstants.RELEASED);
+        product.setReleasedAt(LocalDateTime.now());
+        product.setReleasedBy(currentUser.displayName());
+        product.setUpdatedAt(LocalDateTime.now());
+        product.setUpdatedBy(currentUser.displayName());
+        productRepository.updateById(product);
+        writeProductLog(product, OperationActionConstants.PRODUCT_PUBLISH, dto == null ? null : dto.getReason(), request);
+        return toVO(product);
+    }
+
+    @Override
+    @Transactional
+    public ProductVO archive(Long productId, ProductLifecycleActionDTO dto, HttpServletRequest request) {
+        Product product = getProductOrThrow(productId);
+        CurrentUser currentUser = requireCurrentUser();
+        validateStatusTransition(product.getStatus(), ProductStatusConstants.ARCHIVED);
+        String reason = dto == null ? null : dto.getReason();
+        product.setStatus(ProductStatusConstants.ARCHIVED);
+        product.setArchivedAt(LocalDateTime.now());
+        product.setArchivedBy(currentUser.displayName());
+        product.setArchiveReason(reason);
+        product.setUpdatedAt(LocalDateTime.now());
+        product.setUpdatedBy(currentUser.displayName());
+        productRepository.updateById(product);
+        writeProductLog(product, OperationActionConstants.PRODUCT_ARCHIVE, reason, request);
+        return toVO(product);
+    }
+
+    @Override
+    @Transactional
+    public ProductVO abandon(Long productId, ProductLifecycleActionDTO dto, HttpServletRequest request) {
+        Product product = getProductOrThrow(productId);
+        CurrentUser currentUser = requireCurrentUser();
+        if (ProductStatusConstants.RELEASED.equals(product.getStatus())) {
+            throw new BusinessException(ErrorCodeConstants.STATUS_TRANSITION_ILLEGAL, "已发布产品不能废弃，只能归档或发起变更");
+        }
+        if (ProductStatusConstants.ARCHIVED.equals(product.getStatus())) {
+            throw new BusinessException(ErrorCodeConstants.STATUS_TRANSITION_ILLEGAL, "已归档产品不能重复废弃");
+        }
+        String reason = dto == null ? null : dto.getReason();
+        product.setStatus(ProductStatusConstants.ARCHIVED);
+        product.setLockStatus("abandoned");
+        product.setAbandonedAt(LocalDateTime.now());
+        product.setAbandonedBy(currentUser.displayName());
+        product.setAbandonReason(reason);
+        product.setUpdatedAt(LocalDateTime.now());
+        product.setUpdatedBy(currentUser.displayName());
+        productRepository.updateById(product);
+        writeProductLog(product, OperationActionConstants.PRODUCT_ABANDON, reason, request);
+        return toVO(product);
+    }
+
+    private String toDetailJson(String reason) {
+        try {
+            return objectMapper.writeValueAsString(Map.of("reason", reason == null ? "" : reason));
+        } catch (JsonProcessingException ex) {
+            throw new BusinessException(ErrorCodeConstants.INTERNAL_ERROR, "操作日志详情序列化失败");
+        }
     }
 
     private Product getProductOrThrow(Long productId) {
@@ -178,6 +292,23 @@ public class ProductServiceImpl implements ProductService {
             throw new BusinessException(ErrorCodeConstants.RESOURCE_NOT_FOUND, "产品不存在");
         }
         return product;
+    }
+
+    private CurrentUser requireCurrentUser() {
+        return CurrentUserContext.get()
+            .orElseThrow(() -> new BusinessException(ErrorCodeConstants.UNAUTHORIZED, "未登录或登录已失效"));
+    }
+
+    private void writeProductLog(Product product, String action, String reason, HttpServletRequest request) {
+        operationLogService.logSuccess(OperationLogCreateCommand.builder()
+            .action(action)
+            .businessType("PRODUCT")
+            .businessId(String.valueOf(product.getProductId()))
+            .businessCode(product.getProductCode())
+            .businessName(product.getProductName())
+            .detailJson(toDetailJson(reason))
+            .request(request)
+            .build());
     }
 
     private void validateVariantParent(String productType, Long parentProductId) {
@@ -223,12 +354,19 @@ public class ProductServiceImpl implements ProductService {
             .ownerUserId(product.getOwnerUserId())
             .versionNo(product.getVersionNo())
             .status(product.getStatus())
+            .currentStepNo(product.getCurrentStepNo())
             .effectiveDate(product.getEffectiveDate())
             .releasedAt(product.getReleasedAt())
             .releasedBy(product.getReleasedBy())
             .frozenAt(product.getFrozenAt())
             .frozenBy(product.getFrozenBy())
             .freezeReason(product.getFreezeReason())
+            .archivedAt(product.getArchivedAt())
+            .archivedBy(product.getArchivedBy())
+            .archiveReason(product.getArchiveReason())
+            .abandonedAt(product.getAbandonedAt())
+            .abandonedBy(product.getAbandonedBy())
+            .abandonReason(product.getAbandonReason())
             .lockStatus(product.getLockStatus())
             .remark(product.getRemark())
             .createdAt(product.getCreatedAt())

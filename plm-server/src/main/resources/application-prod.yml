@@ -12,4 +12,9 @@ spring:
 
 app:
   security:
-    enabled: true
+    enabled: ${APP_SECURITY_ENABLED:true}
+    dev-token: ${APP_SECURITY_DEV_TOKEN}
+  storage:
+    local-root: ${APP_STORAGE_LOCAL_ROOT}
+    max-file-size-bytes: ${APP_STORAGE_MAX_FILE_SIZE_BYTES:52428800}
+    allowed-extensions: ${APP_STORAGE_ALLOWED_EXTENSIONS:pdf,doc,docx,xls,xlsx,ppt,pptx,txt,csv,jpg,jpeg,png,zip}

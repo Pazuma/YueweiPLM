@@ -5,6 +5,7 @@ import com.yuewei.plm.common.util.RequestIdUtil;
 import com.yuewei.plm.common.vo.PageVO;
 import com.yuewei.plm.common.vo.ResponseVO;
 import com.yuewei.plm.controller.dto.ProductCreateDTO;
+import com.yuewei.plm.controller.dto.ProductLifecycleActionDTO;
 import com.yuewei.plm.controller.dto.ProductQueryDTO;
 import com.yuewei.plm.controller.dto.ProductUpdateDTO;
 import com.yuewei.plm.service.ProductService;
@@ -14,7 +15,6 @@ import io.swagger.v3.oas.annotations.Operation;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.time.OffsetDateTime;
-import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -61,19 +61,17 @@ public class ProductController {
     @PostMapping("/{id}/freeze")
     @Operation(summary = "冻结产品版本")
     public ResponseVO<Void> freeze(@PathVariable("id") Long productId,
-                                   @RequestParam("operator") String operator,
                                    @RequestParam(value = "reason", required = false) String reason,
                                    HttpServletRequest request) {
-        productService.freeze(productId, operator, reason);
+        productService.freeze(productId, reason, request);
         return ResponseVO.success(RequestIdUtil.getRequestId(request), OffsetDateTime.now());
     }
 
     @PostMapping("/{id}/publish")
     @Operation(summary = "发布产品版本")
-    public ResponseVO<Void> publish(@PathVariable("id") Long productId,
-                                    @RequestBody Map<String, String> body,
-                                    HttpServletRequest request) {
-        productService.publish(productId, body.getOrDefault("operator", "system"));
-        return ResponseVO.success(RequestIdUtil.getRequestId(request), OffsetDateTime.now());
+    public ResponseVO<ProductVO> publish(@PathVariable("id") Long productId,
+                                         @RequestBody(required = false) ProductLifecycleActionDTO dto,
+                                         HttpServletRequest request) {
+        return ResponseVO.success(productService.publish(productId, dto, request), RequestIdUtil.getRequestId(request), OffsetDateTime.now());
     }
 }
