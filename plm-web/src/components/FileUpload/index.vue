@@ -2,7 +2,18 @@
 import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
 
-import { uploadAttachment } from '@/api/modules/attachment'
+import { uploadTimelineAttachment } from '@/api/modules/attachment'
+
+const props = withDefaults(defineProps<{
+  projectId?: number
+  nodeKey?: string
+  fileCategory?: string
+  versionNo?: string
+  remark?: string
+}>(), {
+  fileCategory: 'document',
+  versionNo: 'A'
+})
 
 const emit = defineEmits<{
   (event: 'uploaded', payload: { attachmentId: number; fileName: string }): void
@@ -11,10 +22,23 @@ const emit = defineEmits<{
 const uploading = ref(false)
 
 async function beforeUpload(file: File) {
+  if (!props.projectId || !props.nodeKey) {
+    ElMessage.error('请先选择项目和时间轴节点')
+    return false
+  }
+
   uploading.value = true
   try {
-    const result = await uploadAttachment(file.name)
-    emit('uploaded', result)
+    const result = await uploadTimelineAttachment(props.projectId, props.nodeKey, file, {
+      fileCategory: props.fileCategory,
+      versionNo: props.versionNo,
+      remark: props.remark
+    })
+
+    emit('uploaded', {
+      attachmentId: result.attachmentId,
+      fileName: result.originalFileName || result.fileName
+    })
     ElMessage.success(`已上传 ${file.name}`)
   } finally {
     uploading.value = false
@@ -28,7 +52,7 @@ async function beforeUpload(file: File) {
     <div class="upload-box">
       <el-icon class="upload-box__icon"><UploadFilled /></el-icon>
       <div class="upload-box__title">{{ uploading ? '上传中...' : '拖拽文件到此处，或点击上传' }}</div>
-      <div class="upload-box__tip">用于图纸、工艺文件、客户确认资料等附件演示。</div>
+      <div class="upload-box__tip">文件会挂到当前项目的时间轴节点。</div>
     </div>
   </el-upload>
 </template>

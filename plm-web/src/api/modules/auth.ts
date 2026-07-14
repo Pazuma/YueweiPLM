@@ -1,35 +1,92 @@
-import { mockAccounts, rolePermissions } from '@/mock/users'
+import request, { unwrapResponse } from '../request'
 import type { UserProfile } from '@/types/common'
-import { mockResolve } from '../request'
 
-export async function loginByPassword(payload: { username: string; password: string }) {
-  return mockResolve(() => {
-    const account = mockAccounts.find(
-      (item) => item.username === payload.username && item.password === payload.password
-    )
-
-    if (!account) {
-      throw new Error('账号或密码错误，请使用演示账号登录。')
-    }
-
-    return {
-      token: `mock-token-${account.username}`,
-      profile: account.profile,
-      permissions: rolePermissions[account.profile.roleName] || []
-    }
-  })
+export interface LoginRequest {
+  username: string
+  password: string
 }
 
-export async function getProfileByToken(token: string): Promise<{
+interface BackendCurrentUser {
+  userId: number
+  username: string
+  displayName: string
+  allPermissions: boolean
+}
+
+interface BackendLoginResponse {
+  token: string
+  tokenType: string
+  expiresInSeconds: number
+  user: BackendCurrentUser
+}
+
+export interface LoginResponse {
+  token: string
+  tokenType: string
+  expiresInSeconds: number
+  profile: UserProfile
+  permissions: string[]
+  allPermissions: boolean
+}
+
+export interface ProfileResponse {
+  profile: UserProfile
+  permissions: string[]
+  allPermissions: boolean
+}
+
+function toProfile(user: BackendCurrentUser): UserProfile {
+  return {
+    userId: Number(user.userId),
+    userName: user.displayName || user.username,
+    roleName: user.allPermissions ? '全部权限' : '工程',
+    department: '工程部'
+  }
+}
+
+function toPermissions(user: BackendCurrentUser): string[] {
+  return user.allPermissions ? ['*'] : []
+}
+
+function toSession(data: BackendLoginResponse): LoginResponse {
+  return {
+    token: data.token,
+    tokenType: data.tokenType,
+    expiresInSeconds: data.expiresInSeconds,
+    profile: toProfile(data.user),
+    permissions: toPermissions(data.user),
+    allPermissions: data.user.allPermissions
+  }
+}
+
+export async function login(payload: LoginRequest): Promise<LoginResponse> {
+  const response = await request.post('/auth/login', payload)
+  return toSession(unwrapResponse<BackendLoginResponse>(response))
+}
+
+export const loginByPassword = login
+
+export async function getProfile(): Promise<ProfileResponse> {
+  const response = await request.get('/auth/profile')
+  const user = unwrapResponse<BackendCurrentUser>(response)
+  return {
+    profile: toProfile(user),
+    permissions: toPermissions(user),
+    allPermissions: user.allPermissions
+  }
+}
+
+export async function getProfileByToken(_token: string): Promise<{
   profile: UserProfile
   permissions: string[]
 }> {
-  return mockResolve(() => {
-    const username = token.replace('mock-token-', '')
-    const account = mockAccounts.find((item) => item.username === username) || mockAccounts[0]
-    return {
-      profile: account.profile,
-      permissions: rolePermissions[account.profile.roleName] || []
-    }
-  })
+  const session = await getProfile()
+  return {
+    profile: session.profile,
+    permissions: session.permissions
+  }
+}
+
+export async function logout(): Promise<void> {
+  await request.post('/auth/logout')
 }

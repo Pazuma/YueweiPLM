@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 
-import { getProfileByToken, loginByPassword } from '@/api/modules/auth'
+import { getProfileByToken, loginByPassword, logout as logoutApi } from '@/api/modules/auth'
 import type { UserProfile } from '@/types/common'
 
 export const useUserStore = defineStore('user', () => {
@@ -29,23 +29,37 @@ export const useUserStore = defineStore('user', () => {
       return
     }
 
-    const session = await getProfileByToken(token.value)
-    profile.value = session.profile
-    permissions.value = session.permissions
+    try {
+      const session = await getProfileByToken(token.value)
+      profile.value = session.profile
+      permissions.value = session.permissions
+    } catch (error) {
+      token.value = ''
+      profile.value = null
+      permissions.value = []
+      localStorage.removeItem('plm_token')
+      throw error
+    }
   }
 
-  function logout() {
-    token.value = ''
-    profile.value = null
-    permissions.value = []
-    localStorage.removeItem('plm_token')
+  async function logout() {
+    try {
+      if (token.value) {
+        await logoutApi()
+      }
+    } finally {
+      token.value = ''
+      profile.value = null
+      permissions.value = []
+      localStorage.removeItem('plm_token')
+    }
   }
 
   function hasPermission(permission?: string) {
     if (!permission) {
       return true
     }
-    return permissions.value.includes(permission)
+    return permissions.value.includes('*') || permissions.value.includes(permission)
   }
 
   return {

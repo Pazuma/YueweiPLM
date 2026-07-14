@@ -30,8 +30,8 @@ const breadcrumbItems = computed(() => {
 
 const routeSubtitle = computed(() => String(route.meta?.subtitle || ''))
 
-function handleLogout() {
-  userStore.logout()
+async function handleLogout() {
+  await userStore.logout()
   router.push('/login')
 }
 </script>

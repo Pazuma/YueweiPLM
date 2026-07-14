@@ -7,7 +7,9 @@
     "dev": "vite --host 0.0.0.0 --port 5173",
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0 --port 4173",
-    "type-check": "vue-tsc --noEmit"
+    "type-check": "vue-tsc --noEmit",
+    "test": "vitest",
+    "test:run": "vitest run"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.1",
@@ -21,10 +23,13 @@
   },
   "devDependencies": {
     "@types/node": "^22.15.30",
+    "@vue/test-utils": "^2.4.6",
     "@vitejs/plugin-vue": "^5.2.1",
-    "sass": "^1.83.4",
+    "happy-dom": "15.11.7",
+    "sass": "1.89.2",
     "typescript": "^5.8.3",
     "vite": "^6.0.7",
+    "vitest": "^3.2.4",
     "vue-tsc": "^2.2.12"
   }
 }

@@ -1,13 +1,24 @@
 <script setup lang="ts">
 import { UploadFilled } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import { getProductPresentation } from '@/api/modules/foundation'
-import { getProductList } from '@/api/modules/product'
+import {
+  advanceTimelineNode,
+  confirmTimelineNode,
+  getProjects,
+  getProjectTimeline,
+  returnTimelineNode,
+  type TimelineDetailVO
+} from '@/api/modules/project'
 import FilePreview from '@/components/FilePreview/index.vue'
 import PageContainer from '@/components/PageContainer/index.vue'
 import StatusTag from '@/components/StatusTag/index.vue'
+import ProjectBomPanel from './components/ProjectBomPanel.vue'
+import ProjectProcessRoutePanel from './components/ProjectProcessRoutePanel.vue'
+import TimelineAttachmentPanel from './components/TimelineAttachmentPanel.vue'
 import type { CommonStatus } from '@/types/common'
 import type { BomCompareRow, ProductBomItemRow, ProductDetailPresentation, ProductTimelineNode, ProductionDocumentPreviewFile, SkuProcessRouteRow } from '@/types/foundation'
 import type { ProductSummary } from '@/types/product'
@@ -35,6 +46,7 @@ type SkuPageStage = 'product-home' | 'sku-list'
 type ProductFlowStageStatus = ProductTimelineNode['status']
 type ProcessDetailFilter = 'all' | 'key' | 'changed'
 type ProductProcessDetailTag = 'key' | 'changed' | 'outsourced'
+type TimelinePresentationNode = ProductTimelineNode & { confirmed?: boolean }
 
 interface AbandonedProject {
   productId: number
@@ -156,12 +168,18 @@ const detailTarget = ref<ProductSummary | null>(null)
 const detailLoading = ref(false)
 const detailPresentation = ref<ProductDetailPresentation | null>(null)
 const detailBomVersion = ref('')
+const timelineActionLoading = ref<false | 'confirm' | 'advance' | 'return'>(false)
+const timelineCurrentConfirmed = ref<boolean | null>(null)
+const timelineLastAction = ref<string | null>(null)
+const timelineLastReason = ref<string | null>(null)
+const timelineLastOperatedAt = ref<string | null>(null)
+const timelineLastOperatorUserName = ref<string | null>(null)
 const activeDetailSection = ref<DetailSectionKey>('basic')
 const activeProductFlowStageKey = ref('')
 const activeSkuFlowStageKey = ref('')
 const processDetailFilter = ref<ProcessDetailFilter>('all')
 const processDetailKeyword = ref('')
-const skuFlowTableExpanded = ref(false)
+const skuFlowTableExpanded = ref<string[]>([])
 
 /* 生产资料预览 */
 const productionPreviewVisible = ref(false)
@@ -395,9 +413,24 @@ const activeDetailSections = computed(() =>
   isProductDetailDialog.value ? productDetailSections : skuDetailSections
 )
 
-const activeProductFlowNode = computed(() => {
-  const nodes = detailPresentation.value?.timeline || []
+const activeProductFlowNode = computed<TimelinePresentationNode | null>(() => {
+  const nodes = (detailPresentation.value?.timeline || []) as TimelinePresentationNode[]
   return nodes.find((item) => item.status === 'current') || nodes[0] || null
+})
+
+const currentTimelineConfirmed = computed(() => Boolean(activeProductFlowNode.value?.confirmed ?? timelineCurrentConfirmed.value))
+
+const currentTimelineActionLabel = computed(() => {
+  if (!activeProductFlowNode.value) return '暂无当前节点'
+  return currentTimelineConfirmed.value ? '可推进到下一节点' : '等待确认当前节点'
+})
+
+const canAdvanceCurrentTimelineNode = computed(() => {
+  if (!activeProductFlowNode.value) return false
+  if (activeProductFlowNode.value.status !== 'current') return false
+  const nodes = detailPresentation.value?.timeline || []
+  const currentIndex = nodes.findIndex((node) => node.nodeKey === activeProductFlowNode.value?.nodeKey)
+  return currentTimelineConfirmed.value && currentIndex >= 0 && currentIndex < nodes.length - 1
 })
 
 function stageMatchesNode(stage: ProjectTimelineDefinition, node: ProductTimelineNode, stepNo: number) {
@@ -696,22 +729,193 @@ function skuBackToProductHome() {
   skuPageStage.value = 'product-home'
 }
 
+function getTimelineActionLabel(action?: string | null) {
+  if (action === 'confirm') return '已确认当前节点'
+  if (action === 'advance') return '已推进到下一节点'
+  if (action === 'return') return '已退回处理'
+  return '暂无动作'
+}
+
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error) return error.message
+  return '操作失败，请稍后重试'
+}
+
+function mapTimelineToPresentationNodes(timeline: TimelineDetailVO): TimelinePresentationNode[] {
+  return timeline.nodes.map((node) => ({
+    nodeKey: node.nodeKey,
+    nodeName: node.nodeName,
+    status: node.status,
+    ownerRole: node.ownerRole,
+    summary: node.summary,
+    nextAction: node.nextAction,
+    riskNote: node.riskNote,
+    gateLabel: node.gateLabel,
+    detailLines: node.detailLines,
+    receiverRole: node.receiverRole,
+    receiverUserName: node.receiverUserName,
+    receivedAt: node.receivedAt,
+    promoterRole: node.promoterRole,
+    promoterUserName: node.promoterUserName,
+    promotedAt: node.promotedAt,
+    experienceSummary: node.experienceSummary,
+    documentCount: node.documentCount,
+    phaseName: node.phaseName,
+    confirmed: node.confirmed,
+    canAdvance: node.status === 'current' && Boolean(node.confirmed),
+    canReject: node.status === 'current'
+  }))
+}
+
+function applyTimelineMetadata(timeline: TimelineDetailVO) {
+  timelineCurrentConfirmed.value = timeline.currentConfirmed ?? null
+  timelineLastAction.value = timeline.lastAction || null
+  timelineLastReason.value = timeline.lastReason || null
+  timelineLastOperatedAt.value = timeline.lastOperatedAt || null
+  timelineLastOperatorUserName.value = timeline.lastOperatorUserName || null
+}
+
+async function refreshProjectTimeline(projectId: number) {
+  if (!detailPresentation.value) return
+  const timeline = await getProjectTimeline(projectId)
+  applyTimelineMetadata(timeline)
+  const nodes = mapTimelineToPresentationNodes(timeline)
+  const currentNode = nodes.find((node) => node.status === 'current')
+  detailPresentation.value = {
+    ...detailPresentation.value,
+    currentNode: currentNode?.nodeName || timeline.currentNode || detailPresentation.value.currentNode,
+    nextNode: currentNode?.nextAction || detailPresentation.value.nextNode,
+    timeline: nodes.length ? nodes : detailPresentation.value.timeline
+  }
+  if (detailTarget.value) {
+    detailTarget.value = {
+      ...detailTarget.value,
+      currentStage: currentNode?.nodeName || detailTarget.value.currentStage,
+      currentStepNo: timeline.currentStepNo
+    }
+  }
+}
+
+async function handleM4AttachmentChanged() {
+  if (!detailTarget.value) return
+  await refreshProjectTimeline(detailTarget.value.productId)
+}
+
+async function handleConfirmCurrentNode() {
+  if (!detailTarget.value || !activeProductFlowNode.value || timelineActionLoading.value) return
+  try {
+    const { value } = await ElMessageBox.prompt('可填写确认备注，留空则只确认当前节点。', '确认当前节点', {
+      confirmButtonText: '确认',
+      cancelButtonText: '取消',
+      inputPlaceholder: '例如：资料已检查，进入可推进状态'
+    })
+    timelineActionLoading.value = 'confirm'
+    await confirmTimelineNode(detailTarget.value.productId, activeProductFlowNode.value.nodeKey, String(value || ''))
+    await refreshProjectTimeline(detailTarget.value.productId)
+    await loadData()
+    ElMessage.success('节点已确认')
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close') ElMessage.error(getErrorMessage(error))
+  } finally {
+    timelineActionLoading.value = false
+  }
+}
+
+async function handleAdvanceCurrentNode() {
+  if (!detailTarget.value || !activeProductFlowNode.value || timelineActionLoading.value) return
+  if (!canAdvanceCurrentTimelineNode.value) {
+    ElMessage.warning(currentTimelineConfirmed.value ? '最后一个节点不能继续推进' : '请先确认当前节点')
+    return
+  }
+  try {
+    await ElMessageBox.confirm('推进后项目会进入下一节点，新节点会回到未确认状态。', '推进下一节点', {
+      confirmButtonText: '推进',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+    timelineActionLoading.value = 'advance'
+    await advanceTimelineNode(detailTarget.value.productId, activeProductFlowNode.value.nodeKey)
+    await refreshProjectTimeline(detailTarget.value.productId)
+    await loadData()
+    ElMessage.success('已推进到下一节点')
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close') ElMessage.error(getErrorMessage(error))
+  } finally {
+    timelineActionLoading.value = false
+  }
+}
+
+async function handleReturnCurrentNode(returnToPrevious: boolean) {
+  if (!detailTarget.value || !activeProductFlowNode.value || timelineActionLoading.value) return
+  try {
+    const { value } = await ElMessageBox.prompt(
+      returnToPrevious ? '请输入退回上一节点的原因。' : '请输入退回当前节点修改的原因。',
+      returnToPrevious ? '退回上一节点' : '退回当前节点修改',
+      {
+        confirmButtonText: '退回',
+        cancelButtonText: '取消',
+        inputPlaceholder: '必须填写，例如：图纸资料需补充',
+        inputValidator: (value) => Boolean(String(value || '').trim()),
+        inputErrorMessage: '请填写退回原因'
+      }
+    )
+    timelineActionLoading.value = 'return'
+    await returnTimelineNode(
+      detailTarget.value.productId,
+      activeProductFlowNode.value.nodeKey,
+      String(value || ''),
+      returnToPrevious
+    )
+    await refreshProjectTimeline(detailTarget.value.productId)
+    await loadData()
+    ElMessage.success('已退回处理')
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close') ElMessage.error(getErrorMessage(error))
+  } finally {
+    timelineActionLoading.value = false
+  }
+}
+
+function handleReturnCommand(command: string | number | object) {
+  handleReturnCurrentNode(command === 'previous')
+}
+
 async function openDetail(row: ProductSummary) {
+  detailPresentation.value = null
+  detailBomVersion.value = ''
   detailTarget.value = row
   activeDetailSection.value = row.productType === 'product_line' ? 'current_node' : 'basic'
   activeProductFlowStageKey.value = ''
   activeSkuFlowStageKey.value = ''
   processDetailFilter.value = 'all'
   processDetailKeyword.value = ''
+  timelineCurrentConfirmed.value = null
+  timelineLastAction.value = null
+  timelineLastReason.value = null
+  timelineLastOperatedAt.value = null
+  timelineLastOperatorUserName.value = null
   detailVisible.value = true
   detailLoading.value = true
   try {
     const presentation = await getProductPresentation(row.productId)
-    detailPresentation.value = presentation
+    try {
+      const timeline = await getProjectTimeline(row.productId)
+      applyTimelineMetadata(timeline)
+      const nodes = mapTimelineToPresentationNodes(timeline)
+      const currentNode = nodes.find((node) => node.status === 'current')
+      detailPresentation.value = {
+        ...presentation,
+        currentNode: currentNode?.nodeName || timeline.currentNode || presentation.currentNode,
+        nextNode: currentNode?.nextAction || presentation.nextNode,
+        timeline: nodes.length ? nodes : presentation.timeline
+      }
+    } catch {
+      detailPresentation.value = presentation
+    }
     detailBomVersion.value =
-      presentation.defaultBomVersion ||
-      presentation.bomCompareRows.find((item) => item.statusLabel === '当前')?.versionNo ||
-      presentation.bomCompareRows[0]?.versionNo ||
+      detailPresentation.value.defaultBomVersion ||
+      detailPresentation.value.bomCompareRows.find((item) => item.statusLabel === '当前')?.versionNo ||
+      detailPresentation.value.bomCompareRows[0]?.versionNo ||
       ''
   } finally {
     detailLoading.value = false
@@ -818,7 +1022,7 @@ function syncTabFromRoute() {
 async function loadData() {
   loading.value = true
   try {
-    rows.value = await getProductList()
+    rows.value = await getProjects({ page: 1, size: 100 })
   } finally {
     loading.value = false
   }
@@ -1257,7 +1461,66 @@ onMounted(loadData)
             </div>
           </div>
 
+          <div class="timeline-action-panel">
+            <div class="timeline-action-panel__status">
+              <el-tag :type="currentTimelineConfirmed ? 'success' : 'warning'" effect="light">
+                {{ currentTimelineConfirmed ? '已确认' : '未确认' }}
+              </el-tag>
+              <span>{{ currentTimelineActionLabel }}</span>
+            </div>
+            <div class="timeline-action-panel__buttons">
+              <el-button
+                v-if="activeProductFlowNode && !currentTimelineConfirmed"
+                type="primary"
+                :loading="timelineActionLoading === 'confirm'"
+                :disabled="Boolean(timelineActionLoading)"
+                @click="handleConfirmCurrentNode"
+              >
+                确认当前节点
+              </el-button>
+              <el-button
+                v-if="activeProductFlowNode && currentTimelineConfirmed"
+                type="primary"
+                :loading="timelineActionLoading === 'advance'"
+                :disabled="Boolean(timelineActionLoading) || !canAdvanceCurrentTimelineNode"
+                @click="handleAdvanceCurrentNode"
+              >
+                推进下一节点
+              </el-button>
+              <el-dropdown
+                v-if="activeProductFlowNode"
+                :disabled="Boolean(timelineActionLoading)"
+                @command="handleReturnCommand"
+              >
+                <el-button :loading="timelineActionLoading === 'return'">退回</el-button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item command="current">退回当前节点修改</el-dropdown-item>
+                    <el-dropdown-item command="previous">退回上一节点</el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+            </div>
+          </div>
+
           <div class="detail-grid">
+            <div class="info-card">
+              <span class="subtle-text">确认状态</span>
+              <strong>{{ currentTimelineConfirmed ? '已确认' : '未确认' }}</strong>
+            </div>
+            <div class="info-card">
+              <span class="subtle-text">最近动作</span>
+              <strong>{{ getTimelineActionLabel(timelineLastAction) }}</strong>
+              <span class="subtle-text">{{ timelineLastOperatedAt ? formatDate(timelineLastOperatedAt) : '--' }}</span>
+            </div>
+            <div class="info-card">
+              <span class="subtle-text">最近操作人</span>
+              <strong>{{ timelineLastOperatorUserName || '--' }}</strong>
+            </div>
+            <div class="info-card">
+              <span class="subtle-text">最近退回原因</span>
+              <strong>{{ timelineLastReason || '--' }}</strong>
+            </div>
             <div class="info-card">
               <span class="subtle-text">下一步动作</span>
               <strong>{{ activeProductFlowNode?.nextAction || detailTarget.nextAction || detailPresentation?.nextNode || '--' }}</strong>
@@ -1382,150 +1645,19 @@ onMounted(loadData)
         </section>
 
         <section v-if="isProductDetailDialog" v-show="activeDetailSection === 'bom_manage'" class="detail-section">
-          <div class="toolbar-row">
-            <div>
-              <h4 class="section-title">BOM管理</h4>
-              <p class="page-panel-desc">查看当前 Product 下的 BOM 版本、敲定版本、版本选择和物料明细。</p>
-            </div>
-            <el-button @click="router.push('/bom')">打开 BOM 管理</el-button>
-          </div>
-
-          <div class="detail-cost-grid">
-            <div class="info-card">
-              <span class="subtle-text">敲定版本</span>
-              <strong>{{ detailPresentation?.defaultBomVersion || '-' }}</strong>
-            </div>
-            <div class="info-card">
-              <span class="subtle-text">BOM 版本数</span>
-              <strong>{{ detailPresentation?.bomCompareRows.length || 0 }} 个</strong>
-            </div>
-            <div class="info-card">
-              <span class="subtle-text">当前查看版本</span>
-              <strong>{{ detailBomVersion || '--' }}</strong>
-            </div>
-          </div>
-
-          <div class="bom-version-select-panel">
-            <span class="subtle-text">选择 BOM 版本</span>
-            <el-select v-model="detailBomVersion" style="width: 220px">
-              <el-option
-                v-for="item in detailPresentation?.bomCompareRows || []"
-                :key="item.versionNo"
-                :label="`${item.versionNo} / ${item.statusLabel}`"
-                :value="item.versionNo"
-              />
-            </el-select>
-          </div>
-
-          <div v-if="activeBomVersionSummary" class="bom-summary-row">
-            <span>材料成本：{{ formatAmount(activeBomVersionSummary.materialCost) }}</span>
-            <span>工艺成本：{{ formatAmount(activeBomVersionSummary.processCost) }}</span>
-            <span>总成本：{{ formatAmount(activeBomVersionSummary.totalCost) }}</span>
-          </div>
-
-          <el-table :data="detailBomItems" border stripe size="small">
-            <el-table-column prop="inventoryCode" label="物料编码" min-width="150" />
-            <el-table-column prop="inventoryName" label="物料名称" min-width="180" />
-            <el-table-column prop="quantity" label="用量" width="90" />
-            <el-table-column prop="stockUom" label="单位" width="90" />
-            <el-table-column prop="supplierName" label="供应商" min-width="150" />
-            <el-table-column label="备注" min-width="140"><template #default="{ row }">{{ getBomRemark(row) }}</template></el-table-column>
-            <el-table-column label="成本" width="120"><template #default="{ row }">{{ formatAmount(getBomLineCost(row)) }}</template></el-table-column>
-          </el-table>
-          <el-empty v-if="!detailBomItems.length" description="暂无 BOM 明细" />
+          <ProjectBomPanel :project-id="detailTarget.productId" />
         </section>
 
         <section v-if="isProductDetailDialog" v-show="activeDetailSection === 'process_detail'" class="detail-section">
-          <div class="toolbar-row">
-            <div>
-              <h4 class="section-title">工序明细</h4>
-              <p class="page-panel-desc">按工序查看参数、质量要求、责任确认人和关键标记。</p>
-            </div>
-            <div class="process-detail-tools">
-              <el-radio-group v-model="processDetailFilter" size="small">
-                <el-radio-button label="all">全部工序</el-radio-button>
-                <el-radio-button label="key">关键工序</el-radio-button>
-                <el-radio-button label="changed">变更工序</el-radio-button>
-              </el-radio-group>
-              <el-input v-model="processDetailKeyword" clearable placeholder="搜索工序 / 位置 / 供应商" style="width: 260px" />
-            </div>
-          </div>
-
-          <el-table :data="filteredProcessDetailRows" border stripe size="small">
-            <el-table-column prop="sequenceNo" label="顺序" width="80" />
-            <el-table-column prop="processCode" label="工序编码" min-width="150" />
-            <el-table-column prop="processName" label="工序名称" min-width="150" />
-            <el-table-column label="工序类型" width="120">
-              <template #default="{ row }">{{ getProcessTypeLabel(row.processType) }}</template>
-            </el-table-column>
-            <el-table-column prop="workstationName" label="执行位置" min-width="170" />
-            <el-table-column label="供应商" min-width="140">
-              <template #default="{ row }">{{ row.supplierName || '--' }}</template>
-            </el-table-column>
-            <el-table-column label="确认人" width="140">
-              <template #default="{ row }">
-                <div class="cell-stack">
-                  <strong>{{ row.confirmerName || '--' }}</strong>
-                  <span class="subtle-text">{{ row.confirmerRole || '--' }}</span>
-                </div>
-              </template>
-            </el-table-column>
-            <el-table-column prop="processParamSummary" label="核心参数摘要" min-width="220" />
-            <el-table-column prop="qualityRequirement" label="质量要求" min-width="180" />
-            <el-table-column label="单工序成本" width="130">
-              <template #default="{ row }">{{ formatAmount(row.unitProcessCost || 0) }}</template>
-            </el-table-column>
-            <el-table-column label="标记" width="190">
-              <template #default="{ row }">
-                <div class="process-tag-list">
-                  <el-tag v-if="row.tags.includes('key')" type="warning" effect="light" size="small">关键工序</el-tag>
-                  <el-tag v-if="row.tags.includes('changed')" type="success" effect="light" size="small">变更</el-tag>
-                  <el-tag v-if="row.tags.includes('outsourced')" type="info" effect="light" size="small">外协</el-tag>
-                  <span v-if="!row.tags.length" class="subtle-text">--</span>
-                </div>
-              </template>
-            </el-table-column>
-          </el-table>
-          <el-empty v-if="!filteredProcessDetailRows.length" description="暂无匹配工序" />
+          <ProjectProcessRoutePanel :project-id="detailTarget.productId" />
         </section>
 
-        <section v-if="isProductDetailDialog" v-show="activeDetailSection === 'materials'" class="detail-section">
-          <div class="detail-section__head">
-            <div>
-              <h4 class="section-title">资料区</h4>
-              <p class="page-panel-desc">按 BOM、图纸文件、模具治具和生产资料查看当前版本资料完整度。</p>
-            </div>
-          </div>
-
-          <div class="detail-cost-grid">
-            <div class="info-card"><span class="subtle-text">BOM 版本</span><strong>{{ detailPresentation?.defaultBomVersion || detailBomVersion || detailTarget.activeBomVersion || '--' }}</strong></div>
-            <div class="info-card"><span class="subtle-text">资料总数</span><strong>{{ detailDocumentStats.total }} 份</strong></div>
-            <div class="info-card"><span class="subtle-text">生产资料</span><strong>{{ detailDocumentStats.production }} 份</strong></div>
-            <div class="info-card"><span class="subtle-text">已冻结 / 归档</span><strong>{{ detailDocumentStats.frozen }} 份</strong></div>
-            <div class="info-card"><span class="subtle-text">模具治具</span><strong>{{ detailPresentation?.toolingSummary.totalCount || 0 }} 项</strong></div>
-            <div class="info-card"><span class="subtle-text">可用模具治具</span><strong>{{ detailPresentation?.toolingSummary.availableCount || 0 }} 项</strong></div>
-          </div>
-
-          <el-table :data="detailPresentation?.documents || []" border stripe size="small">
-            <el-table-column prop="category" label="资料类型" width="120" />
-            <el-table-column label="资料编码" width="140"><template #default="{ row }">{{ row.fileId || '--' }}</template></el-table-column>
-            <el-table-column prop="fileName" label="资料名称" min-width="220" />
-            <el-table-column prop="versionNo" label="版本" width="90" />
-            <el-table-column label="状态" width="110">
-              <template #default="{ row }">
-                <el-tag :type="getDocumentStatusType(row.status)" effect="light" size="small">{{ row.status || '--' }}</el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column label="负责人" width="110"><template #default="{ row }">{{ row.owner || '--' }}</template></el-table-column>
-            <el-table-column label="更新时间" width="130"><template #default="{ row }">{{ formatDate(row.updatedAt) }}</template></el-table-column>
-            <el-table-column label="操作" width="120" fixed="right">
-              <template #default="{ row }">
-                <el-button link type="primary" size="small" @click="openProductionDocPreview(row)">预览</el-button>
-                <el-button link type="primary" size="small">下载</el-button>
-              </template>
-            </el-table-column>
-          </el-table>
-          <el-empty v-if="!detailPresentation?.documents?.length" description="暂无资料" />
+        <section v-if="isProductDetailDialog && activeDetailSection === 'materials'" class="detail-section">
+          <TimelineAttachmentPanel
+            :project-id="detailTarget.productId"
+            :node-key="activeProductFlowNode?.nodeKey || null"
+            @changed="handleM4AttachmentChanged"
+          />
         </section>
 
         <section v-if="isProductDetailDialog" v-show="activeDetailSection === 'business'" class="detail-section">
@@ -1570,59 +1702,11 @@ onMounted(loadData)
         </section>
 
         <section v-show="activeDetailSection === 'bom'" class="detail-section">
-          <div class="toolbar-row">
-            <div>
-              <h4 class="section-title">当前版本 BOM</h4>
-              <p class="page-panel-desc">BOM 作为 Product 的版本化资料展示，不作为独立根对象。</p>
-            </div>
-            <el-select v-model="detailBomVersion" style="width: 160px">
-              <el-option v-for="row in detailPresentation?.bomCompareRows || []" :key="row.versionNo" :label="row.versionNo" :value="row.versionNo" />
-            </el-select>
-          </div>
-          <el-table :data="detailBomItems" border stripe>
-            <el-table-column prop="inventoryCode" label="物料编码" min-width="150" />
-            <el-table-column prop="inventoryName" label="物料名称" min-width="180" />
-            <el-table-column prop="quantity" label="用量" width="90" />
-            <el-table-column prop="stockUom" label="单位" width="90" />
-            <el-table-column prop="supplierName" label="供应商" min-width="150" />
-            <el-table-column label="备注" min-width="140"><template #default="{ row }">{{ getBomRemark(row) }}</template></el-table-column>
-            <el-table-column label="成本" width="120"><template #default="{ row }">{{ formatAmount(getBomLineCost(row)) }}</template></el-table-column>
-          </el-table>
+          <ProjectBomPanel :project-id="detailTarget.productId" />
         </section>
 
         <section v-show="activeDetailSection === 'process'" class="detail-section">
-          <div class="detail-section__head">
-            <div>
-              <h4 class="section-title">工艺路线</h4>
-              <p class="page-panel-desc">按工序查看当前 SKU 版本的工艺路线、执行位置、质量要求和差异说明。</p>
-            </div>
-          </div>
-          <el-table :data="detailPresentation?.processRoutes || []" border stripe size="small">
-            <el-table-column prop="sequenceNo" label="顺序" width="70" />
-            <el-table-column prop="processCode" label="工序编码" min-width="150" />
-            <el-table-column prop="processName" label="工序名称" min-width="150" />
-            <el-table-column label="工序类型" width="120">
-              <template #default="{ row }">{{ getProcessTypeLabel(row.processType) }}</template>
-            </el-table-column>
-            <el-table-column label="模具 / 治具" min-width="180">
-              <template #default="{ row }">
-                <div class="cell-stack">
-                  <strong>{{ row.inventoryCode || '--' }}</strong>
-                  <span class="subtle-text">{{ row.inventoryName || '--' }}</span>
-                </div>
-              </template>
-            </el-table-column>
-            <el-table-column label="执行位置" min-width="150">
-              <template #default="{ row }">{{ row.workstationName || '--' }}</template>
-            </el-table-column>
-            <el-table-column label="供应商" min-width="130">
-              <template #default="{ row }">{{ row.supplierName || '--' }}</template>
-            </el-table-column>
-            <el-table-column prop="qualityRequirement" label="质量要求" min-width="180" />
-            <el-table-column prop="outputType" label="产出类型" width="100" />
-            <el-table-column prop="summary" label="说明" min-width="220" />
-          </el-table>
-          <el-empty v-if="!detailPresentation?.processRoutes?.length" description="暂无工艺路线" />
+          <ProjectProcessRoutePanel :project-id="detailTarget.productId" />
         </section>
 
         <section v-if="!isProductDetailDialog" v-show="activeDetailSection === 'project_flow'" class="detail-section">
@@ -1743,44 +1827,12 @@ onMounted(loadData)
           <el-empty v-else description="暂无项目流程" />
         </section>
 
-        <section v-show="activeDetailSection === 'production_docs'" class="detail-section">
-          <div class="detail-section__head">
-            <div>
-              <h4 class="section-title">生产资料</h4>
-              <p class="page-panel-desc">展示归档时关联的图纸、SOP、SIP、质量资料和客户确认件，支持预览入口。</p>
-            </div>
-          </div>
-          <el-table :data="detailPresentation?.documents || []" border stripe size="small">
-            <el-table-column label="资料类型" width="120">
-              <template #default="{ row }">{{ row.category }}</template>
-            </el-table-column>
-            <el-table-column label="资料编码" width="140">
-              <template #default="{ row }">{{ row.fileId || '--' }}</template>
-            </el-table-column>
-            <el-table-column prop="fileName" label="资料名称" min-width="200" />
-            <el-table-column prop="versionNo" label="版本" width="90" />
-            <el-table-column label="状态" width="100">
-              <template #default="{ row }">
-                <el-tag v-if="row.status" size="small" effect="light" :type="row.status === '已冻结' ? 'success' : row.status === '已归档' ? 'info' : 'warning'">
-                  {{ row.status }}
-                </el-tag>
-                <span v-else class="subtle-text">--</span>
-              </template>
-            </el-table-column>
-            <el-table-column label="负责人" width="100">
-              <template #default="{ row }">{{ row.owner || '--' }}</template>
-            </el-table-column>
-            <el-table-column label="更新时间" width="130">
-              <template #default="{ row }">{{ formatDate(row.updatedAt) }}</template>
-            </el-table-column>
-            <el-table-column label="操作" width="130" fixed="right">
-              <template #default="{ row }">
-                <el-button link type="primary" size="small" @click="openProductionDocPreview(row)">预览</el-button>
-                <el-button link type="primary" size="small">下载</el-button>
-              </template>
-            </el-table-column>
-          </el-table>
-          <el-empty v-if="!detailPresentation?.documents?.length" description="暂无生产资料" />
+        <section v-if="!isProductDetailDialog && activeDetailSection === 'production_docs'" class="detail-section">
+          <TimelineAttachmentPanel
+            :project-id="detailTarget.productId"
+            :node-key="activeProductFlowNode?.nodeKey || null"
+            @changed="handleM4AttachmentChanged"
+          />
         </section>
       </div>
       <template #footer>
@@ -2332,6 +2384,26 @@ onMounted(loadData)
   font-weight: 400;
 }
 
+.timeline-action-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 14px 0;
+  padding: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.timeline-action-panel__status,
+.timeline-action-panel__buttons {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 @media (max-width: 1280px) {
   .timeline-row,
   .sku-product-grid,
@@ -2367,6 +2439,7 @@ onMounted(loadData)
   .flow-stage-summary,
   .flow-child-node,
   .sku-flow-current,
+  .timeline-action-panel,
   .bom-version-select-panel {
     align-items: stretch;
     flex-direction: column;

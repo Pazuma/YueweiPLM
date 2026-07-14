@@ -11,15 +11,13 @@ const userStore = useUserStore()
 const loading = ref(false)
 
 const form = reactive({
-  username: 'pm',
-  password: '123456'
+  username: 'engineer01',
+  password: 'plm123456'
 })
 
 const accounts = [
-  'pm / 123456 - 项目经理',
-  'engineer / 123456 - 工程',
-  'manager / 123456 - 管理层',
-  'admin / 123456 - 超级管理员'
+  'engineer01 / plm123456 - 工程部测试账号',
+  'engineer02 / plm123456 - 工程部测试账号'
 ]
 
 async function handleLogin() {
@@ -55,7 +53,7 @@ async function handleLogin() {
       </el-form>
 
       <div class="login-panel__tips">
-        <strong>演示账号</strong>
+        <strong>后端 M1 测试账号</strong>
         <ul>
           <li v-for="item in accounts" :key="item">{{ item }}</li>
         </ul>

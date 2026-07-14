@@ -359,7 +359,11 @@ router.beforeEach(async (to) => {
 
   if (!restored && userStore.token) {
     restored = true
-    await userStore.restore()
+    try {
+      await userStore.restore()
+    } catch {
+      return { path: '/login', query: { redirect: to.fullPath } }
+    }
   }
 
   if (to.path !== '/login' && !userStore.isLoggedIn) {

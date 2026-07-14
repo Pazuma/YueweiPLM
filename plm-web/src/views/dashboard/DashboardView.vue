@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { ArrowRight, Document, Plus, Promotion, Tickets } from '@element-plus/icons-vue'
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router'
 
 import PageContainer from '@/components/PageContainer/index.vue'
 import StatusTag from '@/components/StatusTag/index.vue'
+import { getWorkbenchInProgressProjects } from '@/api/modules/project'
 import { useUserStore } from '@/stores/user'
 import { normalizeLegacyProductTarget } from '@/utils/projectRoute'
 
@@ -18,7 +19,7 @@ interface DashboardProductItem {
   ownerUserName: string
   activeBomVersion: string
   completionRate: number
-  status: 'developing' | 'reviewing'
+  status: 'draft' | 'developing' | 'reviewing'
 }
 
 interface DashboardTaskItem {
@@ -35,7 +36,7 @@ interface DashboardTaskItem {
   currentStepNo?: number
   ownerUserName?: string
   completionRate?: number
-  status?: 'developing' | 'reviewing'
+  status?: 'draft' | 'developing' | 'reviewing'
 }
 
 interface DashboardRiskItem {
@@ -70,7 +71,7 @@ interface DashboardProjectProgressTarget {
   currentStepNo?: number
   ownerUserName?: string
   completionRate?: number
-  status?: 'developing' | 'reviewing'
+  status?: 'draft' | 'developing' | 'reviewing'
   targetPath: string
 }
 
@@ -163,41 +164,22 @@ const userStore = useUserStore()
 const currentUserName = computed(() => userStore.profile?.userName || '')
 const activeMetricView = ref<DashboardViewKey>('products')
 
-const inProgressProducts = computed<DashboardProductItem[]>(() => [
-  {
-    productId: 101,
-    productName: '超队 3.0 磁吸手机壳',
-    productCode: 'PRD-CD30-001',
-    seriesName: '超队 3.0',
-    currentStage: '红样测试',
-    ownerUserName: '张敏',
-    activeBomVersion: 'A.3',
-    completionRate: 0.82,
-    status: 'reviewing'
-  },
-  {
-    productId: 102,
-    productName: '超队 3.0 iPhone18 黑色',
-    productCode: 'PRD-CD30-IP18-BLK',
-    seriesName: '超队 3.0',
-    currentStage: '差异测试验证',
-    ownerUserName: '刘浩',
-    activeBomVersion: 'A.2',
-    completionRate: 0.76,
-    status: 'reviewing'
-  },
-  {
-    productId: 103,
-    productName: '超队 3.0 iPhone18 蓝色',
-    productCode: 'PRD-CD30-IP18-BLU',
-    seriesName: '超队 3.0',
-    currentStage: '样品确认',
-    ownerUserName: '刘浩',
-    activeBomVersion: 'A.1',
-    completionRate: 0.54,
-    status: 'developing'
-  }
-])
+const inProgressProducts = ref<DashboardProductItem[]>([])
+
+async function loadInProgressProjects() {
+  const projects = await getWorkbenchInProgressProjects({ page: 1, size: 20 })
+  inProgressProducts.value = projects.map((item) => ({
+    productId: item.productId,
+    productName: item.productName,
+    productCode: item.productCode,
+    seriesName: item.seriesName,
+    currentStage: item.currentStage,
+    ownerUserName: item.ownerUserName,
+    activeBomVersion: item.activeBomVersion,
+    completionRate: item.completionRate,
+    status: item.status as DashboardProductItem['status']
+  }))
+}
 
 const myPendingTasks = computed<DashboardTaskItem[]>(() => [
   {
@@ -628,6 +610,8 @@ function submitCreateProject() {
 function open(path: string) {
   router.push(normalizeLegacyProductTarget(path))
 }
+
+onMounted(loadInProgressProjects)
 </script>
 
 <template>

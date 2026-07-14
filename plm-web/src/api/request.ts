@@ -1,4 +1,4 @@
-import axios from 'axios'
+import axios, { type AxiosResponse, type InternalAxiosRequestConfig } from 'axios'
 import { ElMessage } from 'element-plus'
 
 const request = axios.create({
@@ -9,7 +9,15 @@ const request = axios.create({
   }
 })
 
+export function prepareRequestContentType(config: InternalAxiosRequestConfig) {
+  if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
+    config.headers.delete('Content-Type')
+  }
+  return config
+}
+
 request.interceptors.request.use((config) => {
+  prepareRequestContentType(config)
   const token = localStorage.getItem('plm_token')
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
@@ -36,6 +44,34 @@ export function mockResolve<T>(factory: () => T, delay = 180): Promise<T> {
       }
     }, delay)
   })
+}
+
+export interface ApiResponse<T> {
+  code: number
+  message: string
+  data: T
+  requestId?: string
+  timestamp?: string
+}
+
+export interface PageResponse<T> {
+  content: T[]
+  page: number
+  size: number
+  totalElements: number
+  totalPages: number
+}
+
+export function unwrapResponse<T>(response: AxiosResponse<ApiResponse<T>>): T {
+  const body = response.data
+  if (body.code !== 0) {
+    throw new Error(body.message || '接口请求失败')
+  }
+  return body.data
+}
+
+export function unwrapPage<T>(response: AxiosResponse<ApiResponse<PageResponse<T>>>): PageResponse<T> {
+  return unwrapResponse(response)
 }
 
 export default request

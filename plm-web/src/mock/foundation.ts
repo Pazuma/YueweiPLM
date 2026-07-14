@@ -12,7 +12,7 @@ import type {
   TestRecordItem
 } from '@/types/foundation'
 
-const foundationProducts: FoundationProductRef[] = [
+export const foundationProducts: FoundationProductRef[] = [
   {
     productId: 101,
     productCode: 'PRD-CD30-001',
@@ -107,7 +107,7 @@ function clone<T>(value: T): T {
   return structuredClone(value)
 }
 
-const productDetailPresentationMap: Record<number, ProductDetailPresentation> = {
+export const productDetailPresentationMap: Record<number, ProductDetailPresentation> = {
   101: {
     productId: 101,
     title: '超队 3.0 磁吸手机壳',
