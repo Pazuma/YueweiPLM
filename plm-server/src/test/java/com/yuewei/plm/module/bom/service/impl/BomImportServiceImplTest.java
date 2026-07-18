@@ -6,6 +6,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.yuewei.plm.module.bom.repository.ProductBomImportBatchRepository;
+import com.yuewei.plm.module.bom.repository.ProductBomRepository;
+import com.yuewei.plm.module.bom.entity.ProductBom;
 import com.yuewei.plm.module.bom.service.BomMaterialLookup;
 import com.yuewei.plm.module.bom.service.BomProcessRouteLookup;
 import com.yuewei.plm.module.bom.service.ProductBomWorkflowService;
@@ -21,6 +23,7 @@ class BomImportServiceImplTest {
     @Test
     void previewsValidWorkbookWithoutWritingBomRows() throws Exception {
         ProductBomImportBatchRepository batchRepository = mock(ProductBomImportBatchRepository.class);
+        ProductBomRepository bomRepository = editableBomRepository();
         BomMaterialLookup materialLookup = mock(BomMaterialLookup.class);
         ProductBomWorkflowService workflowService = mock(ProductBomWorkflowService.class);
         BomProcessRouteLookup routeLookup = mock(BomProcessRouteLookup.class);
@@ -31,7 +34,7 @@ class BomImportServiceImplTest {
             new BomProcessRouteLookup.Route(100L, "DYE", "染色路线")
         ));
         BomImportServiceImpl service = new BomImportServiceImpl(
-            batchRepository, materialLookup, routeLookup, workflowService
+            batchRepository, bomRepository, materialLookup, routeLookup, workflowService
         );
 
         var preview = service.preview(10L, 20L, "formal.xlsx", workbook(true));
@@ -47,7 +50,7 @@ class BomImportServiceImplTest {
     void invalidHeaderProducesDownloadableErrorWorkbook() throws Exception {
         ProductBomImportBatchRepository batchRepository = mock(ProductBomImportBatchRepository.class);
         BomImportServiceImpl service = new BomImportServiceImpl(
-            batchRepository, mock(BomMaterialLookup.class), mock(BomProcessRouteLookup.class),
+            batchRepository, editableBomRepository(), mock(BomMaterialLookup.class), mock(BomProcessRouteLookup.class),
             mock(ProductBomWorkflowService.class)
         );
 
@@ -60,6 +63,35 @@ class BomImportServiceImplTest {
         try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(report))) {
             assertThat(workbook.getSheetAt(0).getRow(0).getCell(3).getStringCellValue()).isEqualTo("错误原因");
         }
+    }
+
+    @Test
+    void rejectsBomOwnedByAnotherProductBeforeParsing() throws Exception {
+        ProductBomRepository bomRepository = mock(ProductBomRepository.class);
+        ProductBom bom = new ProductBom();
+        bom.setProductId(99L);
+        bom.setBomScope("formal");
+        bom.setStatus("draft");
+        when(bomRepository.selectById(20L)).thenReturn(bom);
+        BomImportServiceImpl service = new BomImportServiceImpl(
+            mock(ProductBomImportBatchRepository.class), bomRepository, mock(BomMaterialLookup.class),
+            mock(BomProcessRouteLookup.class), mock(ProductBomWorkflowService.class)
+        );
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.preview(10L, 20L, "formal.xlsx", workbook(true)))
+            .isInstanceOf(com.yuewei.plm.common.exception.BusinessException.class)
+            .hasMessageContaining("BOM");
+    }
+
+    private ProductBomRepository editableBomRepository() {
+        ProductBomRepository repository = mock(ProductBomRepository.class);
+        ProductBom bom = new ProductBom();
+        bom.setProductId(10L);
+        bom.setBomScope("formal");
+        bom.setStatus("draft");
+        bom.setFrozenFlag(0);
+        when(repository.selectById(20L)).thenReturn(bom);
+        return repository;
     }
 
     private byte[] workbook(boolean validHeader) throws Exception {

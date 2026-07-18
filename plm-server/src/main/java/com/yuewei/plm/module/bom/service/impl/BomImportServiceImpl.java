@@ -8,7 +8,9 @@ import com.yuewei.plm.common.exception.BusinessException;
 import com.yuewei.plm.module.bom.dto.BomRouteSaveDTO;
 import com.yuewei.plm.module.bom.dto.ProductBomItemDTO;
 import com.yuewei.plm.module.bom.entity.ProductBomImportBatch;
+import com.yuewei.plm.module.bom.entity.ProductBom;
 import com.yuewei.plm.module.bom.repository.ProductBomImportBatchRepository;
+import com.yuewei.plm.module.bom.repository.ProductBomRepository;
 import com.yuewei.plm.module.bom.service.BomImportService;
 import com.yuewei.plm.module.bom.service.BomMaterialLookup;
 import com.yuewei.plm.module.bom.service.BomProcessRouteLookup;
@@ -42,6 +44,7 @@ public class BomImportServiceImpl implements BomImportService {
     );
 
     private final ProductBomImportBatchRepository batchRepository;
+    private final ProductBomRepository bomRepository;
     private final BomMaterialLookup materialLookup;
     private final BomProcessRouteLookup routeLookup;
     private final ProductBomWorkflowService workflowService;
@@ -49,6 +52,13 @@ public class BomImportServiceImpl implements BomImportService {
 
     @Override
     public BomImportPreviewVO preview(Long productId, Long bomId, String fileName, byte[] content) {
+        ProductBom bom = bomRepository.selectById(bomId);
+        if (bom == null || !productId.equals(bom.getProductId()) || !"formal".equals(bom.getBomScope())) {
+            throw new BusinessException(ErrorCodeConstants.VALIDATION_ERROR, "BOM 不属于当前产品或不是正式 BOM");
+        }
+        if ("released".equals(bom.getStatus()) || Integer.valueOf(1).equals(bom.getFrozenFlag())) {
+            throw new BusinessException(ErrorCodeConstants.VERSION_FROZEN, "BOM 已冻结或发布，不可导入");
+        }
         if (fileName == null || !fileName.toLowerCase().endsWith(".xlsx")) {
             throw new BusinessException(ErrorCodeConstants.VALIDATION_ERROR, "仅支持 xlsx 文件");
         }
@@ -103,6 +113,16 @@ public class BomImportServiceImpl implements BomImportService {
         }
         if (!"ready".equals(batch.getStatus()) || batch.getExpiresAt().isBefore(LocalDateTime.now())) {
             throw new BusinessException(ErrorCodeConstants.VALIDATION_ERROR, "导入批次不可提交或已过期");
+        }
+        batch.setStatus("committing");
+        batch.setUpdatedAt(LocalDateTime.now());
+        batch.setUpdatedBy("system");
+        int claimed = batchRepository.update(batch, new LambdaQueryWrapper<ProductBomImportBatch>()
+            .eq(ProductBomImportBatch::getProductBomImportBatchId, batch.getProductBomImportBatchId())
+            .eq(ProductBomImportBatch::getStatus, "ready")
+            .eq(ProductBomImportBatch::getDeletedFlag, 0));
+        if (claimed != 1) {
+            throw new BusinessException(ErrorCodeConstants.CODE_CONFLICT, "导入令牌已被提交，不能重复使用");
         }
         List<BomImportRowVO> rows = readRows(batch.getPreviewJson());
         Map<String, List<BomImportRowVO>> byRoute = new LinkedHashMap<>();
@@ -229,7 +249,7 @@ public class BomImportServiceImpl implements BomImportService {
         route.setProcessId(first.getProcessId());
         route.setRouteCode(first.getRouteCode());
         route.setRouteName(first.getRouteName());
-        route.setColors(first.getColors());
+        route.setColors(rows.stream().flatMap(row -> row.getColors().stream()).distinct().toList());
         route.setItems(rows.stream().map(this::toItem).toList());
         return route;
     }

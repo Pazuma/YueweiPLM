@@ -1,15 +1,19 @@
-import { bomCenterData } from '@/mock/data'
-import type { BomCenterSnapshot } from '@/types/bom'
-import request, { mockResolve, unwrapResponse } from '../request'
-
-function clone<T>(value: T): T {
-  return structuredClone(value)
-}
+import type {
+  BomCenterSnapshot,
+  BomImportPreview,
+  BomLedgerRow,
+  BomRoute,
+  BomSkuRow,
+  BomSummary,
+  BomWorkbench
+} from '@/types/bom'
+import { notConnected } from '../notConnected'
+import request, { unwrapResponse } from '../request'
 
 /* ========== BOM 中心 ========== */
 
 export function getBomCenterSnapshot(): Promise<BomCenterSnapshot> {
-  return mockResolve(() => clone(bomCenterData))
+  return notConnected('BOM 中心快照')
 }
 
 /* ========== 项目级 BOM（文档 7.4） ========== */
@@ -62,6 +66,7 @@ export interface ProductBomItemSavePayload {
   quantity: number
   unit: string
   lossRate?: number | null
+  unitCost?: number | null
   substituteFlag?: number | null
   remark?: string
 }
@@ -112,4 +117,92 @@ export async function deleteBomItem(bomId: number, itemId: number) {
 export async function freezeBom(bomId: number) {
   const response = await request.post(`/boms/${bomId}/freeze`)
   return unwrapResponse<ProductBomVO>(response)
+}
+
+export interface BomCopyVersionPayload {
+  versionNo: string
+  selectedColors: string[]
+}
+
+export interface BomInheritancePayload {
+  sourceBomId: number
+  selectedColors: string[]
+}
+
+export interface TestBomPayload {
+  versionNo: string
+  items: ProductBomItemSavePayload[]
+}
+
+export async function getBomLedger(): Promise<BomLedgerRow[]> {
+  return unwrapResponse<BomLedgerRow[]>(await request.get('/bom-ledger'))
+}
+
+export async function getBomWorkbench(bomId: number): Promise<BomWorkbench> {
+  return unwrapResponse<BomWorkbench>(await request.get(`/boms/${bomId}/workbench`))
+}
+
+export async function getBomSkus(bomId: number): Promise<BomSkuRow[]> {
+  return unwrapResponse<BomSkuRow[]>(await request.get(`/boms/${bomId}/skus`))
+}
+
+export async function getProcessRouteSkus(routeId: number): Promise<BomSkuRow[]> {
+  return unwrapResponse<BomSkuRow[]>(await request.get(`/process-routes/${routeId}/skus`))
+}
+
+export async function getProductBomSummary(productId: number): Promise<BomSummary> {
+  return unwrapResponse<BomSummary>(await request.get(`/products/${productId}/bom-summary`))
+}
+
+export async function saveBomRoutes(bomId: number, routes: BomRoute[]): Promise<void> {
+  await request.put(`/boms/${bomId}/routes`, routes)
+}
+
+export async function recalculateBomCosts(bomId: number, routes: BomRoute[]) {
+  return unwrapResponse(await request.post(`/boms/${bomId}/costs/recalculate`, routes))
+}
+
+export async function submitBomReview(bomId: number) {
+  return unwrapResponse(await request.post(`/boms/${bomId}/submit-review`))
+}
+
+export async function publishBom(bomId: number) {
+  return unwrapResponse(await request.post(`/boms/${bomId}/publish`))
+}
+
+export async function copyBomVersion(bomId: number, payload: BomCopyVersionPayload) {
+  return unwrapResponse(await request.post(`/boms/${bomId}/copy-version`, payload))
+}
+
+export async function inheritBom(productId: number, payload: BomInheritancePayload) {
+  return unwrapResponse(await request.post(`/products/${productId}/boms/inherit`, payload))
+}
+
+export async function saveTestBom(productId: number, payload: TestBomPayload) {
+  return unwrapResponse(await request.post(`/products/${productId}/test-bom`, payload))
+}
+
+export async function confirmTestBom(productId: number) {
+  return unwrapResponse(await request.post(`/products/${productId}/test-bom/confirm`))
+}
+
+export async function previewBomImport(productId: number, bomId: number, file: File): Promise<BomImportPreview> {
+  const form = new FormData()
+  form.append('bomId', String(bomId))
+  form.append('file', file)
+  return unwrapResponse<BomImportPreview>(await request.post(`/products/${productId}/boms/import/preview`, form))
+}
+
+export async function commitBomImport(importToken: string) {
+  return unwrapResponse(await request.post(`/boms/import/${importToken}/commit`))
+}
+
+export async function downloadBomImportTemplate(): Promise<Blob> {
+  const response = await request.get('/boms/import/template', { responseType: 'blob' })
+  return response.data
+}
+
+export async function downloadBomImportErrors(importToken: string): Promise<Blob> {
+  const response = await request.get(`/boms/import/${importToken}/errors`, { responseType: 'blob' })
+  return response.data
 }

@@ -36,6 +36,7 @@ public class ProductBomWorkflowService {
     private final ProductBomItemRepository itemRepository;
     private final ProductBomCostSnapshotRepository costRepository;
     private final BomCostCalculator costCalculator;
+    private final BomTimelineGate timelineGate;
 
     @Transactional
     public ProductBom saveTestBom(Long productId, TestBomSaveDTO dto) {
@@ -166,6 +167,7 @@ public class ProductBomWorkflowService {
     @Transactional
     public ProductBom freeze(Long bomId) {
         ProductBom bom = requireBom(bomId);
+        timelineGate.requireFreezeOrPublishNode(bom.getProductId());
         if (!"reviewing".equals(bom.getStatus())) {
             throw validation("只有审核中的正式 BOM 可以冻结");
         }
@@ -181,6 +183,7 @@ public class ProductBomWorkflowService {
     @Transactional
     public ProductBom publish(Long bomId) {
         ProductBom bom = requireBom(bomId);
+        timelineGate.requireFreezeOrPublishNode(bom.getProductId());
         if (!Integer.valueOf(1).equals(bom.getFrozenFlag())) {
             throw validation("正式 BOM 发布前必须先冻结");
         }
@@ -356,6 +359,25 @@ public class ProductBomWorkflowService {
             touch(route);
             routeRepository.updateById(route);
         });
+        List<ProductBomRouteColor> colors = colorRepository.selectList(new LambdaQueryWrapper<ProductBomRouteColor>()
+            .eq(ProductBomRouteColor::getProductBomId, bomId).eq(ProductBomRouteColor::getDeletedFlag, 0));
+        if (colors != null) {
+            colors.forEach(color -> {
+                color.setDeletedFlag(1);
+                color.setStatus("inactive");
+                touch(color);
+                colorRepository.updateById(color);
+            });
+        }
+        List<ProductBomItem> items = itemRepository.selectList(new LambdaQueryWrapper<ProductBomItem>()
+            .eq(ProductBomItem::getProductBomId, bomId).eq(ProductBomItem::getDeletedFlag, 0));
+        if (items != null) {
+            items.forEach(item -> {
+                item.setDeletedFlag(1);
+                touch(item);
+                itemRepository.updateById(item);
+            });
+        }
     }
 
     private void archiveCurrentCost(Long bomId, Long routeId) {

@@ -6,8 +6,15 @@ import com.yuewei.plm.module.bom.entity.ProductBomItem;
 import java.math.BigDecimal;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.springframework.core.annotation.AnnotationUtils;
+import org.springframework.stereotype.Component;
 
 class BomCostCalculatorTest {
+
+    @Test
+    void isRegisteredAsSpringBeanForWorkflowInjection() {
+        assertThat(AnnotationUtils.findAnnotation(BomCostCalculator.class, Component.class)).isNotNull();
+    }
 
     @Test
     void separatesMaterialAndLossAndBuildsRouteTotal() {

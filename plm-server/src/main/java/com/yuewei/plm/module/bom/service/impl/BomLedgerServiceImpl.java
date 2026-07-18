@@ -44,8 +44,9 @@ public class BomLedgerServiceImpl implements BomLedgerService {
     public List<BomLedgerRowVO> listFormal() {
         List<ProductBom> boms = safe(bomRepository.selectList(new LambdaQueryWrapper<ProductBom>()
             .eq(ProductBom::getBomScope, "formal").eq(ProductBom::getDeletedFlag, 0)
+            .eq(ProductBom::getStatus, "released")
             .orderByDesc(ProductBom::getUpdatedAt)));
-        return boms.stream().filter(bom -> "formal".equals(bom.getBomScope())).map(bom -> {
+        return boms.stream().filter(bom -> "formal".equals(bom.getBomScope()) && "released".equals(bom.getStatus())).map(bom -> {
             Product product = productRepository.selectById(bom.getProductId());
             return BomLedgerRowVO.builder()
                 .productBomId(bom.getProductBomId()).productId(bom.getProductId()).bomCode(bom.getBomCode())

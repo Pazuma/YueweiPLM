@@ -29,8 +29,9 @@ class BomLedgerServiceImplTest {
         ProductRepository productRepository = mock(ProductRepository.class);
         BomLedgerServiceImpl service = service(bomRepository, productRepository);
         ProductBom formal = bom(10L, "formal", "released");
-        ProductBom test = bom(11L, "test", "confirmed");
-        when(bomRepository.selectList(Mockito.<Wrapper<ProductBom>>any())).thenReturn(List.of(formal, test));
+        ProductBom draft = bom(11L, "formal", "draft");
+        ProductBom test = bom(12L, "test", "confirmed");
+        when(bomRepository.selectList(Mockito.<Wrapper<ProductBom>>any())).thenReturn(List.of(formal, draft, test));
         when(productRepository.selectById(1L)).thenReturn(product(1L, null, "蓝色"));
 
         var rows = service.listFormal();

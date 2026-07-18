@@ -100,7 +100,35 @@ class ProductReleaseGateValidatorImplTest {
     }
 
     @Test
-    void checkPassesForModelVariantFreezeReleaseNode() {
+    void frozenBomQueryAcceptsFrozenFlagOrReleasedStatus() {
+        ProductBomRepository bomRepository = mock(ProductBomRepository.class);
+        ProcessRepository processRepository = mock(ProcessRepository.class);
+        AttachmentRepository attachmentRepository = mock(AttachmentRepository.class);
+        ProductReleaseGateValidatorImpl validator = new ProductReleaseGateValidatorImpl(
+            bomRepository,
+            processRepository,
+            attachmentRepository,
+            new TimelineDefinitionProvider()
+        );
+        when(bomRepository.selectCount(Mockito.<Wrapper<ProductBom>>any())).thenReturn(1L);
+        when(processRepository.selectCount(Mockito.<Wrapper<ProcessEntity>>any())).thenReturn(1L);
+        when(attachmentRepository.selectCount(Mockito.<Wrapper<Attachment>>any()))
+            .thenReturn(1L, 1L, 0L, 1L);
+
+        validator.check(releasableProduct());
+
+        ArgumentCaptor<Wrapper<ProductBom>> wrapperCaptor = ArgumentCaptor.forClass(Wrapper.class);
+        verify(bomRepository).selectCount(wrapperCaptor.capture());
+        TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), "test"), ProductBom.class);
+        LambdaQueryWrapper<ProductBom> queryWrapper = (LambdaQueryWrapper<ProductBom>) wrapperCaptor.getValue();
+        assertThat(queryWrapper.getSqlSegment())
+            .contains("frozen_flag")
+            .contains("status");
+        assertThat(queryWrapper.getParamNameValuePairs()).containsValue("released");
+    }
+
+    @Test
+    void checkPassesForModelVariantReleaseNode() {
         ProductBomRepository bomRepository = mock(ProductBomRepository.class);
         ProcessRepository processRepository = mock(ProcessRepository.class);
         AttachmentRepository attachmentRepository = mock(AttachmentRepository.class);
@@ -112,8 +140,8 @@ class ProductReleaseGateValidatorImplTest {
         );
         Product product = releasableProduct();
         product.setProductType("model_variant");
-        product.setCurrentStepNo(6);
-        product.setTimelineConfirmedNodeKey("MODEL_VARIANT_FREEZE_RELEASE");
+        product.setCurrentStepNo(16);
+        product.setTimelineConfirmedNodeKey("MODEL_VARIANT_RELEASE");
         when(bomRepository.selectCount(Mockito.<Wrapper<ProductBom>>any())).thenReturn(1L);
         when(processRepository.selectCount(Mockito.<Wrapper<ProcessEntity>>any())).thenReturn(1L);
         when(attachmentRepository.selectCount(Mockito.<Wrapper<Attachment>>any()))
@@ -122,8 +150,36 @@ class ProductReleaseGateValidatorImplTest {
         var result = validator.check(product);
 
         assertThat(result.getPassed()).isTrue();
-        assertThat(result.getCurrentNodeKey()).isEqualTo("MODEL_VARIANT_FREEZE_RELEASE");
+        assertThat(result.getCurrentNodeKey()).isEqualTo("MODEL_VARIANT_RELEASE");
         assertThat(result.getMissingItems()).isEmpty();
+    }
+
+    @Test
+    void checkRejectsModelVariantVersionFreezeNodeForFormalRelease() {
+        ProductBomRepository bomRepository = mock(ProductBomRepository.class);
+        ProcessRepository processRepository = mock(ProcessRepository.class);
+        AttachmentRepository attachmentRepository = mock(AttachmentRepository.class);
+        ProductReleaseGateValidatorImpl validator = new ProductReleaseGateValidatorImpl(
+            bomRepository,
+            processRepository,
+            attachmentRepository,
+            new TimelineDefinitionProvider()
+        );
+        Product product = releasableProduct();
+        product.setProductType("model_variant");
+        product.setCurrentStepNo(15);
+        product.setTimelineConfirmedNodeKey("MODEL_VARIANT_VERSION_FREEZE");
+        when(bomRepository.selectCount(Mockito.<Wrapper<ProductBom>>any())).thenReturn(1L);
+        when(processRepository.selectCount(Mockito.<Wrapper<ProcessEntity>>any())).thenReturn(1L);
+        when(attachmentRepository.selectCount(Mockito.<Wrapper<Attachment>>any()))
+            .thenReturn(1L, 1L, 0L, 1L);
+
+        var result = validator.check(product);
+
+        assertThat(result.getPassed()).isFalse();
+        assertThat(result.getMissingItems())
+            .extracting("code")
+            .contains("TIMELINE_NODE_NOT_ALLOWED");
     }
 
     private Product releasableProduct() {
@@ -131,9 +187,9 @@ class ProductReleaseGateValidatorImplTest {
         product.setProductId(10L);
         product.setProductType("product_line");
         product.setStatus("reviewing");
-        product.setCurrentStepNo(6);
+        product.setCurrentStepNo(22);
         product.setTimelineCurrentConfirmed(true);
-        product.setTimelineConfirmedNodeKey("PRODUCT_LINE_PRODUCTION_DECISION");
+        product.setTimelineConfirmedNodeKey("PRODUCT_LINE_PRODUCTION_DECISION_STEP");
         product.setDeletedFlag(0);
         return product;
     }

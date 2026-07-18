@@ -54,7 +54,7 @@ class ProductBomWorkflowServiceTest {
         ProductBomItemRepository itemRepository = mock(ProductBomItemRepository.class);
         ProductBomWorkflowService service = new ProductBomWorkflowService(
             bomRepository, mock(ProductBomRouteRepository.class), mock(ProductBomRouteColorRepository.class),
-            itemRepository, mock(ProductBomCostSnapshotRepository.class), new BomCostCalculator()
+            itemRepository, mock(ProductBomCostSnapshotRepository.class), new BomCostCalculator(), mock(BomTimelineGate.class)
         );
         ProductBom testBom = bom(30L, "draft", 0);
         testBom.setBomScope("test");
@@ -80,7 +80,8 @@ class ProductBomWorkflowServiceTest {
             mock(ProductBomRouteColorRepository.class),
             mock(ProductBomItemRepository.class),
             mock(ProductBomCostSnapshotRepository.class),
-            new BomCostCalculator()
+            new BomCostCalculator(),
+            mock(BomTimelineGate.class)
         );
     }
 

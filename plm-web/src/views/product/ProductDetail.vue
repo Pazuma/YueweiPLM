@@ -7,6 +7,7 @@ import { getFoundationProducts, getProductPresentation } from '@/api/modules/fou
 import FilePreview from '@/components/FilePreview/index.vue'
 import PageContainer from '@/components/PageContainer/index.vue'
 import StatusTag from '@/components/StatusTag/index.vue'
+import ProductBomViewer from './components/ProductBomViewer.vue'
 import { useUserStore } from '@/stores/user'
 import type {
   FoundationProductRef,
@@ -261,6 +262,9 @@ async function loadData() {
     presentation.value = detail
     selectedBomVersion.value = detail.defaultBomVersion || detail.bomCompareRows[0]?.versionNo || ''
     activeTimelineNodeKey.value = detail.timeline.find((item) => item.status === 'current')?.nodeKey || detail.timeline[0]?.nodeKey || ''
+  } catch {
+    product.value = null
+    presentation.value = null
   } finally {
     loading.value = false
   }
@@ -478,73 +482,7 @@ onMounted(loadData)
         </div>
 
         <section v-if="activeMaterialSection === 'bom'" class="page-panel bom-detail-panel">
-          <div class="bom-summary-panel">
-            <div class="toolbar-row bom-summary-panel__header">
-              <div>
-                <h3 class="section-title">BOM 成本汇总</h3>
-                <p class="page-panel-desc">汇总当前版本的材料、工艺、包装、人工、模具和损耗成本，作为版本核对的主入口。</p>
-              </div>
-              <el-tag type="info" effect="light">版本：{{ selectedBomVersion || presentation.defaultBomVersion }}</el-tag>
-            </div>
-
-            <div class="bom-summary-grid">
-              <div class="info-card bom-summary-grid__total">
-                <span class="subtle-text">总成本</span>
-                <strong>{{ formatAmount(presentation.bomCostSummary?.totalCost || 0) }}</strong>
-                <span class="subtle-text">与版本对比表保持一致</span>
-              </div>
-              <div v-for="item in bomCostSummaryRows" :key="item.label" class="info-card bom-summary-grid__item">
-                <span class="subtle-text">{{ item.label }}</span>
-                <strong>{{ formatAmount(item.value) }}</strong>
-              </div>
-            </div>
-          </div>
-
-          <div class="bom-compare-layout">
-            <div class="bom-compare-layout__table">
-              <div class="toolbar-row">
-                <div>
-                  <h4 class="section-title">版本对比</h4>
-                  <p class="page-panel-desc">先确认不同版本的成本变化，再继续查看当前版本的物料组成。</p>
-                </div>
-              </div>
-              <el-table
-                :data="presentation.bomCompareRows"
-                border
-                stripe
-                highlight-current-row
-                @row-click="handleBomVersionRowClick"
-              >
-                <el-table-column prop="versionNo" label="版本" width="100">
-                  <template #default="{ row }">
-                    <el-button link type="primary" @click.stop="selectBomVersion(row.versionNo)">{{ row.versionNo }}</el-button>
-                  </template>
-                </el-table-column>
-                <el-table-column prop="statusLabel" label="状态" width="120" />
-                <el-table-column label="材料成本" width="140">
-                  <template #default="{ row }">{{ formatAmount(row.materialCost) }}</template>
-                </el-table-column>
-                <el-table-column label="工艺成本" width="140">
-                  <template #default="{ row }">{{ formatAmount(row.processCost) }}</template>
-                </el-table-column>
-                <el-table-column label="总成本" width="140">
-                  <template #default="{ row }">{{ formatAmount(row.totalCost) }}</template>
-                </el-table-column>
-                <el-table-column label="变化" width="140">
-                  <template #default="{ row }">
-                    <span :class="row.delta > 0 ? 'text-danger' : row.delta < 0 ? 'text-success' : ''">
-                      {{ row.delta > 0 ? '+' : '' }}{{ formatAmount(row.delta) }}
-                    </span>
-                  </template>
-                </el-table-column>
-                <el-table-column label="详情" width="100" fixed="right">
-                  <template #default="{ row }">
-                    <el-button link type="primary" @click.stop="openBomDetail(row.versionNo)">详情</el-button>
-                  </template>
-                </el-table-column>
-              </el-table>
-            </div>
-          </div>
+          <ProductBomViewer :product-id="productId" />
         </section>
 
         <section v-else-if="activeMaterialSection === 'files'" class="page-panel materials-section-panel">

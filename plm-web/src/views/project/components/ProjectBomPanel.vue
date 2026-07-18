@@ -1,73 +1,62 @@
 <script setup lang="ts">
-import { Delete, Edit, Lock, Plus, Refresh } from '@element-plus/icons-vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { computed, reactive, ref, watch } from 'vue'
+import { DocumentCopy, Lock, Plus, Promotion, Refresh, Upload } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
+import { computed, ref, watch } from 'vue'
 
 import {
-  addBomItem,
+  confirmTestBom,
+  copyBomVersion,
   createProjectBom,
-  deleteBomItem,
   freezeBom,
+  getBomWorkbench,
   getProjectBoms,
-  updateBom,
-  updateBomItem,
-  type ProductBomItemSavePayload,
-  type ProductBomItemVO,
-  type ProductBomSavePayload,
+  publishBom,
+  recalculateBomCosts,
+  saveBomRoutes,
+  submitBomReview,
   type ProductBomVO
 } from '@/api/modules/bom'
+import type { BomRoute, BomWorkbench } from '@/types/bom'
+
+import BomImportDialog from './BomImportDialog.vue'
+import BomRouteEditor from './BomRouteEditor.vue'
 
 const props = defineProps<{ projectId: number }>()
 const emit = defineEmits<{ (event: 'changed'): void }>()
 
+const mode = ref<'test' | 'formal'>('formal')
 const loading = ref(false)
 const actionLoading = ref(false)
 const loadError = ref('')
 const boms = ref<ProductBomVO[]>([])
 const selectedBomId = ref<number | null>(null)
-const bomDialogVisible = ref(false)
-const itemDialogVisible = ref(false)
-const editingBom = ref(false)
-const editingItemId = ref<number | null>(null)
+const workbench = ref<BomWorkbench | null>(null)
+const importVisible = ref(false)
+const routeEditorVisible = ref(false)
 
-const bomForm = reactive<ProductBomSavePayload>({
-  bomName: '',
-  bomType: 'ebom',
-  versionNo: 'A',
-  remark: ''
-})
-
-const itemForm = reactive<ProductBomItemSavePayload>({
-  itemCode: '',
-  itemName: '',
-  specification: '',
-  lineNo: 10,
-  quantity: 1,
-  unit: 'pcs',
-  lossRate: 0,
-  substituteFlag: 0,
-  remark: ''
-})
-
-const selectedBom = computed(() =>
-  boms.value.find((item) => item.productBomId === selectedBomId.value) || null
+const formalBoms = computed(() => boms.value.filter((bom) => bom.bomType !== 'test'))
+const selectedBom = computed(() => boms.value.find((bom) => bom.productBomId === selectedBomId.value) || null)
+const isReadOnly = computed(() => ['released', 'archived'].includes(workbench.value?.status || ''))
+const isFrozen = computed(() =>
+  Boolean((selectedBom.value as ProductBomVO & { frozenFlag?: number })?.frozenFlag)
+  || selectedBom.value?.status === 'frozen'
+  || isReadOnly.value
 )
-const isFrozen = computed(() => selectedBom.value?.status === 'frozen')
 
 function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : '请求失败，请稍后重试'
+  return error instanceof Error ? error.message : 'BOM 数据加载失败'
 }
 
-async function loadBoms(preferredBomId?: number) {
+async function load(preferredBomId?: number) {
   loading.value = true
   loadError.value = ''
   try {
-    const result = await getProjectBoms(props.projectId)
-    boms.value = result
-    const preferred = preferredBomId ?? selectedBomId.value
-    selectedBomId.value = result.some((item) => item.productBomId === preferred)
-      ? preferred
-      : result[0]?.productBomId ?? null
+    boms.value = await getProjectBoms(props.projectId)
+    const candidates = boms.value.filter((bom) => bom.bomType !== 'test')
+    selectedBomId.value = candidates.some((bom) => bom.productBomId === preferredBomId)
+      ? preferredBomId || null
+      : candidates[0]?.productBomId || null
+    workbench.value = selectedBomId.value ? await getBomWorkbench(selectedBomId.value) : null
   } catch (error) {
     loadError.value = errorMessage(error)
   } finally {
@@ -75,250 +64,159 @@ async function loadBoms(preferredBomId?: number) {
   }
 }
 
-function resetBomForm(bom?: ProductBomVO) {
-  bomForm.bomName = bom?.bomName || ''
-  bomForm.bomType = bom?.bomType || 'ebom'
-  bomForm.versionNo = bom?.versionNo || 'A'
-  bomForm.remark = bom?.remark || ''
+async function changeVersion() {
+  workbench.value = selectedBomId.value ? await getBomWorkbench(selectedBomId.value) : null
 }
 
-function openCreateBom() {
-  editingBom.value = false
-  resetBomForm()
-  bomDialogVisible.value = true
-}
-
-function openEditBom() {
-  if (!selectedBom.value || isFrozen.value) return
-  editingBom.value = true
-  resetBomForm(selectedBom.value)
-  bomDialogVisible.value = true
-}
-
-async function saveBom() {
-  if (!bomForm.bomName.trim() || !bomForm.bomType.trim() || !bomForm.versionNo.trim()) {
-    ElMessage.warning('请填写 BOM 名称、类型和版本号')
-    return
-  }
-  actionLoading.value = true
-  try {
-    const payload = { ...bomForm }
-    const result = editingBom.value && selectedBom.value
-      ? await updateBom(selectedBom.value.productBomId, payload)
-      : await createProjectBom(props.projectId, payload)
-    bomDialogVisible.value = false
-    await loadBoms(result.productBomId)
-    emit('changed')
-    ElMessage.success(editingBom.value ? 'BOM 已更新' : 'BOM 已创建')
-  } finally {
-    actionLoading.value = false
-  }
-}
-
-function resetItemForm(item?: ProductBomItemVO) {
-  itemForm.inventoryId = item?.inventoryId ?? null
-  itemForm.itemCode = item?.itemCode || ''
-  itemForm.itemName = item?.itemName || ''
-  itemForm.specification = item?.specification || ''
-  itemForm.lineNo = item?.lineNo ?? ((selectedBom.value?.items.length || 0) + 1) * 10
-  itemForm.quantity = item?.quantity ?? 1
-  itemForm.unit = item?.unit || 'pcs'
-  itemForm.lossRate = item?.lossRate ?? 0
-  itemForm.substituteFlag = item?.substituteFlag ?? 0
-  itemForm.remark = item?.remark || ''
-}
-
-function openCreateItem() {
-  if (!selectedBom.value || isFrozen.value) return
-  editingItemId.value = null
-  resetItemForm()
-  itemDialogVisible.value = true
-}
-
-function openEditItem(item: ProductBomItemVO) {
-  if (isFrozen.value) return
-  editingItemId.value = item.productBomItemId
-  resetItemForm(item)
-  itemDialogVisible.value = true
-}
-
-async function saveItem() {
-  if (!selectedBom.value) return
-  if (!itemForm.itemName.trim() || !itemForm.unit.trim() || itemForm.quantity <= 0 || itemForm.lineNo <= 0) {
-    ElMessage.warning('请填写有效的行号、物料名称、用量和单位')
-    return
-  }
-  actionLoading.value = true
-  try {
-    const payload = { ...itemForm }
-    const result = editingItemId.value
-      ? await updateBomItem(selectedBom.value.productBomId, editingItemId.value, payload)
-      : await addBomItem(selectedBom.value.productBomId, payload)
-    itemDialogVisible.value = false
-    await loadBoms(result.productBomId)
-    emit('changed')
-    ElMessage.success(editingItemId.value ? 'BOM 明细已更新' : 'BOM 明细已添加')
-  } finally {
-    actionLoading.value = false
-  }
-}
-
-async function removeItem(item: ProductBomItemVO) {
-  if (!selectedBom.value || isFrozen.value) return
-  await ElMessageBox.confirm(`确认删除第 ${item.lineNo} 行“${item.itemName}”吗？`, '删除 BOM 明细', {
-    confirmButtonText: '删除',
-    cancelButtonText: '取消',
-    type: 'warning'
+async function createFormalBom() {
+  const next = formalBoms.value.length + 1
+  const result = await createProjectBom(props.projectId, {
+    bomName: `正式 BOM V${next}`,
+    bomType: 'mbom',
+    versionNo: `V${next}`,
+    remark: '工作台创建'
   })
+  await load(result.productBomId)
+  emit('changed')
+}
+
+async function saveRoutes(routes: BomRoute[]) {
+  if (!selectedBomId.value) return
   actionLoading.value = true
   try {
-    const result = await deleteBomItem(selectedBom.value.productBomId, item.productBomItemId)
-    await loadBoms(result.productBomId)
+    await saveBomRoutes(selectedBomId.value, routes)
+    routeEditorVisible.value = false
+    await changeVersion()
     emit('changed')
-    ElMessage.success('BOM 明细已删除')
+    ElMessage.success('工艺路线与 BOM 已保存')
   } finally {
     actionLoading.value = false
   }
 }
 
-async function lockBom() {
-  if (!selectedBom.value || isFrozen.value) return
-  await ElMessageBox.confirm('冻结后 BOM 头和全部明细都不能继续修改，是否继续？', '冻结 BOM', {
-    confirmButtonText: '冻结',
-    cancelButtonText: '取消',
-    type: 'warning'
-  })
+async function lifecycle(action: 'cost' | 'review' | 'freeze' | 'publish' | 'copy') {
+  if (!selectedBomId.value || !workbench.value) return
   actionLoading.value = true
   try {
-    const result = await freezeBom(selectedBom.value.productBomId)
-    await loadBoms(result.productBomId)
+    if (action === 'cost') await recalculateBomCosts(selectedBomId.value, workbench.value.routes)
+    if (action === 'review') await submitBomReview(selectedBomId.value)
+    if (action === 'freeze') await freezeBom(selectedBomId.value)
+    if (action === 'publish') await publishBom(selectedBomId.value)
+    if (action === 'copy') {
+      const colors = workbench.value.routes.flatMap((route) => route.colors)
+      await copyBomVersion(selectedBomId.value, { versionNo: `${workbench.value.versionNo}-COPY`, selectedColors: colors })
+    }
+    await load(selectedBomId.value)
     emit('changed')
-    ElMessage.success('BOM 已冻结')
+    ElMessage.success('BOM 状态已更新')
   } finally {
     actionLoading.value = false
   }
 }
 
-watch(() => props.projectId, () => loadBoms(), { immediate: true })
+async function confirmTest() {
+  await confirmTestBom(props.projectId)
+  ElMessage.success('测试 BOM 成本已确认')
+  emit('changed')
+}
+
+watch(() => props.projectId, () => load(), { immediate: true })
 </script>
 
 <template>
-  <div class="m4-panel" v-loading="loading">
-    <div class="m4-panel__toolbar">
+  <section class="bom-workbench" v-loading="loading">
+    <header class="bom-workbench__header">
       <div>
-        <h4 class="section-title">BOM 管理</h4>
-        <p class="page-panel-desc">维护当前 Product 的 BOM 版本和物料明细，冻结后进入只读状态。</p>
+        <h4>BOM 工作台</h4>
+        <p>在项目流程中维护测试成本、正式版本、路线颜色和路线 BOM。</p>
       </div>
-      <div class="m4-panel__actions">
-        <el-button :icon="Refresh" circle title="刷新 BOM" @click="loadBoms()" />
-        <el-button data-test="bom-create" type="primary" :icon="Plus" @click="openCreateBom">新建 BOM</el-button>
+      <div class="command-row">
+        <el-tooltip content="刷新"><el-button :icon="Refresh" circle @click="load(selectedBomId || undefined)" /></el-tooltip>
+        <el-button data-test="bom-create" type="primary" :icon="Plus" @click="createFormalBom">新建正式 BOM</el-button>
       </div>
+    </header>
+
+    <el-alert v-if="loadError" type="error" :title="loadError" show-icon :closable="false" />
+
+    <div class="mode-switch" role="tablist" aria-label="BOM 类型">
+      <button :class="{ active: mode === 'test' }" role="tab" @click="mode = 'test'">测试 BOM</button>
+      <button :class="{ active: mode === 'formal' }" role="tab" @click="mode = 'formal'">正式 BOM</button>
     </div>
 
-    <el-alert v-if="loadError" :title="loadError" type="error" show-icon :closable="false" />
+    <div v-if="mode === 'test'" class="mode-panel">
+      <div class="mode-panel__title">
+        <div><strong>测试 BOM</strong><span>确认后只保存单一测试总成本</span></div>
+        <div class="command-row">
+          <el-button :icon="Upload" @click="importVisible = true">导入 XLSX</el-button>
+          <el-button type="primary" :icon="Promotion" @click="confirmTest">确认测试成本</el-button>
+        </div>
+      </div>
+      <el-empty description="测试 BOM 明细通过导入或人工维护后在此显示" />
+    </div>
 
-    <template v-else-if="selectedBom">
-      <div class="m4-panel__selector">
-        <el-select v-model="selectedBomId" class="m4-panel__select" aria-label="选择 BOM 版本">
-          <el-option
-            v-for="bom in boms"
-            :key="bom.productBomId"
-            :label="`${bom.bomName} / ${bom.versionNo}`"
-            :value="bom.productBomId"
-          />
+    <div v-else-if="formalBoms.length" class="mode-panel">
+      <div class="formal-toolbar">
+        <el-select v-model="selectedBomId" aria-label="选择正式 BOM 版本" @change="changeVersion">
+          <el-option v-for="bom in formalBoms" :key="bom.productBomId" :label="`${bom.versionNo} · ${bom.bomName}`" :value="bom.productBomId" />
         </el-select>
-        <el-tag :type="isFrozen ? 'success' : 'warning'" effect="light">
-          {{ isFrozen ? '已冻结' : '草稿' }}
-        </el-tag>
-        <span class="m4-panel__code">{{ selectedBom.bomCode }} / {{ selectedBom.bomType.toUpperCase() }}</span>
-        <div class="m4-panel__actions m4-panel__actions--right">
-          <el-button data-test="bom-edit" :icon="Edit" :disabled="isFrozen" @click="openEditBom">编辑</el-button>
-          <el-button data-test="bom-item-add" type="primary" plain :icon="Plus" :disabled="isFrozen" @click="openCreateItem">添加明细</el-button>
-          <el-button type="warning" plain :icon="Lock" :disabled="isFrozen" @click="lockBom">冻结</el-button>
+        <el-tag v-if="isFrozen" type="warning" effect="light">已冻结</el-tag>
+        <el-tag v-else-if="workbench" effect="light">{{ workbench.status }}</el-tag>
+        <div class="command-row command-row--push">
+          <el-button :icon="Upload" :disabled="isFrozen" @click="importVisible = true">导入 XLSX</el-button>
+          <el-button data-test="bom-edit" :disabled="isFrozen" @click="routeEditorVisible = true">维护路线与 BOM</el-button>
+          <el-button data-test="bom-item-add" :disabled="isFrozen" @click="routeEditorVisible = true">添加明细</el-button>
         </div>
       </div>
 
-      <el-table :data="selectedBom.items" border stripe size="small" class="m4-panel__table">
-        <el-table-column prop="lineNo" label="行号" width="72" />
-        <el-table-column prop="itemCode" label="物料编码" min-width="130"><template #default="{ row }">{{ row.itemCode || '--' }}</template></el-table-column>
-        <el-table-column prop="itemName" label="物料名称" min-width="160" />
-        <el-table-column prop="specification" label="规格" min-width="140"><template #default="{ row }">{{ row.specification || '--' }}</template></el-table-column>
-        <el-table-column prop="quantity" label="用量" width="100" />
-        <el-table-column prop="unit" label="单位" width="80" />
-        <el-table-column prop="lossRate" label="损耗率" width="90"><template #default="{ row }">{{ row.lossRate ?? 0 }}</template></el-table-column>
-        <el-table-column prop="remark" label="备注" min-width="140"><template #default="{ row }">{{ row.remark || '--' }}</template></el-table-column>
-        <el-table-column label="操作" width="120" fixed="right">
-          <template #default="{ row }">
-            <el-button link type="primary" :icon="Edit" :disabled="isFrozen" title="编辑明细" @click="openEditItem(row)" />
-            <el-button link type="danger" :icon="Delete" :disabled="isFrozen" title="删除明细" @click="removeItem(row)" />
-          </template>
-        </el-table-column>
-      </el-table>
-      <el-empty v-if="!selectedBom.items.length" description="当前 BOM 还没有明细" />
-    </template>
+      <div v-if="workbench?.routes.length" class="route-list">
+        <article v-for="route in workbench.routes" :key="route.routeCode" class="route-row">
+          <div class="route-row__identity"><strong>{{ route.routeName }}</strong><code>{{ route.routeCode }}</code></div>
+          <div class="color-list"><el-tag v-for="color in route.colors" :key="color" size="small">{{ color }}</el-tag></div>
+          <span>{{ route.items.length }} 项物料</span>
+          <strong>{{ route.costSnapshot ? `${route.costSnapshot.currencyCode} ${route.costSnapshot.totalCost}` : '待计算' }}</strong>
+        </article>
+      </div>
+      <el-empty v-else description="当前正式版本尚未维护工艺路线" />
 
-    <el-empty v-else description="当前项目还没有 BOM">
-      <el-button type="primary" :icon="Plus" @click="openCreateBom">新建 BOM</el-button>
-    </el-empty>
+      <footer class="lifecycle-bar">
+        <el-button :loading="actionLoading" :disabled="isReadOnly" @click="lifecycle('cost')">刷新成本</el-button>
+        <el-button :icon="Promotion" :disabled="isReadOnly" @click="lifecycle('review')">提交审核</el-button>
+        <el-button :icon="Lock" :disabled="isFrozen" @click="lifecycle('freeze')">冻结</el-button>
+        <el-button type="primary" :disabled="isReadOnly" @click="lifecycle('publish')">发布</el-button>
+        <el-button :icon="DocumentCopy" @click="lifecycle('copy')">复制版本</el-button>
+      </footer>
+    </div>
+    <el-empty v-else description="当前项目还没有 BOM" />
 
-    <el-dialog v-model="bomDialogVisible" :title="editingBom ? '编辑 BOM' : '新建 BOM'" width="520px" append-to-body>
-      <el-form label-width="88px">
-        <el-form-item label="BOM 名称" required><el-input v-model="bomForm.bomName" maxlength="100" /></el-form-item>
-        <el-form-item label="BOM 类型" required>
-          <el-select v-model="bomForm.bomType" style="width: 100%">
-            <el-option label="EBOM" value="ebom" />
-            <el-option label="MBOM" value="mbom" />
-            <el-option label="包装 BOM" value="pack" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="版本号" required><el-input v-model="bomForm.versionNo" maxlength="50" /></el-form-item>
-        <el-form-item label="备注"><el-input v-model="bomForm.remark" type="textarea" :rows="3" maxlength="500" show-word-limit /></el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="bomDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="actionLoading" @click="saveBom">保存</el-button>
-      </template>
-    </el-dialog>
-
-    <el-dialog v-model="itemDialogVisible" :title="editingItemId ? '编辑 BOM 明细' : '添加 BOM 明细'" width="680px" append-to-body>
-      <el-form label-width="88px" class="m4-form-grid">
-        <el-form-item label="行号" required><el-input-number v-model="itemForm.lineNo" :min="1" :step="10" controls-position="right" /></el-form-item>
-        <el-form-item label="物料编码"><el-input v-model="itemForm.itemCode" maxlength="100" /></el-form-item>
-        <el-form-item label="物料名称" required><el-input v-model="itemForm.itemName" maxlength="200" /></el-form-item>
-        <el-form-item label="规格"><el-input v-model="itemForm.specification" maxlength="200" /></el-form-item>
-        <el-form-item label="用量" required><el-input-number v-model="itemForm.quantity" :min="0.000001" :precision="6" controls-position="right" /></el-form-item>
-        <el-form-item label="单位" required><el-input v-model="itemForm.unit" maxlength="30" /></el-form-item>
-        <el-form-item label="损耗率"><el-input-number v-model="itemForm.lossRate" :min="0" :precision="4" controls-position="right" /></el-form-item>
-        <el-form-item label="替代料"><el-switch v-model="itemForm.substituteFlag" :active-value="1" :inactive-value="0" /></el-form-item>
-        <el-form-item label="备注" class="m4-form-grid__wide"><el-input v-model="itemForm.remark" type="textarea" :rows="2" maxlength="500" /></el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="itemDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="actionLoading" @click="saveItem">保存</el-button>
-      </template>
-    </el-dialog>
-  </div>
+    <BomImportDialog v-model="importVisible" :product-id="projectId" :bom-id="selectedBomId" @committed="load(selectedBomId || undefined)" />
+    <BomRouteEditor v-if="workbench" v-model="routeEditorVisible" :routes="workbench.routes" :loading="actionLoading" @save="saveRoutes" />
+  </section>
 </template>
 
 <style scoped>
-.m4-panel { min-width: 0; }
-.m4-panel__toolbar,
-.m4-panel__selector,
-.m4-panel__actions { display: flex; align-items: center; gap: 10px; }
-.m4-panel__toolbar { justify-content: space-between; margin-bottom: 16px; }
-.m4-panel__toolbar h4,
-.m4-panel__toolbar p { margin-top: 0; }
-.m4-panel__selector { flex-wrap: wrap; margin-bottom: 14px; }
-.m4-panel__select { width: min(100%, 320px); }
-.m4-panel__code { color: var(--plm-color-text-secondary); font-size: 13px; }
-.m4-panel__actions--right { margin-left: auto; }
-.m4-panel__table { width: 100%; }
-.m4-form-grid { display: grid; grid-template-columns: 1fr 1fr; column-gap: 16px; }
-.m4-form-grid__wide { grid-column: 1 / -1; }
+.bom-workbench { min-width: 0; }
+.bom-workbench__header, .mode-panel__title, .formal-toolbar, .command-row, .lifecycle-bar { display: flex; align-items: center; gap: 10px; }
+.bom-workbench__header { justify-content: space-between; margin-bottom: 14px; }
+.bom-workbench__header h4, .bom-workbench__header p { margin: 0; }
+.bom-workbench__header p, .mode-panel__title span { color: var(--plm-color-text-secondary); font-size: 13px; }
+.mode-panel { margin-top: 14px; }
+.mode-switch { display: inline-grid; grid-template-columns: 1fr 1fr; padding: 3px; border: 1px solid var(--el-border-color); border-radius: 6px; background: var(--el-fill-color-light); }
+.mode-switch button { min-width: 108px; padding: 6px 12px; border: 0; border-radius: 4px; color: var(--plm-color-text-secondary); background: transparent; cursor: pointer; }
+.mode-switch button.active { color: var(--el-color-primary); background: var(--el-bg-color); box-shadow: 0 1px 3px rgb(0 0 0 / 10%); }
+.mode-panel__title { justify-content: space-between; margin-bottom: 12px; }
+.mode-panel__title div:first-child { display: grid; gap: 3px; }
+.formal-toolbar { flex-wrap: wrap; margin-bottom: 12px; }
+.formal-toolbar :deep(.el-select) { width: 260px; }
+.command-row--push { margin-left: auto; }
+.route-list { border-top: 1px solid var(--el-border-color-lighter); }
+.route-row { display: grid; grid-template-columns: minmax(170px, 1.2fr) minmax(180px, 1fr) 100px 110px; align-items: center; gap: 12px; min-height: 58px; border-bottom: 1px solid var(--el-border-color-lighter); }
+.route-row__identity { display: grid; gap: 3px; }
+.route-row code { color: var(--plm-color-text-secondary); font-size: 12px; }
+.color-list { display: flex; flex-wrap: wrap; gap: 5px; }
+.lifecycle-bar { justify-content: flex-end; flex-wrap: wrap; margin-top: 14px; }
 @media (max-width: 760px) {
-  .m4-panel__toolbar { align-items: flex-start; flex-direction: column; }
-  .m4-panel__actions--right { width: 100%; margin-left: 0; flex-wrap: wrap; }
-  .m4-form-grid { grid-template-columns: 1fr; }
-  .m4-form-grid__wide { grid-column: auto; }
+  .bom-workbench__header, .mode-panel__title { align-items: flex-start; flex-direction: column; }
+  .route-row { grid-template-columns: 1fr; padding: 10px 0; }
+  .command-row--push { width: 100%; margin-left: 0; flex-wrap: wrap; }
 }
 </style>

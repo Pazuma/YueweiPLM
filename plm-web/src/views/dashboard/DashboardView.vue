@@ -1,13 +1,22 @@
 <script setup lang="ts">
 import { ArrowRight, Document, Plus, Promotion, Tickets } from '@element-plus/icons-vue'
 import { computed, onMounted, reactive, ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
 
 import PageContainer from '@/components/PageContainer/index.vue'
 import StatusTag from '@/components/StatusTag/index.vue'
-import { getWorkbenchInProgressProjects } from '@/api/modules/project'
+import {
+  confirmTimelineNode,
+  getProjectTimeline,
+  getWorkbenchInProgressProjects,
+  returnTimelineNode,
+  type TimelineDetailVO,
+  type TimelineNodeVO
+} from '@/api/modules/project'
+import { uploadTimelineAttachment } from '@/api/modules/attachment'
 import { useUserStore } from '@/stores/user'
+import { findCurrentTimelineStep, mapTimelineStages, type TimelineStageView } from '@/utils/timelineAdapter'
 import { normalizeLegacyProductTarget } from '@/utils/projectRoute'
 
 interface DashboardProductItem {
@@ -59,7 +68,7 @@ interface DashboardFreezeItem {
 }
 
 type DashboardViewKey = 'products' | 'tasks' | 'risks' | 'freeze'
-type ProgressAction = 'reject' | 'hold' | 'force' | 'advance'
+type ProgressAction = 'confirm' | 'return' | 'force'
 
 interface DashboardProjectProgressTarget {
   productId: number
@@ -75,12 +84,39 @@ interface DashboardProjectProgressTarget {
   targetPath: string
 }
 
-interface DashboardChildStep { stepNo: number; title: string; requireUpload?: boolean; uploadLabel?: string; requireApproval?: boolean }
+interface DashboardChildStep {
+  nodeKey?: string
+  stepNo: number
+  title: string
+  requireUpload?: boolean
+  uploadLabel?: string
+  requireApproval?: boolean
+  requiredFileCategory?: string | null
+  uploadCount?: number
+  isCurrent?: boolean
+  isConfirmed?: boolean
+  hasUploaded?: boolean
+  visualStatus?: ChildStepVisualStatus
+}
+
+type ChildStepVisualStatus = 'confirmed' | 'current' | 'uploaded' | 'missing-upload' | 'pending' | 'rejected'
+
+interface DashboardChildStepView extends DashboardChildStep {
+  nodeKey: string
+  uploadCount: number
+  isCurrent: boolean
+  isConfirmed: boolean
+  hasUploaded: boolean
+  visualStatus: ChildStepVisualStatus
+}
 
 interface DashboardProgressNode {
   nodeKey: string
   title: string
+  stageCode?: string | null
+  stageName?: string | null
   phase: string
+  requiredFileCategory?: string | null
   status: 'completed' | 'current' | 'pending' | 'rejected'
   hint: string
   date?: string
@@ -89,6 +125,8 @@ interface DashboardProgressNode {
   riskText?: string
   checkItems?: string[]
   childSteps: DashboardChildStep[]
+  documentCount?: number
+  confirmed?: boolean
 }
 
 interface DashboardMetric {
@@ -181,98 +219,11 @@ async function loadInProgressProjects() {
   }))
 }
 
-const myPendingTasks = computed<DashboardTaskItem[]>(() => [
-  {
-    taskId: 1,
-    nodeName: 'BOM 会签',
-    objectName: '超队 3.0 iPhone18 黑色',
-    initiator: '刘浩',
-    dueDate: '2026-06-10',
-    targetPath: '/products/102'
-  },
-  {
-    taskId: 2,
-    nodeName: '资料冻结确认',
-    objectName: '超队 3.0 磁吸手机壳',
-    initiator: '张敏',
-    dueDate: '2026-06-11',
-    targetPath: '/products/101'
-  },
-  {
-    taskId: 3,
-    nodeName: '样品确认',
-    objectName: '超队 3.0 iPhone18 蓝色',
-    initiator: '刘浩',
-    dueDate: '2026-06-12',
-    targetPath: '/products/103'
-  }
-])
+const myPendingTasks = computed<DashboardTaskItem[]>(() => [])
 
-const overdueRisks = computed<DashboardRiskItem[]>(() => [
-  {
-    title: '亮甲 3.0',
-    stage: '模具阶段',
-    plannedDate: '06-05',
-    overdueDays: 5,
-    owner: '李工程',
-    targetPath: '/products/104'
-  },
-  {
-    title: '超队 3.0 iPhone18 黑色',
-    stage: '半成品阶段',
-    plannedDate: '06-08',
-    overdueDays: 2,
-    owner: '张经理',
-    targetPath: '/products/102'
-  },
-  {
-    title: '超队 3.0 磁吸手机壳',
-    stage: '资料冻结',
-    plannedDate: '06-08',
-    overdueDays: 1,
-    owner: '张敏',
-    targetPath: '/products/101'
-  }
-])
+const overdueRisks = computed<DashboardRiskItem[]>(() => [])
 
-const pendingFreezeItems = computed<DashboardFreezeItem[]>(() => [
-  {
-    productId: 101,
-    productName: '超队 3.0 磁吸手机壳',
-    versionNo: 'A.3',
-    missingItems: ['客户确认样', 'SOP'],
-    ownerUserName: '张敏',
-    dueDate: '2026-06-11',
-    targetPath: '/products/101'
-  },
-  {
-    productId: 102,
-    productName: '超队 3.0 iPhone18 黑色',
-    versionNo: 'A.2',
-    missingItems: ['图纸冻结', '质量测试记录'],
-    ownerUserName: '刘浩',
-    dueDate: '2026-06-12',
-    targetPath: '/products/102'
-  },
-  {
-    productId: 103,
-    productName: '超队 3.0 iPhone18 蓝色',
-    versionNo: 'A.1',
-    missingItems: ['BOM 会签', '客户颜色确认'],
-    ownerUserName: '刘浩',
-    dueDate: '2026-06-13',
-    targetPath: '/products/103'
-  },
-  {
-    productId: 104,
-    productName: '亮甲 3.0',
-    versionNo: 'B.1',
-    missingItems: ['模具验收', '红样报告'],
-    ownerUserName: '李工程',
-    dueDate: '2026-06-14',
-    targetPath: '/products/104'
-  }
-])
+const pendingFreezeItems = computed<DashboardFreezeItem[]>(() => [])
 
 const quickActions: QuickActionItem[] = [
   { label: '新项目', icon: 'plus', actionType: 'create_project' },
@@ -303,60 +254,13 @@ const createProjectForm = reactive<CreateProjectForm>({
   projectSummary: ''
 })
 
-const projectOrderOptions = computed<ProjectOrderOption[]>(() => [
-  { orderCode: 'ORD-SAMPLE-0603', orderName: '超队 3.0 客户需求', dingTalkApprovalNo: '20260603-001', customerName: '北美渠道 A', productName: '超队 3.0', sourceType: 'customer' },
-  { orderCode: 'ORD-DEV-0605', orderName: '亮甲 3.0 内部需求', dingTalkApprovalNo: '20260605-003', customerName: '内部立项', productName: '亮甲 3.0', sourceType: 'market_internal' },
-  { orderCode: 'ORD-SAMPLE-0520', orderName: '骑士 2.0 客户需求', dingTalkApprovalNo: '20260520-008', customerName: '欧洲渠道 B', productName: '骑士 2.0', sourceType: 'customer' },
-  { orderCode: 'ORD-DEV-0515', orderName: '圣宿 Case 内部研发', dingTalkApprovalNo: '20260515-012', customerName: '内部立项', productName: '圣宿 Case', sourceType: 'market_internal' }
-])
+const projectOrderOptions = computed<ProjectOrderOption[]>(() => [])
 
-const approvalTemplateOptions = computed<ApprovalTemplateOption[]>(() => [
-  {
-    templateId: 'tpl-product-line-001',
-    templateName: '新产品线立项审批',
-    projectType: 'product_line',
-    nodes: [
-      { nodeKey: 'manager-review', nodeName: '管理层评审', approverRole: '管理层', required: true },
-      { nodeKey: 'engineering-review', nodeName: '工程评审', approverRole: '工程', required: true },
-      { nodeKey: 'procurement-check', nodeName: '采购确认', approverRole: '采购', required: true },
-      { nodeKey: 'quality-check', nodeName: '品质确认', approverRole: '品质', required: true },
-      { nodeKey: 'finance-review', nodeName: '财务审核', approverRole: '财务', required: false }
-    ]
-  },
-  {
-    templateId: 'tpl-variant-001',
-    templateName: '新型号线扩展审批',
-    projectType: 'model_variant',
-    nodes: [
-      { nodeKey: 'pm-confirm', nodeName: '项目经理确认', approverRole: '项目经理', required: true },
-      { nodeKey: 'engineering-check', nodeName: '工程确认', approverRole: '工程', required: true },
-      { nodeKey: 'quality-check', nodeName: '品质确认', approverRole: '品质', required: true }
-    ]
-  },
-  {
-    templateId: 'tpl-general-001',
-    templateName: '通用项目审批',
-    projectType: 'all',
-    nodes: [
-      { nodeKey: 'manager-approve', nodeName: '管理层审批', approverRole: '管理层', required: true },
-      { nodeKey: 'dept-approve', nodeName: '部门审批', approverRole: '项目经理', required: true }
-    ]
-  }
-])
+const approvalTemplateOptions = computed<ApprovalTemplateOption[]>(() => [])
 
-const approverOptions = computed(() => [
-  { userId: 'u-001', userName: '王总', roleName: '管理层' },
-  { userId: 'u-002', userName: '张敏', roleName: '项目经理' },
-  { userId: 'u-003', userName: '李工', roleName: '工程' },
-  { userId: 'u-004', userName: '赵工', roleName: '品质' },
-  { userId: 'u-005', userName: '陈采购', roleName: '采购' },
-  { userId: 'u-006', userName: '钱财务', roleName: '财务' }
-])
+const approverOptions = computed<Array<{ userId: string; userName: string; roleName: string }>>(() => [])
 
-const productLineOptions = computed(() => [
-  { productId: 101, productName: '超队 3.0 磁吸手机壳' },
-  { productId: 104, productName: '亮甲 3.0 镜面手机壳' }
-])
+const productLineOptions = computed<Array<{ productId: number; productName: string }>>(() => [])
 
 const topMetrics = computed<DashboardMetric[]>(() => [
   {
@@ -446,6 +350,20 @@ function selectMetricView(view: DashboardViewKey) {
 const projectProgressVisible = ref(false)
 const activeProgressProject = ref<DashboardProjectProgressTarget | null>(null)
 const activeProgressNodeKey = ref<string | null>(null)
+const activeProgressTimeline = ref<TimelineDetailVO | null>(null)
+const progressActionLoading = ref<false | ProgressAction | 'upload'>(false)
+const progressUploadVisible = ref(false)
+const progressUploadFile = ref<File | null>(null)
+const progressUploadCategory = ref('other')
+const progressUploadStepKey = ref('')
+
+const progressUploadCategoryOptions = [
+  { label: '图纸', value: 'drawing' },
+  { label: 'SOP', value: 'sop' },
+  { label: 'SIP', value: 'sip' },
+  { label: '测试资料', value: 'testing' },
+  { label: '其他资料', value: 'other' }
+]
 
 const newProductLineProgressTemplate = [
   { nodeKey: 'initiation', title: '立项确认', phase: '立项阶段', hint: '确认需求、成本、周期和投入边界。', ownerRole: '项目经理 / 管理层', childSteps: [{ stepNo: 1, title: '产品立项', requireUpload: true, uploadLabel: '上传立项资料' }, { stepNo: 2, title: '确认立项', requireApproval: true }] },
@@ -469,7 +387,69 @@ const activeProgressTemplate = computed(() =>
   activeProgressProject.value?.productType === 'model_variant' ? modelVariantProgressTemplate : newProductLineProgressTemplate
 )
 
+function findProgressTemplateNode(stepNo: number) {
+  return activeProgressTemplate.value.find((node) => {
+    const stepNos = node.childSteps.map((step) => step.stepNo)
+    return stepNo >= Math.min(...stepNos) && stepNo <= Math.max(...stepNos)
+  })
+}
+
+function toDashboardProgressNode(node: TimelineNodeVO): DashboardProgressNode {
+  const templateNode = findProgressTemplateNode(node.stepNo)
+  return {
+    nodeKey: node.nodeKey,
+    title: node.nodeName,
+    stageCode: node.stageCode,
+    stageName: node.stageName,
+    phase: node.phaseName || templateNode?.phase || `第 ${node.stepNo} 节点`,
+    requiredFileCategory: node.requiredFileCategory,
+    status: node.status,
+    hint: node.summary || templateNode?.hint || '节点状态来自后端时间轴',
+    date: node.promotedAt,
+    ownerRole: node.ownerRole || templateNode?.ownerRole,
+    nextAction: node.nextAction || (node.status === 'current' ? '处理当前节点' : undefined),
+    riskText: node.riskNote,
+    checkItems: node.detailLines,
+    childSteps: templateNode?.childSteps || [{ stepNo: node.stepNo, title: node.nodeName }],
+    documentCount: node.documentCount,
+    confirmed: Boolean(node.confirmed)
+  }
+}
+
+function toDashboardProgressNodeFromStage(stage: TimelineStageView): DashboardProgressNode {
+  const templateNode = findProgressTemplateNode(stage.currentStepNo)
+  return {
+    nodeKey: stage.stageCode,
+    title: stage.stageName,
+    stageCode: stage.stageCode,
+    stageName: stage.stageName,
+    phase: stage.phaseName || templateNode?.phase || stage.stageName,
+    status: stage.status,
+    hint: templateNode?.hint || '节点状态来自后端时间轴',
+    ownerRole: templateNode?.ownerRole,
+    nextAction: stage.status === 'current' ? '处理当前小步骤' : undefined,
+    childSteps: stage.steps.map((step) => ({
+      nodeKey: step.nodeKey,
+      stepNo: step.stepNo,
+      title: step.stepName,
+      requireUpload: Boolean(step.requiredFileCategory),
+      uploadLabel: step.requiredFileCategory ? `上传${step.stepName}资料` : undefined,
+      requiredFileCategory: step.requiredFileCategory,
+      uploadCount: step.documentCount,
+      isCurrent: step.isCurrent,
+      isConfirmed: step.isConfirmed,
+      hasUploaded: step.hasUploaded,
+      visualStatus: step.visualStatus
+    })),
+    documentCount: stage.documentCount,
+    confirmed: stage.steps.some((step) => step.confirmed)
+  }
+}
+
 const dashboardProgressNodes = computed<DashboardProgressNode[]>(() => {
+  if (activeProgressTimeline.value?.nodes?.length) {
+    return mapTimelineStages(activeProgressTimeline.value).map(toDashboardProgressNodeFromStage)
+  }
   const currentStepNo = activeProgressProject.value?.currentStepNo || 1
   return activeProgressTemplate.value.map((node) => {
     const minStep = Math.min(...node.childSteps.map((s) => s.stepNo))
@@ -484,20 +464,142 @@ const selectedProgressNode = computed(() =>
     || dashboardProgressNodes.value[0]
 )
 
+const selectedProgressNodeConfirmed = computed(() => Boolean(selectedProgressNode.value?.confirmed))
+
+const currentProgressStep = computed(() => findCurrentTimelineStep(activeProgressTimeline.value))
+
+const currentProgressStepNo = computed(() => (
+  currentProgressStep.value?.stepNo
+  || activeProgressTimeline.value?.currentStepNo
+  || activeProgressProject.value?.currentStepNo
+  || 1
+))
+
+const currentProgressStepTitle = computed(() => {
+  const stepNo = currentProgressStepNo.value
+  if (currentProgressStep.value?.stepName) return currentProgressStep.value.stepName
+  const stepTitle = selectedProgressNode.value?.childSteps.find((step) => step.stepNo === stepNo)?.title
+  return activeProgressTimeline.value?.currentStepName || stepTitle || selectedProgressNode.value?.title || '--'
+})
+
+function getStepUploadCount(step: DashboardChildStep, node: DashboardProgressNode) {
+  if (!step.requireUpload) return 0
+  if (typeof step.uploadCount === 'number') return step.uploadCount
+  if (step.stepNo !== currentProgressStepNo.value) return 0
+  return Number(node.documentCount || 0)
+}
+
+const selectedProgressChildSteps = computed<DashboardChildStepView[]>(() => {
+  const node = selectedProgressNode.value
+  if (!node) return []
+  return node.childSteps.map((step) => {
+    const uploadCount = getStepUploadCount(step, node)
+    const isCurrent = Boolean(step.isCurrent ?? step.stepNo === currentProgressStepNo.value)
+    const isConfirmed = Boolean(step.isConfirmed ?? (step.stepNo < currentProgressStepNo.value || Boolean(node.confirmed && isCurrent)))
+    const hasUploaded = Boolean(step.requireUpload && uploadCount > 0)
+    const processRouteStep = isProcessRouteStep(step)
+    const visualStatus: ChildStepVisualStatus = step.visualStatus || (isConfirmed
+      ? 'confirmed'
+      : hasUploaded
+        ? 'uploaded'
+        : isCurrent
+          ? (step.requireUpload ? 'missing-upload' : 'current')
+          : 'pending')
+
+    return {
+      ...step,
+      nodeKey: step.nodeKey || node.nodeKey,
+      uploadCount,
+      isCurrent,
+      isConfirmed,
+      hasUploaded,
+      uploadLabel: processRouteStep ? '新建工艺路线' : step.uploadLabel,
+      visualStatus
+    }
+  })
+})
+
+const progressUploadStepOptions = computed(() => {
+  return selectedProgressChildSteps.value
+})
+
+const processRouteStepKeys = new Set([
+  'PRODUCT_LINE_PROCESS_ADD',
+  'PRODUCT_LINE_PROCESS_CONFIRM',
+  'MODEL_VARIANT_PROCESS_DIFF_CONFIRM'
+])
+
+function isProcessRouteStep(step?: { nodeKey?: string; stepNo?: number; title?: string; stepName?: string; nodeName?: string } | null) {
+  if (!step) return false
+  const name = step.title || step.stepName || step.nodeName || ''
+  return Boolean(
+    (step.nodeKey && processRouteStepKeys.has(step.nodeKey)) ||
+    step.stepNo === 9 ||
+    step.stepNo === 10 ||
+    (step.stepNo === 7 && name.includes('工艺'))
+  )
+}
+
+const isCurrentProcessRouteStep = computed(() => isProcessRouteStep(currentProgressStep.value))
+
+function getProgressUploadOptionLabel(option: DashboardChildStepView) {
+  return `第 ${option.stepNo} 步：${option.title}（${Number(option.uploadCount || 0)} 个附件）`
+}
+
 function toProgressTargetFromTask(task: DashboardTaskItem): DashboardProjectProgressTarget {
   return { productId: task.productId ?? Number(task.targetPath.split('/').pop()), productName: task.objectName, productCode: task.productCode, seriesName: task.seriesName, productType: task.productType, currentStage: task.nodeName, currentStepNo: task.currentStepNo, ownerUserName: task.ownerUserName || task.initiator, completionRate: task.completionRate, status: task.status, targetPath: task.targetPath }
 }
 
-function openProjectProgress(project: DashboardProjectProgressTarget) {
+async function loadActiveProgressTimeline(projectId: number) {
+  try {
+    const timeline = await getProjectTimeline(projectId)
+    activeProgressTimeline.value = timeline
+    const currentStep = findCurrentTimelineStep(timeline)
+    activeProgressNodeKey.value = currentStep?.stageCode || currentStep?.nodeKey || timeline.nodes[0]?.stageCode || timeline.nodes[0]?.nodeKey || null
+    if (activeProgressProject.value) {
+      activeProgressProject.value = {
+        ...activeProgressProject.value,
+        currentStage: timeline.currentNode,
+        currentStepNo: timeline.currentStepNo
+      }
+    }
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error))
+  }
+}
+
+async function refreshActiveProgressProject() {
+  if (!activeProgressProject.value) return
+  await loadActiveProgressTimeline(activeProgressProject.value.productId)
+  await loadInProgressProjects()
+}
+
+async function openProjectProgress(project: DashboardProjectProgressTarget) {
   activeProgressProject.value = project
   activeProgressNodeKey.value = null
+  activeProgressTimeline.value = null
   projectProgressVisible.value = true
+  await loadActiveProgressTimeline(project.productId)
 }
 
 function openActiveProjectDetail() {
   if (!activeProgressProject.value) return
   projectProgressVisible.value = false
   router.push(normalizeLegacyProductTarget(activeProgressProject.value.targetPath))
+}
+
+function openProcessRouteCreateFromDashboard() {
+  if (!activeProgressProject.value) return
+  projectProgressVisible.value = false
+  router.push({
+    path: '/projects',
+    query: {
+      tab: 'in_progress',
+      productId: String(activeProgressProject.value.productId),
+      section: 'process_detail',
+      createProcessRoute: '1'
+    }
+  })
 }
 
 function getProgressNodeTagType(status: DashboardProgressNode['status']) {
@@ -515,13 +617,121 @@ function getProgressNodeStatusText(status: DashboardProgressNode['status']) {
 }
 
 function handleProgressAction(action: ProgressAction) {
-  const msg: Record<ProgressAction, string> = {
-    reject: '已触发驳回占位，后续接入后端。',
-    hold: '已记录暂不推进。',
-    force: '已触发强制推进占位，后续须校验权限。',
-    advance: '已触发推动进程占位，后续接入流程推进接口。'
+  if (action === 'confirm') {
+    void confirmCurrentProgressNode()
+    return
   }
-  alert(msg[action])
+  if (action === 'return') {
+    void returnCurrentProgressNode()
+    return
+  }
+  ElMessage.warning('强制推进需要后端权限和审计闭环，后续接入')
+}
+
+function getErrorMessage(error: unknown) {
+  if (typeof error === 'object' && error && 'response' in error) {
+    const response = (error as { response?: { data?: { message?: string } } }).response
+    if (response?.data?.message) return response.data.message
+  }
+  if (error instanceof Error) return error.message
+  return '操作失败'
+}
+
+function requireProgressActionContext() {
+  const currentStep = currentProgressStep.value
+  if (!activeProgressProject.value || !selectedProgressNode.value || !currentStep) {
+    ElMessage.warning('请先选择项目和当前节点')
+    return null
+  }
+  if (selectedProgressNode.value.status !== 'current') {
+    ElMessage.warning('只能操作当前推进中的节点')
+    return null
+  }
+  return {
+    project: activeProgressProject.value,
+    node: currentStep
+  }
+}
+
+async function confirmCurrentProgressNode() {
+  const context = requireProgressActionContext()
+  if (!context || progressActionLoading.value) return
+  try {
+    const { value } = await ElMessageBox.prompt('可填写当前节点确认备注，留空则只确认节点。', '确认当前节点', {
+      confirmButtonText: '确认',
+      cancelButtonText: '取消',
+      inputPlaceholder: '例如：资料已确认，可以进入下一环节'
+    })
+    progressActionLoading.value = 'confirm'
+    await confirmTimelineNode(context.project.productId, context.node.nodeKey, String(value || ''))
+    await refreshActiveProgressProject()
+    ElMessage.success('当前节点已确认')
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close') ElMessage.error(getErrorMessage(error))
+  } finally {
+    progressActionLoading.value = false
+  }
+}
+
+async function returnCurrentProgressNode() {
+  const context = requireProgressActionContext()
+  if (!context || progressActionLoading.value) return
+  try {
+    const { value } = await ElMessageBox.prompt('请输入返回上一步原因，系统会写入项目时间轴操作记录。', '返回上一步', {
+      confirmButtonText: '返回上一步',
+      cancelButtonText: '取消',
+      inputPlaceholder: '例如：资料缺失，需要补充后重新确认'
+    })
+    progressActionLoading.value = 'return'
+    await returnTimelineNode(context.project.productId, context.node.nodeKey, String(value || ''), true)
+    await refreshActiveProgressProject()
+    ElMessage.success('已返回上一步')
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close') ElMessage.error(getErrorMessage(error))
+  } finally {
+    progressActionLoading.value = false
+  }
+}
+
+function openProgressUpload() {
+  const context = requireProgressActionContext()
+  if (!context) return
+  progressUploadFile.value = null
+  progressUploadStepKey.value = context.node.nodeKey
+  progressUploadCategory.value = context.node.requiredFileCategory || 'other'
+  progressUploadVisible.value = true
+}
+
+function handleProgressUploadFileChange(event: Event) {
+  progressUploadFile.value = (event.target as HTMLInputElement).files?.[0] || null
+}
+
+async function submitProgressUpload() {
+  const context = requireProgressActionContext()
+  if (!context || progressActionLoading.value) return
+  if (!progressUploadFile.value) {
+    ElMessage.warning('请先选择要上传的资料')
+    return
+  }
+  if (!progressUploadStepKey.value) {
+    ElMessage.warning('请选择资料归属步骤')
+    return
+  }
+  try {
+    progressActionLoading.value = 'upload'
+    const attachment = await uploadTimelineAttachment(context.project.productId, progressUploadStepKey.value, progressUploadFile.value, {
+      fileCategory: progressUploadCategory.value,
+      remark: '工作台当前节点资料'
+    })
+    progressUploadVisible.value = false
+    await refreshActiveProgressProject()
+    activeProgressNodeKey.value = attachment.timelineStageCode || selectedProgressNode.value?.stageCode || activeProgressNodeKey.value
+    ElMessage.success('资料已上传')
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error))
+  } finally {
+    progressActionLoading.value = false
+  }
 }
 
 /* ========== 新建项目弹窗逻辑 ========== */
@@ -643,6 +853,7 @@ onMounted(loadInProgressProjects)
           :key="item.productId"
           class="list-button"
           type="button"
+          :data-test="`dashboard-project-${item.productId}`"
           @click="openProjectProgress({ productId: item.productId, productName: item.productName, productCode: item.productCode, seriesName: item.seriesName, currentStage: item.currentStage, ownerUserName: item.ownerUserName, completionRate: item.completionRate, status: item.status, targetPath: `/products/${item.productId}` })"
         >
           <div class="toolbar-row">
@@ -752,30 +963,73 @@ onMounted(loadInProgressProjects)
             <div class="project-progress-node-detail__head"><div><h4>{{ selectedProgressNode.title }}</h4><p class="page-panel-desc">{{ selectedProgressNode.hint }}</p></div><el-tag effect="light" :type="getProgressNodeTagType(selectedProgressNode.status)">{{ getProgressNodeStatusText(selectedProgressNode.status) }}</el-tag></div>
             <div class="project-progress-info-grid">
               <div><span class="subtle-text">责任角色</span><strong>{{ selectedProgressNode.ownerRole || '--' }}</strong></div>
+              <div data-test="dashboard-current-step-summary"><span class="subtle-text">当前小节点</span><strong>第 {{ currentProgressStepNo }} 步：{{ currentProgressStepTitle }}</strong></div>
               <div><span class="subtle-text">下一步动作</span><strong>{{ selectedProgressNode.nextAction || '--' }}</strong></div>
               <div><span class="subtle-text">风险提示</span><strong>{{ selectedProgressNode.riskText || '暂无风险' }}</strong></div>
+              <div><span class="subtle-text">节点资料</span><strong>{{ selectedProgressNode.documentCount || 0 }} 个附件</strong></div>
+              <div><span class="subtle-text">确认状态</span><strong>{{ selectedProgressNodeConfirmed ? '已确认' : '未确认' }}</strong></div>
             </div>
             <section class="project-progress-child-steps">
               <h5>包含的小节点</h5>
               <div class="project-progress-child-step-list">
-                <article v-for="step in selectedProgressNode.childSteps" :key="step.stepNo" class="project-progress-child-step">
+                <article
+                  v-for="step in selectedProgressChildSteps"
+                  :key="step.stepNo"
+                  class="project-progress-child-step"
+                  :class="`is-${step.visualStatus}`"
+                  :data-test="`dashboard-child-step-${step.stepNo}`"
+                >
                   <div><strong>第 {{ step.stepNo }} 步：{{ step.title }}</strong><p v-if="step.uploadLabel" class="subtle-text">{{ step.uploadLabel }}</p></div>
                   <div class="project-progress-child-step__tags">
-                    <el-tag v-if="step.requireUpload" size="small" type="warning" effect="light">需上传</el-tag>
+                    <el-tag v-if="step.isCurrent" size="small" type="primary" effect="light">当前步骤</el-tag>
+                    <el-tag v-if="step.isConfirmed" size="small" type="success" effect="light">已确认</el-tag>
+                    <el-tag v-if="step.requireUpload && step.hasUploaded" size="small" type="success" effect="light">已上传 {{ step.uploadCount }} 个</el-tag>
+                    <el-tag v-else-if="step.requireUpload" size="small" type="warning" effect="light">待上传</el-tag>
                     <el-tag v-if="step.requireApproval" size="small" type="info" effect="light">审批</el-tag>
                   </div>
                 </article>
               </div>
             </section>
             <footer class="project-progress-node-actions" v-if="selectedProgressNode.status === 'current'">
-              <el-button type="danger" plain @click="handleProgressAction('reject')">驳回</el-button>
-              <el-button plain @click="handleProgressAction('hold')">暂不推进</el-button>
+              <el-button data-test="dashboard-progress-confirm" plain :loading="progressActionLoading === 'confirm'" @click="handleProgressAction('confirm')">确认当前节点</el-button>
+              <el-button data-test="dashboard-progress-return" type="danger" plain :loading="progressActionLoading === 'return'" @click="handleProgressAction('return')">返回上一步</el-button>
               <el-button type="warning" plain @click="handleProgressAction('force')">强制推进</el-button>
-              <el-button type="primary" @click="handleProgressAction('advance')">推动项目进程</el-button>
+              <el-button v-if="isCurrentProcessRouteStep" data-test="dashboard-process-route-create" type="primary" :icon="Plus" @click="openProcessRouteCreateFromDashboard">新建工艺路线</el-button>
+              <el-button v-else data-test="dashboard-progress-upload-open" plain :loading="progressActionLoading === 'upload'" @click="openProgressUpload">上传节点资料</el-button>
             </footer>
           </section>
         </section>
       </div>
+    </el-dialog>
+
+    <el-dialog v-model="progressUploadVisible" title="上传节点资料" width="520px" destroy-on-close>
+      <div class="project-progress-upload-form">
+        <label>
+          <span class="subtle-text">资料归属步骤</span>
+          <select v-model="progressUploadStepKey" data-test="dashboard-progress-upload-step">
+            <option v-for="option in progressUploadStepOptions" :key="option.nodeKey" :value="option.nodeKey">
+              {{ getProgressUploadOptionLabel(option) }}
+            </option>
+          </select>
+        </label>
+        <label>
+          <span class="subtle-text">资料类别</span>
+          <select v-model="progressUploadCategory" data-test="dashboard-progress-upload-category">
+            <option v-for="option in progressUploadCategoryOptions" :key="option.value" :value="option.value">
+              {{ option.label }}
+            </option>
+          </select>
+        </label>
+        <label>
+          <span class="subtle-text">选择文件</span>
+          <input data-test="dashboard-progress-upload-file" type="file" @change="handleProgressUploadFileChange" />
+        </label>
+        <p class="page-panel-desc">资料会上传到当前大节点内选择的小步骤，文件中心和阶段门禁读取同一份后端数据。</p>
+      </div>
+      <template #footer>
+        <el-button @click="progressUploadVisible = false">取消</el-button>
+        <el-button data-test="dashboard-progress-upload-submit" type="primary" :loading="progressActionLoading === 'upload'" @click="submitProgressUpload">上传</el-button>
+      </template>
     </el-dialog>
 
     <el-dialog v-model="createProjectVisible" title="新建项目" width="760px" destroy-on-close>
@@ -1058,9 +1312,18 @@ onMounted(loadInProgressProjects)
 .project-progress-info-grid > div { padding: 12px; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; }
 .project-progress-child-steps { padding: 12px; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; }
 .project-progress-child-step-list { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
-.project-progress-child-step { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 8px; border-radius: 6px; background: #f8fafc; }
-.project-progress-child-step__tags { display: flex; gap: 4px; flex-shrink: 0; }
+.project-progress-child-step { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 9px 10px; border: 1px solid #e5e7eb; border-radius: 6px; background: #f8fafc; }
+.project-progress-child-step.is-confirmed,
+.project-progress-child-step.is-uploaded { border-color: #86efac; background: #f0fdf4; }
+.project-progress-child-step.is-current { border-color: #60a5fa; background: #eff6ff; }
+.project-progress-child-step.is-missing-upload { border-color: #fdba74; background: #fff7ed; }
+.project-progress-child-step.is-pending { border-color: #e5e7eb; background: #f8fafc; }
+.project-progress-child-step__tags { display: flex; gap: 4px; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
 .project-progress-node-actions { display: flex; justify-content: flex-end; gap: 10px; padding-top: 4px; }
+.project-progress-upload-form { display: flex; flex-direction: column; gap: 14px; }
+.project-progress-upload-form label { display: flex; flex-direction: column; gap: 6px; }
+.project-progress-upload-form select,
+.project-progress-upload-form input[type="file"] { min-height: 36px; border: 1px solid #dcdfe6; border-radius: 6px; padding: 6px 10px; background: #fff; }
 .dashboard-toolbar--with-tabs { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .dashboard-segment-bar { display: flex; gap: 2px; background: #fff; border-radius: 8px; padding: 4px; overflow-x: auto; margin: 0; }
 .dashboard-segment-btn { display: flex; align-items: center; gap: 6px; padding: 8px 16px; border: 0; border-radius: 6px; background: transparent; color: #0f172a; font-size: 14px; cursor: pointer; white-space: nowrap; transition: background 0.16s; }

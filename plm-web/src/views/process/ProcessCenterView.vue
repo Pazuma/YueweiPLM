@@ -1,10 +1,21 @@
 <script setup lang="ts">
-import { ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
+import { ArrowLeft, ArrowRight, Plus, Refresh } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
-import { getProcessCenterSnapshot } from '@/api/modules/process'
+import {
+  confirmProcessOperationMaster,
+  createProcessOperationMaster,
+  getProcessCenterSnapshot,
+  getProcessOperationMasters,
+  getProcessRouteTemplates,
+  type ProcessOperationMasterSavePayload,
+  type ProcessOperationMasterVO,
+  type ProcessRouteTemplateOperationVO,
+  type ProcessRouteTemplateVO
+} from '@/api/modules/process'
+import { getProcessRouteSkus } from '@/api/modules/bom'
 import PageContainer from '@/components/PageContainer/index.vue'
 import ProjectTimeRangeFilter, { type ProjectTimeRangeValue } from '@/components/ProjectTimeRangeFilter/index.vue'
 import SearchBar from '@/components/SearchBar/index.vue'
@@ -19,6 +30,7 @@ import type {
   ProcessRouteDetail,
   ProcessRouteListItem
 } from '@/types/process'
+import type { BomSkuRow } from '@/types/bom'
 import { formatAmount } from '@/utils/format'
 import { normalizeLegacyProductTarget } from '@/utils/projectRoute'
 
@@ -28,11 +40,42 @@ const route = useRoute()
 const router = useRouter()
 const loading = ref(false)
 const snapshot = ref<ProcessCenterSnapshot | null>(null)
+const activeManagementTab = ref<'operation-master' | 'route-template' | 'project-route'>(
+  route.query.routeId ? 'project-route' : 'operation-master'
+)
 const viewMode = ref<ProcessCenterViewMode>('route')
 const activeSection = ref<DetailSectionKey>('overview')
 const timeRange = ref<ProjectTimeRangeValue>('all')
 const operationKeyword = ref('')
 const activeImpactLabel = ref('')
+const operationMasterLoading = ref(false)
+const operationMasterRows = ref<ProcessOperationMasterVO[]>([])
+const routeTemplateLoading = ref(false)
+const routeTemplateRows = ref<ProcessRouteTemplateVO[]>([])
+const operationMasterDialogVisible = ref(false)
+const skuDialogVisible = ref(false)
+const skuLoading = ref(false)
+const skuRows = ref<BomSkuRow[]>([])
+const activeSkuRouteCode = ref('')
+const operationMasterForm = reactive<ProcessOperationMasterSavePayload>({
+  processCode: '',
+  processName: '',
+  processCategory: '',
+  operationType: '加工',
+  operationCraftCode: '',
+  defaultStandardTimeMins: 0,
+  defaultQualityRequirement: '',
+  defaultProcessParamJson: '{}',
+  needWorkstation: false,
+  workstationType: '',
+  remark: ''
+})
+
+const processTabOptions = [
+  { label: '工序库', value: 'operation-master' },
+  { label: '标准工艺路线', value: 'route-template' },
+  { label: '项目工艺路线', value: 'project-route' }
+] as const
 
 function isWithinTimeRange(dateText: string | undefined, range: ProjectTimeRangeValue) {
   if (!dateText || range === 'all') return true
@@ -44,6 +87,80 @@ function isWithinTimeRange(dateText: string | undefined, range: ProjectTimeRange
   if (range === '7d') return diffDays <= 7
   if (range === '30d') return diffDays <= 30
   return diffDays <= 180
+}
+
+function resetOperationMasterForm() {
+  operationMasterForm.processCode = ''
+  operationMasterForm.processName = ''
+  operationMasterForm.processCategory = ''
+  operationMasterForm.operationType = '加工'
+  operationMasterForm.operationCraftCode = ''
+  operationMasterForm.defaultStandardTimeMins = 0
+  operationMasterForm.defaultQualityRequirement = ''
+  operationMasterForm.defaultProcessParamJson = '{}'
+  operationMasterForm.needWorkstation = false
+  operationMasterForm.workstationType = ''
+  operationMasterForm.remark = ''
+}
+
+async function loadOperationMasterRows() {
+  operationMasterLoading.value = true
+  try {
+    operationMasterRows.value = await getProcessOperationMasters()
+  } finally {
+    operationMasterLoading.value = false
+  }
+}
+
+async function loadRouteTemplateRows() {
+  routeTemplateLoading.value = true
+  try {
+    routeTemplateRows.value = await getProcessRouteTemplates()
+  } finally {
+    routeTemplateLoading.value = false
+  }
+}
+
+function openOperationMasterCreate() {
+  resetOperationMasterForm()
+  operationMasterDialogVisible.value = true
+}
+
+function validateOperationMasterForm() {
+  if (!operationMasterForm.processCode.trim() || !operationMasterForm.processName.trim()) return '请填写工序编码和工序名称'
+  if (!operationMasterForm.processCategory.trim() || !operationMasterForm.operationType.trim()) return '请填写工序分类和工序类型'
+  if (operationMasterForm.defaultStandardTimeMins != null && operationMasterForm.defaultStandardTimeMins < 0) return '默认工时不能小于 0'
+  try {
+    const parsed = JSON.parse(operationMasterForm.defaultProcessParamJson || '{}')
+    if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') return '默认参数必须是 JSON 对象'
+  } catch {
+    return '默认参数 JSON 格式不正确'
+  }
+  return ''
+}
+
+async function saveOperationMaster() {
+  const validationError = validateOperationMasterForm()
+  if (validationError) {
+    ElMessage.warning(validationError)
+    return
+  }
+  const created = await createProcessOperationMaster({
+    ...operationMasterForm,
+    processCode: operationMasterForm.processCode.trim(),
+    processName: operationMasterForm.processName.trim(),
+    processCategory: operationMasterForm.processCategory.trim(),
+    operationType: operationMasterForm.operationType.trim(),
+    operationCraftCode: operationMasterForm.operationCraftCode?.trim().toUpperCase() || null,
+    defaultQualityRequirement: operationMasterForm.defaultQualityRequirement?.trim() || null,
+    defaultProcessParamJson: operationMasterForm.defaultProcessParamJson?.trim() || '{}',
+    workstationType: operationMasterForm.workstationType?.trim() || null,
+    remark: operationMasterForm.remark?.trim() || null
+  })
+  await confirmProcessOperationMaster(created.processId)
+  operationMasterDialogVisible.value = false
+  await loadOperationMasterRows()
+  ElMessage.success('工序已加入工序库')
 }
 
 const rows = computed(() => (snapshot.value?.routes || []).filter((item) => isWithinTimeRange(item.updatedAt, timeRange.value)))
@@ -237,12 +354,15 @@ async function loadSnapshot() {
     })
     const mode = String(route.query.mode || 'route') as ProcessCenterViewMode
     viewMode.value = ['route', 'operation', 'change'].includes(mode) ? mode : 'route'
+  } catch {
+    snapshot.value = null
   } finally {
     loading.value = false
   }
 }
 
 function openRouteDetail(row: ProcessRouteListItem) {
+  activeManagementTab.value = 'project-route'
   activeSection.value = 'overview'
   operationKeyword.value = ''
   router.push({
@@ -252,6 +372,21 @@ function openRouteDetail(row: ProcessRouteListItem) {
       routeId: row.routeId
     }
   })
+}
+
+async function openRouteSkus(row: ProcessRouteListItem) {
+  activeSkuRouteCode.value = row.routeCode
+  skuDialogVisible.value = true
+  skuLoading.value = true
+  skuRows.value = []
+  try {
+    skuRows.value = await getProcessRouteSkus(row.routeId)
+  } catch {
+    skuDialogVisible.value = false
+    ElMessage.error('关联 SKU 加载失败')
+  } finally {
+    skuLoading.value = false
+  }
 }
 
 function backToList() {
@@ -330,16 +465,93 @@ watch(
   { immediate: true }
 )
 
-onMounted(loadSnapshot)
+onMounted(async () => {
+  await Promise.all([loadOperationMasterRows(), loadRouteTemplateRows(), loadSnapshot()])
+})
 </script>
 
 <template>
   <PageContainer
-    title="工艺路线中心"
-    description="围绕 Process 对象集中查看工艺路线、工序结构、确认门禁、资料挂接、版本变更和业务联动。"
+    title="工艺管理"
+    description="集中维护工序库、标准工艺路线，并查看项目工艺路线、工序结构、资料挂接和版本追溯。"
   >
+    <section class="process-management-tabs">
+      <el-segmented v-model="activeManagementTab" :options="processTabOptions" />
+    </section>
+
+    <section v-if="activeManagementTab === 'operation-master'" class="page-panel route-table-panel" v-loading="operationMasterLoading">
+      <div class="toolbar-row route-table-panel__header">
+        <div>
+          <h3 class="section-title">工序库</h3>
+          <p class="page-panel-desc">工序名称由基础资料维护，工作台和项目中心只能选择这里已确认的工序。</p>
+        </div>
+        <div class="header-actions">
+          <el-button :icon="Refresh" circle title="刷新工序库" @click="loadOperationMasterRows" />
+          <el-button type="primary" :icon="Plus" @click="openOperationMasterCreate">新增工序</el-button>
+        </div>
+      </div>
+
+      <el-table :data="operationMasterRows" border stripe>
+        <el-table-column prop="processCode" label="工序编码" min-width="150" />
+        <el-table-column prop="processName" label="工序名称" min-width="150" />
+        <el-table-column prop="processCategory" label="工序分类" min-width="120" />
+        <el-table-column prop="operationType" label="工序类型" min-width="120" />
+        <el-table-column prop="operationCraftCode" label="工艺编码" width="100">
+          <template #default="{ row }">{{ row.operationCraftCode || '--' }}</template>
+        </el-table-column>
+        <el-table-column prop="defaultStandardTimeMins" label="默认工时" width="110" />
+        <el-table-column prop="defaultQualityRequirement" label="默认质量要求" min-width="220" show-overflow-tooltip />
+        <el-table-column label="需要工位" width="100">
+          <template #default="{ row }">{{ row.needWorkstation ? '是' : '否' }}</template>
+        </el-table-column>
+        <el-table-column prop="workstationType" label="工位类型" min-width="120">
+          <template #default="{ row }">{{ row.workstationType || '--' }}</template>
+        </el-table-column>
+        <el-table-column label="状态" width="110">
+          <template #default="{ row }">
+            <StatusTag :status="row.status" object-type="process" />
+          </template>
+        </el-table-column>
+      </el-table>
+    </section>
+
+    <section v-else-if="activeManagementTab === 'route-template'" class="page-panel route-table-panel" v-loading="routeTemplateLoading">
+      <div class="toolbar-row route-table-panel__header">
+        <div>
+          <h3 class="section-title">标准工艺路线</h3>
+          <p class="page-panel-desc">标准路线由工序库组合而成，工作台编写项目路线时可按模板复制。</p>
+        </div>
+        <el-button :icon="Refresh" circle title="刷新标准工艺路线" @click="loadRouteTemplateRows" />
+      </div>
+
+      <el-table :data="routeTemplateRows" border stripe>
+        <el-table-column prop="routeTemplateCode" label="路线编码" min-width="170" />
+        <el-table-column prop="routeTemplateName" label="路线名称" min-width="180" />
+        <el-table-column prop="versionNo" label="版本" width="90" />
+        <el-table-column prop="productCode" label="适用产品" min-width="130">
+          <template #default="{ row }">{{ row.productCode || '通用' }}</template>
+        </el-table-column>
+        <el-table-column label="默认" width="90">
+          <template #default="{ row }"><el-tag v-if="row.defaultTemplate" type="success" effect="light">默认</el-tag><span v-else>--</span></template>
+        </el-table-column>
+        <el-table-column label="工序数" width="100">
+          <template #default="{ row }">{{ row.operations?.length || 0 }}</template>
+        </el-table-column>
+        <el-table-column label="工序组合" min-width="320" show-overflow-tooltip>
+          <template #default="{ row }">
+            {{ row.operations?.map((item: ProcessRouteTemplateOperationVO) => item.processName).join(' / ') || '--' }}
+          </template>
+        </el-table-column>
+        <el-table-column label="状态" width="110">
+          <template #default="{ row }">
+            <StatusTag :status="row.status || 'confirmed'" object-type="process" />
+          </template>
+        </el-table-column>
+      </el-table>
+    </section>
+
     <SearchBar
-      v-if="!isDetailMode"
+      v-if="activeManagementTab === 'project-route' && !isDetailMode"
       :fields="searchFields"
       :model-value="table.query"
       @search="table.setQuery"
@@ -350,7 +562,7 @@ onMounted(loadSnapshot)
       </template>
     </SearchBar>
 
-    <section v-if="!isDetailMode" class="page-panel route-table-panel" v-loading="loading">
+    <section v-if="activeManagementTab === 'project-route' && !isDetailMode" class="page-panel route-table-panel" v-loading="loading">
       <div class="toolbar-row route-table-panel__header">
         <div>
           <h3 class="section-title">工艺产品列表</h3>
@@ -370,15 +582,16 @@ onMounted(loadSnapshot)
         </el-table-column>
         <el-table-column prop="currentGate" label="进程" min-width="170" />
         <el-table-column prop="versionNo" label="版本" width="90" />
-        <el-table-column label="详情" width="110" fixed="right">
+        <el-table-column label="操作" width="180" fixed="right">
           <template #default="{ row }">
+            <el-button data-test="process-route-skus" link type="primary" @click="openRouteSkus(row)">关联 SKU</el-button>
             <el-button link type="primary" @click="openRouteDetail(row)">详情</el-button>
           </template>
         </el-table-column>
       </el-table>
     </section>
 
-    <article v-else-if="activeDetail" class="page-panel detail-panel">
+    <article v-else-if="activeManagementTab === 'project-route' && activeDetail" class="page-panel detail-panel">
       <div class="detail-topline">
         <el-button link type="primary" :icon="ArrowLeft" @click="backToList">返回列表</el-button>
       </div>
@@ -387,7 +600,7 @@ onMounted(loadSnapshot)
         <div>
           <h3 class="section-title">{{ activeDetail.routeName }}</h3>
           <div class="detail-breadcrumb">
-            <span>工艺路线中心</span>
+            <span>工艺管理</span>
             <span>{{ activeDetail.productName }}</span>
             <span>{{ activeDetail.routeCode }}</span>
             <span>版本 {{ activeDetail.versionNo }}</span>
@@ -607,10 +820,90 @@ onMounted(loadSnapshot)
         </div>
       </section>
     </article>
+
+    <el-dialog v-model="operationMasterDialogVisible" title="新增工序" width="min(720px, 94vw)" append-to-body>
+      <el-form label-width="112px" class="operation-master-form">
+        <el-form-item label="工序编码" required>
+          <el-input v-model="operationMasterForm.processCode" maxlength="80" placeholder="例如 PROC_LAMINATION" />
+        </el-form-item>
+        <el-form-item label="工序名称" required>
+          <el-input v-model="operationMasterForm.processName" maxlength="100" placeholder="例如 压合" />
+        </el-form-item>
+        <el-form-item label="工序分类" required>
+          <el-select v-model="operationMasterForm.processCategory" filterable allow-create default-first-option placeholder="选择或输入分类">
+            <el-option label="成型" value="成型" />
+            <el-option label="后处理" value="后处理" />
+            <el-option label="表面处理" value="表面处理" />
+            <el-option label="组装" value="组装" />
+            <el-option label="包装" value="包装" />
+            <el-option label="质检" value="质检" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="工序类型" required>
+          <el-select v-model="operationMasterForm.operationType">
+            <el-option label="加工" value="加工" />
+            <el-option label="检验" value="检验" />
+            <el-option label="包装" value="包装" />
+            <el-option label="外协" value="外协" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="工艺编码">
+          <el-input v-model="operationMasterForm.operationCraftCode" maxlength="20" placeholder="如 10 / 20 / 30" />
+        </el-form-item>
+        <el-form-item label="默认工时">
+          <el-input-number v-model="operationMasterForm.defaultStandardTimeMins" :min="0" :precision="2" controls-position="right" />
+        </el-form-item>
+        <el-form-item label="需要工位">
+          <el-switch v-model="operationMasterForm.needWorkstation" />
+        </el-form-item>
+        <el-form-item label="工位类型">
+          <el-input v-model="operationMasterForm.workstationType" maxlength="80" placeholder="例如 注塑机 / 组装工位" />
+        </el-form-item>
+        <el-form-item label="质量要求" class="operation-master-form__wide">
+          <el-input v-model="operationMasterForm.defaultQualityRequirement" maxlength="500" type="textarea" :rows="2" />
+        </el-form-item>
+        <el-form-item label="默认参数" class="operation-master-form__wide">
+          <el-input v-model="operationMasterForm.defaultProcessParamJson" type="textarea" :rows="3" placeholder='例如 {"temperature":"按工艺卡"}' />
+        </el-form-item>
+        <el-form-item label="备注" class="operation-master-form__wide">
+          <el-input v-model="operationMasterForm.remark" maxlength="500" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="operationMasterDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="saveOperationMaster">保存并确认</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="skuDialogVisible" :title="`关联 SKU - ${activeSkuRouteCode}`" width="min(920px, 94vw)" append-to-body>
+      <el-table v-loading="skuLoading" :data="skuRows" border stripe empty-text="暂无关联 SKU">
+        <el-table-column prop="skuCode" label="SKU 编码" min-width="160" />
+        <el-table-column prop="productName" label="产品" min-width="150" />
+        <el-table-column prop="phoneModel" label="手机型号" min-width="150" />
+        <el-table-column prop="color" label="颜色" width="110" />
+        <el-table-column label="状态" width="110">
+          <template #default="{ row }"><StatusTag :status="row.status" object-type="product" /></template>
+        </el-table-column>
+      </el-table>
+    </el-dialog>
   </PageContainer>
 </template>
 
 <style scoped>
+.process-management-tabs {
+  margin-bottom: 14px;
+}
+
+.operation-master-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 12px;
+}
+
+.operation-master-form__wide {
+  grid-column: 1 / -1;
+}
+
 .route-table-panel,
 .detail-panel {
   min-height: 0;
@@ -844,6 +1137,10 @@ onMounted(loadSnapshot)
 }
 
 @media (max-width: 720px) {
+  .operation-master-form {
+    grid-template-columns: 1fr;
+  }
+
   .detail-header,
   .header-actions,
   .operation-toolbar {

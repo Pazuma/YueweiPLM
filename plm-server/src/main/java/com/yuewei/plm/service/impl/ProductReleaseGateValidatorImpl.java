@@ -104,10 +104,10 @@ public class ProductReleaseGateValidatorImpl implements ProductReleaseGateValida
 
     private boolean isAllowedPublishNode(String productType, String currentNodeKey) {
         if (TimelineNodeConstants.PRODUCT_TYPE_PRODUCT_LINE.equals(productType)) {
-            return "PRODUCT_LINE_PRODUCTION_DECISION".equals(currentNodeKey);
+            return "PRODUCT_LINE_PRODUCTION_DECISION_STEP".equals(currentNodeKey);
         }
         if (TimelineNodeConstants.PRODUCT_TYPE_MODEL_VARIANT.equals(productType)) {
-            return "MODEL_VARIANT_FREEZE_RELEASE".equals(currentNodeKey);
+            return "MODEL_VARIANT_RELEASE".equals(currentNodeKey);
         }
         return false;
     }
@@ -116,7 +116,10 @@ public class ProductReleaseGateValidatorImpl implements ProductReleaseGateValida
         Long count = productBomRepository.selectCount(new LambdaQueryWrapper<ProductBom>()
             .eq(ProductBom::getProductId, productId)
             .eq(ProductBom::getDeletedFlag, 0)
-            .in(ProductBom::getStatus, List.of("frozen", "released")));
+            .and(wrapper -> wrapper
+                .eq(ProductBom::getFrozenFlag, 1)
+                .or()
+                .eq(ProductBom::getStatus, "released")));
         return count.intValue();
     }
 

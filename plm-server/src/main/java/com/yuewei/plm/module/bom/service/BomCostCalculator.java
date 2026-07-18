@@ -3,7 +3,9 @@ package com.yuewei.plm.module.bom.service;
 import com.yuewei.plm.module.bom.entity.ProductBomItem;
 import java.math.BigDecimal;
 import java.util.List;
+import org.springframework.stereotype.Component;
 
+@Component
 public class BomCostCalculator {
 
     public Result calculate(
