@@ -192,6 +192,7 @@ public class ProductBomWorkflowService {
         item.setQuantity(dto.getQuantity());
         item.setUnit(dto.getUnit());
         item.setLossRate(dto.getLossRate() == null ? BigDecimal.ZERO : dto.getLossRate());
+        item.setUnitCostSnapshot(dto.getUnitCost() == null ? BigDecimal.ZERO : dto.getUnitCost());
         item.setSubstituteFlag(dto.getSubstituteFlag() == null ? 0 : dto.getSubstituteFlag());
         item.setRemark(dto.getRemark());
         item.setVersionNo(bom.getVersionNo());

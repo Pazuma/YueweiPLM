@@ -28,6 +28,7 @@ public class ProductBomItemDTO {
     private String unit;
 
     private BigDecimal lossRate;
+    private BigDecimal unitCost;
     private Integer substituteFlag;
     private String remark;
 }
