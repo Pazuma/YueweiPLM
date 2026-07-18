@@ -3,9 +3,20 @@ package com.yuewei.plm.module.bom.controller;
 import com.yuewei.plm.common.util.RequestIdUtil;
 import com.yuewei.plm.common.vo.ResponseVO;
 import com.yuewei.plm.module.bom.dto.ProductBomCreateDTO;
+import com.yuewei.plm.module.bom.dto.BomInheritanceDTO;
+import com.yuewei.plm.module.bom.dto.BomCopyVersionDTO;
+import com.yuewei.plm.module.bom.dto.BomRouteSaveDTO;
+import com.yuewei.plm.module.bom.dto.TestBomSaveDTO;
 import com.yuewei.plm.module.bom.dto.ProductBomItemDTO;
 import com.yuewei.plm.module.bom.dto.ProductBomUpdateDTO;
 import com.yuewei.plm.module.bom.service.ProductBomService;
+import com.yuewei.plm.module.bom.service.BomImportService;
+import com.yuewei.plm.module.bom.service.BomInheritanceService;
+import com.yuewei.plm.module.bom.service.ProductBomWorkflowService;
+import com.yuewei.plm.module.bom.entity.ProductBom;
+import com.yuewei.plm.module.bom.entity.ProductBomCostSnapshot;
+import com.yuewei.plm.module.bom.entity.ProductBomImportBatch;
+import com.yuewei.plm.module.bom.vo.BomImportPreviewVO;
 import com.yuewei.plm.module.bom.vo.ProductBomVO;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -21,6 +32,11 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.multipart.MultipartFile;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 
 @Validated
 @RestController
@@ -29,6 +45,9 @@ import org.springframework.web.bind.annotation.RestController;
 public class ProductBomController {
 
     private final ProductBomService productBomService;
+    private final ProductBomWorkflowService workflowService;
+    private final BomInheritanceService inheritanceService;
+    private final BomImportService importService;
 
     @GetMapping("/projects/{projectId}/boms")
     public ResponseVO<List<ProductBomVO>> listByProject(@PathVariable Long projectId, HttpServletRequest request) {
@@ -77,7 +96,103 @@ public class ProductBomController {
     }
 
     @PostMapping("/boms/{bomId}/freeze")
-    public ResponseVO<ProductBomVO> freeze(@PathVariable Long bomId, HttpServletRequest request) {
-        return ResponseVO.success(productBomService.freeze(bomId, request), RequestIdUtil.getRequestId(request), OffsetDateTime.now());
+    public ResponseVO<ProductBom> freeze(@PathVariable Long bomId, HttpServletRequest request) {
+        return ResponseVO.success(workflowService.freeze(bomId), RequestIdUtil.getRequestId(request), OffsetDateTime.now());
+    }
+
+    @PutMapping("/boms/{bomId}/routes")
+    public ResponseVO<Void> saveRoutes(@PathVariable Long bomId,
+                                       @Valid @RequestBody List<BomRouteSaveDTO> routes,
+                                       HttpServletRequest request) {
+        workflowService.saveRoutes(bomId, routes);
+        return ResponseVO.success(null, RequestIdUtil.getRequestId(request), OffsetDateTime.now());
+    }
+
+    @PostMapping("/products/{productId}/test-bom")
+    public ResponseVO<ProductBom> saveTestBom(@PathVariable Long productId,
+                                              @Valid @RequestBody TestBomSaveDTO dto,
+                                              HttpServletRequest request) {
+        return ResponseVO.success(workflowService.saveTestBom(productId, dto),
+            RequestIdUtil.getRequestId(request), OffsetDateTime.now());
+    }
+
+    @PostMapping("/products/{productId}/test-bom/confirm")
+    public ResponseVO<ProductBom> confirmTestBom(@PathVariable Long productId, HttpServletRequest request) {
+        return ResponseVO.success(workflowService.confirmTestBom(productId),
+            RequestIdUtil.getRequestId(request), OffsetDateTime.now());
+    }
+
+    @PostMapping("/boms/{bomId}/costs/recalculate")
+    public ResponseVO<List<ProductBomCostSnapshot>> recalculateCosts(
+        @PathVariable Long bomId,
+        @Valid @RequestBody List<BomRouteSaveDTO> costs,
+        HttpServletRequest request
+    ) {
+        return ResponseVO.success(workflowService.recalculateCosts(bomId, costs),
+            RequestIdUtil.getRequestId(request), OffsetDateTime.now());
+    }
+
+    @PostMapping("/boms/{bomId}/submit-review")
+    public ResponseVO<ProductBom> submitReview(@PathVariable Long bomId, HttpServletRequest request) {
+        return ResponseVO.success(workflowService.submitReview(bomId),
+            RequestIdUtil.getRequestId(request), OffsetDateTime.now());
+    }
+
+    @PostMapping("/boms/{bomId}/publish")
+    public ResponseVO<ProductBom> publish(@PathVariable Long bomId, HttpServletRequest request) {
+        return ResponseVO.success(workflowService.publish(bomId),
+            RequestIdUtil.getRequestId(request), OffsetDateTime.now());
+    }
+
+    @PostMapping("/boms/{bomId}/copy-version")
+    public ResponseVO<ProductBom> copyVersion(@PathVariable Long bomId,
+                                              @Valid @RequestBody BomCopyVersionDTO dto,
+                                              HttpServletRequest request) {
+        return ResponseVO.success(
+            inheritanceService.copyVersion(bomId, dto.getVersionNo(), dto.getSelectedColors()),
+            RequestIdUtil.getRequestId(request), OffsetDateTime.now()
+        );
+    }
+
+    @PostMapping("/products/{productId}/boms/inherit")
+    public ResponseVO<ProductBom> inherit(@PathVariable Long productId,
+                                          @Valid @RequestBody BomInheritanceDTO dto,
+                                          HttpServletRequest request) {
+        return ResponseVO.success(inheritanceService.inherit(dto.getSourceBomId(), productId, dto.getSelectedColors()),
+            RequestIdUtil.getRequestId(request), OffsetDateTime.now());
+    }
+
+    @PostMapping(value = "/products/{productId}/boms/import/preview", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseVO<BomImportPreviewVO> previewImport(
+        @PathVariable Long productId,
+        @RequestParam Long bomId,
+        @RequestParam("file") MultipartFile file,
+        HttpServletRequest request
+    ) throws java.io.IOException {
+        return ResponseVO.success(importService.preview(productId, bomId, file.getOriginalFilename(), file.getBytes()),
+            RequestIdUtil.getRequestId(request), OffsetDateTime.now());
+    }
+
+    @PostMapping("/boms/import/{importToken}/commit")
+    public ResponseVO<ProductBomImportBatch> commitImport(@PathVariable String importToken, HttpServletRequest request) {
+        return ResponseVO.success(importService.commit(importToken),
+            RequestIdUtil.getRequestId(request), OffsetDateTime.now());
+    }
+
+    @GetMapping("/boms/import/template")
+    public ResponseEntity<byte[]> downloadTemplate() {
+        return xlsx("BOM-import-template.xlsx", importService.buildTemplate());
+    }
+
+    @GetMapping("/boms/import/{importToken}/errors")
+    public ResponseEntity<byte[]> downloadErrors(@PathVariable String importToken) {
+        return xlsx("BOM-import-errors.xlsx", importService.buildErrorReport(importService.getErrors(importToken)));
+    }
+
+    private ResponseEntity<byte[]> xlsx(String fileName, byte[] content) {
+        return ResponseEntity.ok()
+            .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + fileName + "\"")
+            .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+            .body(content);
     }
 }

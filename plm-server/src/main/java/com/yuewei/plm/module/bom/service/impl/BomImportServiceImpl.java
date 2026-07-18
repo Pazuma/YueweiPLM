@@ -119,6 +119,20 @@ public class BomImportServiceImpl implements BomImportService {
     }
 
     @Override
+    public List<BomImportErrorVO> getErrors(String importToken) {
+        ProductBomImportBatch batch = batchRepository.selectOne(new LambdaQueryWrapper<ProductBomImportBatch>()
+            .eq(ProductBomImportBatch::getImportToken, importToken).eq(ProductBomImportBatch::getDeletedFlag, 0));
+        if (batch == null) {
+            throw new BusinessException(ErrorCodeConstants.RESOURCE_NOT_FOUND, "导入批次不存在");
+        }
+        try {
+            return objectMapper.readValue(batch.getErrorJson(), new TypeReference<List<BomImportErrorVO>>() {});
+        } catch (Exception exception) {
+            throw new BusinessException(ErrorCodeConstants.INTERNAL_ERROR, "导入错误数据损坏");
+        }
+    }
+
+    @Override
     public byte[] buildErrorReport(List<BomImportErrorVO> errors) {
         try (XSSFWorkbook workbook = new XSSFWorkbook(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
             var sheet = workbook.createSheet("错误报告");

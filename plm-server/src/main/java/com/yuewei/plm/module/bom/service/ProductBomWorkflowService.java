@@ -5,6 +5,7 @@ import com.yuewei.plm.common.constant.ErrorCodeConstants;
 import com.yuewei.plm.common.exception.BusinessException;
 import com.yuewei.plm.module.bom.dto.BomRouteSaveDTO;
 import com.yuewei.plm.module.bom.dto.ProductBomItemDTO;
+import com.yuewei.plm.module.bom.dto.TestBomSaveDTO;
 import com.yuewei.plm.module.bom.entity.ProductBom;
 import com.yuewei.plm.module.bom.entity.ProductBomCostSnapshot;
 import com.yuewei.plm.module.bom.entity.ProductBomItem;
@@ -35,6 +36,69 @@ public class ProductBomWorkflowService {
     private final ProductBomItemRepository itemRepository;
     private final ProductBomCostSnapshotRepository costRepository;
     private final BomCostCalculator costCalculator;
+
+    @Transactional
+    public ProductBom saveTestBom(Long productId, TestBomSaveDTO dto) {
+        ProductBom bom = findTestBom(productId);
+        LocalDateTime now = LocalDateTime.now();
+        if (bom == null) {
+            bom = new ProductBom();
+            bom.setProductId(productId);
+            bom.setBomCode("TEST-BOM-" + productId);
+            bom.setBomName("测试 BOM");
+            bom.setBomType("test");
+            bom.setBomScope("test");
+            bom.setSourceType("manual");
+            bom.setStatus("draft");
+            bom.setCurrencyCode("CNY");
+            bom.setFrozenFlag(0);
+            fillCreate(bom, now);
+            bomRepository.insert(bom);
+        } else if ("archived".equals(bom.getStatus())) {
+            throw validation("已归档测试 BOM 不可修改");
+        }
+        bom.setVersionNo(dto.getVersionNo());
+        bom.setStatus("draft");
+        touch(bom);
+        bomRepository.updateById(bom);
+        List<ProductBomItem> existing = itemRepository.selectList(new LambdaQueryWrapper<ProductBomItem>()
+            .eq(ProductBomItem::getProductBomId, bom.getProductBomId()).eq(ProductBomItem::getDeletedFlag, 0));
+        if (existing != null) {
+            existing.forEach(item -> {
+                item.setDeletedFlag(1);
+                touch(item);
+                itemRepository.updateById(item);
+            });
+        }
+        int index = 0;
+        for (ProductBomItemDTO itemDTO : dto.getItems()) {
+            ProductBomItem item = toTestItem(bom, itemDTO, ++index, now);
+            itemRepository.insert(item);
+        }
+        return bom;
+    }
+
+    @Transactional
+    public ProductBom confirmTestBom(Long productId) {
+        ProductBom bom = findTestBom(productId);
+        if (bom == null) {
+            throw new BusinessException(ErrorCodeConstants.RESOURCE_NOT_FOUND, "测试 BOM 不存在");
+        }
+        List<ProductBomItem> items = itemRepository.selectList(new LambdaQueryWrapper<ProductBomItem>()
+            .eq(ProductBomItem::getProductBomId, bom.getProductBomId()).eq(ProductBomItem::getDeletedFlag, 0));
+        if (items == null || items.isEmpty()) {
+            throw validation("测试 BOM 至少需要一条明细");
+        }
+        BomCostCalculator.Result cost = costCalculator.calculate(items, null, null, null, null, null);
+        bom.setTestTotalCost(cost.totalCost());
+        bom.setCalculatedAt(LocalDateTime.now());
+        bom.setConfirmedAt(bom.getCalculatedAt());
+        bom.setConfirmedBy("system");
+        bom.setStatus("confirmed");
+        touch(bom);
+        bomRepository.updateById(bom);
+        return bom;
+    }
 
     @Transactional
     public void saveRoutes(Long bomId, List<BomRouteSaveDTO> routes) {
@@ -200,6 +264,21 @@ public class ProductBomWorkflowService {
         item.setCurrencyCode(bom.getCurrencyCode() == null ? "CNY" : bom.getCurrencyCode());
         fillCreate(item, now);
         return item;
+    }
+
+    private ProductBomItem toTestItem(ProductBom bom, ProductBomItemDTO dto, int fallbackLineNo, LocalDateTime now) {
+        ProductBomRoute placeholder = new ProductBomRoute();
+        placeholder.setProductBomRouteId(null);
+        ProductBomItem item = toItem(bom, placeholder, dto, now);
+        item.setProductBomRouteId(null);
+        if (item.getLineNo() == null) item.setLineNo(fallbackLineNo);
+        return item;
+    }
+
+    private ProductBom findTestBom(Long productId) {
+        return bomRepository.selectOne(new LambdaQueryWrapper<ProductBom>()
+            .eq(ProductBom::getProductId, productId).eq(ProductBom::getBomScope, "test")
+            .eq(ProductBom::getDeletedFlag, 0).orderByDesc(ProductBom::getProductBomId).last("limit 1"));
     }
 
     private ProductBomCostSnapshot snapshot(ProductBom bom, ProductBomRoute route, BomCostCalculator.Result value) {

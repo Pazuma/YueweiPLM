@@ -36,6 +36,21 @@ public class BomInheritanceService {
 
     @Transactional
     public ProductBom inherit(Long sourceBomId, Long targetProductId, List<String> selectedColors) {
+        return inherit(sourceBomId, targetProductId, selectedColors, null);
+    }
+
+    @Transactional
+    public ProductBom copyVersion(Long sourceBomId, String versionNo, List<String> selectedColors) {
+        ProductBom source = bomRepository.selectById(sourceBomId);
+        if (source == null) {
+            throw new BusinessException(ErrorCodeConstants.RESOURCE_NOT_FOUND, "来源 BOM 不存在");
+        }
+        return inherit(sourceBomId, source.getProductId(), selectedColors, versionNo);
+    }
+
+    private ProductBom inherit(
+        Long sourceBomId, Long targetProductId, List<String> selectedColors, String targetVersionNo
+    ) {
         ProductBom source = bomRepository.selectById(sourceBomId);
         if (source == null || !"released".equals(source.getStatus())) {
             throw new BusinessException(ErrorCodeConstants.VALIDATION_ERROR, "只能继承已发布正式 BOM");
@@ -49,7 +64,7 @@ public class BomInheritanceService {
             throw new BusinessException(ErrorCodeConstants.VALIDATION_ERROR, "至少选择一个生产颜色");
         }
         LocalDateTime now = LocalDateTime.now();
-        ProductBom targetBom = copyBom(source, targetProductId, now);
+        ProductBom targetBom = copyBom(source, targetProductId, targetVersionNo, now);
         bomRepository.insert(targetBom);
 
         List<ProductBomRoute> sourceRoutes = routeRepository.selectList(new LambdaQueryWrapper<ProductBomRoute>()
@@ -93,7 +108,7 @@ public class BomInheritanceService {
         return values == null ? List.of() : values;
     }
 
-    private ProductBom copyBom(ProductBom source, Long targetProductId, LocalDateTime now) {
+    private ProductBom copyBom(ProductBom source, Long targetProductId, String targetVersionNo, LocalDateTime now) {
         ProductBom target = new ProductBom();
         target.setProductId(targetProductId);
         target.setBomCode("BOM-" + targetProductId + "-" + System.currentTimeMillis());
@@ -103,7 +118,7 @@ public class BomInheritanceService {
         target.setSourceType("inherited");
         target.setSourceProductId(source.getProductId());
         target.setSourceProductBomId(source.getProductBomId());
-        target.setVersionNo(source.getVersionNo());
+        target.setVersionNo(targetVersionNo == null ? source.getVersionNo() : targetVersionNo);
         target.setStatus("draft");
         target.setFrozenFlag(0);
         target.setCurrencyCode(source.getCurrencyCode() == null ? "CNY" : source.getCurrencyCode());
