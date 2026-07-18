@@ -1,0 +1,19 @@
+package com.yuewei.plm.module.bom.vo;
+
+import java.util.List;
+import lombok.Builder;
+import lombok.Data;
+
+@Data
+@Builder
+public class ProductBomRouteVO {
+    private Long productBomRouteId;
+    private Long productBomId;
+    private Long processId;
+    private String routeCode;
+    private String routeName;
+    private String status;
+    private List<String> colors;
+    private List<ProductBomItemVO> items;
+    private ProductBomCostSnapshotVO costSnapshot;
+}

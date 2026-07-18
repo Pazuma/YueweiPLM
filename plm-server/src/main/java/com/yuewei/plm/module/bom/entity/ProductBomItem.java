@@ -17,6 +17,7 @@ public class ProductBomItem extends BaseEntity {
     @TableId(value = "product_bom_item_id", type = IdType.AUTO)
     private Long productBomItemId;
     private Long productBomId;
+    private Long productBomRouteId;
     private Long productId;
     private Long inventoryId;
     private String itemCode;
@@ -27,6 +28,8 @@ public class ProductBomItem extends BaseEntity {
     @TableField("uom_code")
     private String unit;
     private BigDecimal lossRate;
+    private BigDecimal unitCostSnapshot;
+    private String currencyCode;
     private Integer substituteFlag;
     private String remark;
     private String versionNo;

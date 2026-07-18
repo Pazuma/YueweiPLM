@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.yuewei.plm.repository.entity.BaseEntity;
 import java.time.LocalDateTime;
+import java.math.BigDecimal;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
@@ -21,7 +22,19 @@ public class ProductBom extends BaseEntity {
     private String bomType;
     private String versionNo;
     private String status;
+    private String bomScope;
+    private String sourceType;
+    private Long sourceProductId;
+    private Long sourceProductBomId;
+    private BigDecimal testTotalCost;
+    private String currencyCode;
+    private LocalDateTime calculatedAt;
+    private LocalDateTime confirmedAt;
+    private String confirmedBy;
+    private Integer frozenFlag;
     private LocalDateTime frozenAt;
     private String frozenBy;
+    private LocalDateTime releasedAt;
+    private String releasedBy;
     private String remark;
 }
