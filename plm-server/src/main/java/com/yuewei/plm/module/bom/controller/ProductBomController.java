@@ -10,6 +10,7 @@ import com.yuewei.plm.module.bom.dto.TestBomSaveDTO;
 import com.yuewei.plm.module.bom.dto.ProductBomItemDTO;
 import com.yuewei.plm.module.bom.dto.ProductBomUpdateDTO;
 import com.yuewei.plm.module.bom.service.ProductBomService;
+import com.yuewei.plm.module.bom.service.impl.HistoricalBomImportService;
 import com.yuewei.plm.module.bom.service.BomImportService;
 import com.yuewei.plm.module.bom.service.BomInheritanceService;
 import com.yuewei.plm.module.bom.service.ProductBomWorkflowService;
@@ -48,6 +49,7 @@ public class ProductBomController {
     private final ProductBomWorkflowService workflowService;
     private final BomInheritanceService inheritanceService;
     private final BomImportService importService;
+    private final HistoricalBomImportService historicalImportService;
 
     @GetMapping("/projects/{projectId}/boms")
     public ResponseVO<List<ProductBomVO>> listByProject(@PathVariable Long projectId, HttpServletRequest request) {
@@ -187,6 +189,25 @@ public class ProductBomController {
     @GetMapping("/boms/import/{importToken}/errors")
     public ResponseEntity<byte[]> downloadErrors(@PathVariable String importToken) {
         return xlsx("BOM-import-errors.xlsx", importService.buildErrorReport(importService.getErrors(importToken)));
+    }
+
+    @PostMapping(value = "/boms/history/import/preview", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseVO<BomImportPreviewVO> previewHistoricalImport(@RequestParam("file") MultipartFile file,
+        HttpServletRequest request) throws java.io.IOException {
+        return ResponseVO.success(historicalImportService.preview(file.getOriginalFilename(), file.getBytes()),
+            RequestIdUtil.getRequestId(request), OffsetDateTime.now());
+    }
+
+    @PostMapping("/boms/history/import/{importToken}/commit")
+    public ResponseVO<ProductBomImportBatch> commitHistoricalImport(@PathVariable String importToken,
+        HttpServletRequest request) {
+        return ResponseVO.success(historicalImportService.commit(importToken),
+            RequestIdUtil.getRequestId(request), OffsetDateTime.now());
+    }
+
+    @GetMapping("/boms/history/import/template")
+    public ResponseEntity<byte[]> downloadHistoricalTemplate() {
+        return xlsx("historical-BOM-import-template.xlsx", historicalImportService.buildTemplate());
     }
 
     private ResponseEntity<byte[]> xlsx(String fileName, byte[] content) {

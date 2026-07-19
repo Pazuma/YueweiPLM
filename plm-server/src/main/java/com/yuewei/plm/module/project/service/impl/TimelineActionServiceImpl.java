@@ -1,10 +1,15 @@
 package com.yuewei.plm.module.project.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.yuewei.plm.common.constant.ErrorCodeConstants;
 import com.yuewei.plm.common.constant.ProductStatusConstants;
 import com.yuewei.plm.common.exception.BusinessException;
 import com.yuewei.plm.common.security.CurrentUser;
 import com.yuewei.plm.common.security.CurrentUserContext;
+import com.yuewei.plm.module.attachment.constant.AttachmentOwnerTypeConstants;
+import com.yuewei.plm.module.attachment.entity.Attachment;
+import com.yuewei.plm.module.attachment.repository.AttachmentRepository;
+import com.yuewei.plm.module.bom.service.ProductionConfirmationService;
 import com.yuewei.plm.module.operationlog.constant.OperationActionConstants;
 import com.yuewei.plm.module.operationlog.service.OperationLogCreateCommand;
 import com.yuewei.plm.module.operationlog.service.OperationLogService;
@@ -18,6 +23,8 @@ import com.yuewei.plm.repository.entity.Product;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,8 +39,10 @@ public class TimelineActionServiceImpl implements TimelineActionService {
     private static final String ACTION_RETURN = "return";
 
     private final ProductRepository productRepository;
+    private final AttachmentRepository attachmentRepository;
     private final TimelineDefinitionProvider timelineDefinitionProvider;
     private final OperationLogService operationLogService;
+    private final ProductionConfirmationService productionConfirmationService;
 
     @Override
     @Transactional
@@ -42,19 +51,51 @@ public class TimelineActionServiceImpl implements TimelineActionService {
         TimelineContext context = requireCurrentNode(product, nodeKey);
         CurrentUser currentUser = requireCurrentUser();
         String remark = dto == null ? null : dto.getRemark();
+        boolean hasNextStep = context.currentStepNo() < context.definitions().size();
+        TimelineNodeDefinition nextNode = hasNextStep
+            ? context.definitions().get(context.currentStepNo())
+            : context.current();
+        boolean crossingStage = hasNextStep && !context.current().stageCode().equals(nextNode.stageCode());
+
+        requireBusinessGate(projectId, nodeKey);
+
+        if (crossingStage) {
+            requireStageDocuments(product, context.current());
+        }
 
         applyTimelineAudit(product, currentUser, ACTION_CONFIRM, remark);
-        product.setTimelineCurrentConfirmed(true);
-        product.setTimelineConfirmedNodeKey(nodeKey);
+        if (hasNextStep) {
+            product.setCurrentStepNo(nextNode.stepNo());
+            product.setTimelineCurrentConfirmed(false);
+            product.setTimelineConfirmedNodeKey(null);
+            product.setStatus(resolveProductStatus(nextNode.stepNo(), context.definitions().size()));
+        } else {
+            product.setCurrentStepNo(context.currentStepNo());
+            product.setTimelineCurrentConfirmed(true);
+            product.setTimelineConfirmedNodeKey(nodeKey);
+            product.setStatus(resolveProductStatus(context.currentStepNo(), context.definitions().size()));
+        }
         productRepository.updateById(product);
 
         Long logId = writeLog(
             product,
             OperationActionConstants.TIMELINE_CONFIRM,
-            detailJsonForConfirm(product, context.current(), remark),
+            detailJsonForConfirmStep(product, context.current(), nextNode, hasNextStep, remark),
             request
         );
-        return buildResult(product, ACTION_CONFIRM, nodeKey, context.currentStepNo(), context.current(), true, logId);
+        return buildResult(product, ACTION_CONFIRM, nodeKey, context.currentStepNo(), nextNode, !hasNextStep, logId);
+    }
+
+    private void requireBusinessGate(Long projectId, String nodeKey) {
+        switch (nodeKey) {
+            case "PRODUCT_LINE_PROCESS_PLAN" -> productionConfirmationService.requireBomRoutesDetermined(projectId);
+            case "PRODUCT_LINE_PROCESS_CONFIRM" -> productionConfirmationService.requireOperationsConfirmed(projectId);
+            case "PRODUCT_LINE_PRODUCTION_DECISION_STEP", "MODEL_VARIANT_RELEASE" ->
+                productionConfirmationService.requireColorsConfirmed(projectId);
+            default -> {
+                // Other timeline nodes keep their existing document and status gates.
+            }
+        }
     }
 
     @Override
@@ -147,6 +188,35 @@ public class TimelineActionServiceImpl implements TimelineActionService {
         return Math.min(currentStepNo, maxStepNo);
     }
 
+    private void requireStageDocuments(Product product, TimelineNodeDefinition currentNode) {
+        List<TimelineNodeDefinition> requiredDefinitions = timelineDefinitionProvider.getRequiredDefinitionsForStage(
+            product.getProductType(),
+            currentNode.stageCode()
+        );
+        if (requiredDefinitions.isEmpty()) {
+            return;
+        }
+        Set<String> uploadedNodeKeys = attachmentRepository.selectList(new LambdaQueryWrapper<Attachment>()
+                .eq(Attachment::getOwnerObjectType, AttachmentOwnerTypeConstants.PRODUCT)
+                .eq(Attachment::getOwnerObjectId, product.getProductId())
+                .eq(Attachment::getDeletedFlag, 0))
+            .stream()
+            .map(Attachment::getTimelineNodeKey)
+            .filter(StringUtils::hasText)
+            .collect(Collectors.toSet());
+
+        List<String> missing = requiredDefinitions.stream()
+            .filter(definition -> !uploadedNodeKeys.contains(definition.nodeCode()))
+            .map(TimelineNodeDefinition::nodeCode)
+            .toList();
+        if (!missing.isEmpty()) {
+            throw new BusinessException(
+                ErrorCodeConstants.STATUS_TRANSITION_ILLEGAL,
+                "current stage documents are incomplete: " + String.join(",", missing)
+            );
+        }
+    }
+
     private CurrentUser requireCurrentUser() {
         return CurrentUserContext.get()
             .orElseThrow(() -> new BusinessException(ErrorCodeConstants.UNAUTHORIZED, "未登录或登录已失效"));
@@ -209,13 +279,22 @@ public class TimelineActionServiceImpl implements TimelineActionService {
             .build();
     }
 
-    private String detailJsonForConfirm(Product product, TimelineNodeDefinition node, String remark) {
+    private String detailJsonForConfirmStep(
+        Product product,
+        TimelineNodeDefinition fromNode,
+        TimelineNodeDefinition toNode,
+        boolean moved,
+        String remark
+    ) {
         return "{"
             + "\"projectId\":" + product.getProductId()
             + ",\"productId\":" + product.getProductId()
             + ",\"action\":\"confirm\""
-            + ",\"nodeKey\":\"" + json(node.nodeCode()) + "\""
-            + ",\"stepNo\":" + node.stepNo()
+            + ",\"fromNodeKey\":\"" + json(fromNode.nodeCode()) + "\""
+            + ",\"fromStepNo\":" + fromNode.stepNo()
+            + ",\"toNodeKey\":\"" + json(toNode.nodeCode()) + "\""
+            + ",\"toStepNo\":" + toNode.stepNo()
+            + ",\"moved\":" + moved
             + ",\"remark\":\"" + json(remark) + "\""
             + "}";
     }

@@ -35,6 +35,31 @@ public class BomInheritanceService {
     private final ProductBomCostSnapshotRepository costRepository;
 
     @Transactional
+    public ProductBom inheritLatestReleasedAllColors(Long sourceProductId, Long targetProductId) {
+        List<ProductBom> sources = bomRepository.selectList(new LambdaQueryWrapper<ProductBom>()
+            .eq(ProductBom::getProductId, sourceProductId)
+            .eq(ProductBom::getBomScope, "formal")
+            .eq(ProductBom::getStatus, "released")
+            .eq(ProductBom::getDeletedFlag, 0)
+            .orderByDesc(ProductBom::getUpdatedAt));
+        if (sources == null || sources.isEmpty()) {
+            throw new BusinessException(ErrorCodeConstants.VALIDATION_ERROR, "父产品没有已发布正式 BOM，不能创建新型号项目");
+        }
+        ProductBom source = sources.get(0);
+        List<ProductBomRoute> routes = routeRepository.selectList(new LambdaQueryWrapper<ProductBomRoute>()
+            .eq(ProductBomRoute::getProductBomId, source.getProductBomId())
+            .eq(ProductBomRoute::getStatus, "active")
+            .eq(ProductBomRoute::getDeletedFlag, 0));
+        Set<String> colors = new HashSet<>();
+        if (routes != null) routes.forEach(route -> activeColors(route.getProductBomRouteId())
+            .forEach(color -> colors.add(color.getColorName())));
+        if (colors.isEmpty()) {
+            throw new BusinessException(ErrorCodeConstants.VALIDATION_ERROR, "父产品正式 BOM 没有有效颜色，不能创建新型号项目");
+        }
+        return inherit(source.getProductBomId(), targetProductId, List.copyOf(colors));
+    }
+
+    @Transactional
     public ProductBom inherit(Long sourceBomId, Long targetProductId, List<String> selectedColors) {
         return inherit(sourceBomId, targetProductId, selectedColors, null);
     }

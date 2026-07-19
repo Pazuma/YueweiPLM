@@ -205,7 +205,8 @@ class ProductServiceLifecycleTest {
             mock(ProductCodeGenerator.class),
             operationLogService,
             new JacksonConfig().objectMapper(),
-            releaseGateValidator
+            releaseGateValidator,
+            mock(com.yuewei.plm.module.bom.service.BomInheritanceService.class)
         );
     }
 

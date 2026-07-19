@@ -18,7 +18,7 @@ export function getBomCenterSnapshot(): Promise<BomCenterSnapshot> {
 
 /* ========== 项目级 BOM（文档 7.4） ========== */
 
-export type ProductBomStatus = 'draft' | 'frozen'
+export type ProductBomStatus = 'draft' | 'reviewing' | 'released' | 'archived' | 'frozen'
 
 export interface ProductBomItemVO {
   productBomItemId: number
@@ -205,4 +205,40 @@ export async function downloadBomImportTemplate(): Promise<Blob> {
 export async function downloadBomImportErrors(importToken: string): Promise<Blob> {
   const response = await request.get(`/boms/import/${importToken}/errors`, { responseType: 'blob' })
   return response.data
+}
+
+export interface ProductionConfirmation {
+  productId: number
+  selectedOperationCount: number
+  selectedColorCount: number
+  createdSkuCount: number
+  operationProcessIds: number[]
+  colors: string[]
+}
+
+export async function previewHistoricalBomImport(file: File): Promise<BomImportPreview> {
+  const form = new FormData()
+  form.append('file', file)
+  return unwrapResponse<BomImportPreview>(await request.post('/boms/history/import/preview', form))
+}
+
+export async function commitHistoricalBomImport(importToken: string) {
+  return unwrapResponse(await request.post(`/boms/history/import/${importToken}/commit`))
+}
+
+export async function downloadHistoricalBomTemplate(): Promise<Blob> {
+  const response = await request.get('/boms/history/import/template', { responseType: 'blob' })
+  return response.data
+}
+
+export async function getProductionConfirmation(projectId: number): Promise<ProductionConfirmation> {
+  return unwrapResponse<ProductionConfirmation>(await request.get(`/projects/${projectId}/production-confirmation`))
+}
+
+export async function confirmProductionOperations(projectId: number, payload: { productBomRouteId: number; operationProcessIds: number[] }) {
+  return unwrapResponse<ProductionConfirmation>(await request.post(`/projects/${projectId}/production-operations/confirm`, payload))
+}
+
+export async function confirmProductionColors(projectId: number, payload: { colors: Array<{ colorName: string; productBomId: number; productBomRouteId: number }> }) {
+  return unwrapResponse<ProductionConfirmation>(await request.post(`/projects/${projectId}/production-colors/confirm`, payload))
 }

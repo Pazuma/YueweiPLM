@@ -6,6 +6,9 @@ import lombok.Data;
 
 @Data
 public class BomImportRowVO {
+    private Long productId;
+    private String productCode;
+    private String versionNo;
     private Integer lineNo;
     private Long processId;
     private String routeCode;

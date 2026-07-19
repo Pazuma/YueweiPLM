@@ -19,6 +19,7 @@ import com.yuewei.plm.controller.dto.ProductUpdateDTO;
 import com.yuewei.plm.module.operationlog.constant.OperationActionConstants;
 import com.yuewei.plm.module.operationlog.service.OperationLogCreateCommand;
 import com.yuewei.plm.module.operationlog.service.OperationLogService;
+import com.yuewei.plm.module.bom.service.BomInheritanceService;
 import com.yuewei.plm.repository.ProductRepository;
 import com.yuewei.plm.repository.entity.Product;
 import com.yuewei.plm.service.ProductReleaseGateValidator;
@@ -43,6 +44,7 @@ public class ProductServiceImpl implements ProductService {
     private final OperationLogService operationLogService;
     private final ObjectMapper objectMapper;
     private final ProductReleaseGateValidator productReleaseGateValidator;
+    private final BomInheritanceService bomInheritanceService;
 
     @Override
     public PageVO<ProductVO> page(ProductQueryDTO queryDTO) {
@@ -105,6 +107,9 @@ public class ProductServiceImpl implements ProductService {
         product.setDeletedFlag(0);
 
         productRepository.insert(product);
+        if ("model_variant".equals(product.getProductType())) {
+            bomInheritanceService.inheritLatestReleasedAllColors(product.getParentProductId(), product.getProductId());
+        }
         return ProductCreateResultVO.builder()
             .productId(product.getProductId())
             .productCode(product.getProductCode())

@@ -10,6 +10,8 @@ import com.yuewei.plm.common.security.CurrentUser;
 import com.yuewei.plm.common.security.CurrentUserContext;
 import com.yuewei.plm.common.util.ProductCodeGenerator;
 import com.yuewei.plm.module.operationlog.constant.OperationActionConstants;
+import com.yuewei.plm.module.bom.service.BomInheritanceService;
+import com.yuewei.plm.controller.dto.ProductCreateDTO;
 import com.yuewei.plm.module.operationlog.service.OperationLogCreateCommand;
 import com.yuewei.plm.module.operationlog.service.OperationLogService;
 import com.yuewei.plm.repository.ProductRepository;
@@ -37,7 +39,8 @@ class ProductServiceImplTest {
             productCodeGenerator,
             operationLogService,
             new JacksonConfig().objectMapper(),
-            mock(ProductReleaseGateValidator.class)
+            mock(ProductReleaseGateValidator.class),
+            mock(BomInheritanceService.class)
         );
         Product product = new Product();
         product.setProductId(100L);
@@ -81,7 +84,8 @@ class ProductServiceImplTest {
             productCodeGenerator,
             operationLogService,
             new JacksonConfig().objectMapper(),
-            mock(ProductReleaseGateValidator.class)
+            mock(ProductReleaseGateValidator.class),
+            mock(BomInheritanceService.class)
         );
         Product product = new Product();
         product.setProductId(101L);
@@ -96,5 +100,33 @@ class ProductServiceImplTest {
         var vo = service.getById(101L);
 
         assertThat(vo.getCurrentStepNo()).isEqualTo(3);
+    }
+
+    @Test
+    void creatingModelVariantAutomaticallyInheritsLatestReleasedBom() {
+        ProductRepository repository = mock(ProductRepository.class);
+        BomInheritanceService inheritance = mock(BomInheritanceService.class);
+        ProductCodeGenerator generator = mock(ProductCodeGenerator.class);
+        when(generator.generate("亮甲")).thenReturn("PRD-LJ-IP18");
+        Product parent = new Product();
+        parent.setProductId(5L);
+        parent.setProductType("product_line");
+        parent.setStatus("released");
+        parent.setDeletedFlag(0);
+        when(repository.selectById(5L)).thenReturn(parent);
+        org.mockito.Mockito.doAnswer(invocation -> {
+            Product created = invocation.getArgument(0);
+            created.setProductId(20L);
+            return 1;
+        }).when(repository).insert(org.mockito.ArgumentMatchers.any(Product.class));
+        ProductServiceImpl service = new ProductServiceImpl(repository, generator, mock(OperationLogService.class),
+            new JacksonConfig().objectMapper(), mock(ProductReleaseGateValidator.class), inheritance);
+        ProductCreateDTO dto = new ProductCreateDTO();
+        dto.setParentProductId(5L); dto.setProductName("亮甲"); dto.setProductType("model_variant");
+        dto.setModel("iPhone 18"); dto.setVersionNo("V1"); dto.setCreatedBy("engineer");
+
+        service.create(dto);
+
+        verify(inheritance).inheritLatestReleasedAllColors(5L, 20L);
     }
 }

@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ArrowRight, Refresh, Search } from '@element-plus/icons-vue'
+import { ArrowRight, Refresh, Search, Upload } from '@element-plus/icons-vue'
 import { computed, onMounted, ref } from 'vue'
 
 import { getBomLedger, getBomSkus, getBomWorkbench } from '@/api/modules/bom'
 import type { BomLedgerRow, BomSkuRow, BomWorkbench } from '@/types/bom'
+import HistoricalBomImportDialog from './components/HistoricalBomImportDialog.vue'
 
 const loading = ref(false)
 const error = ref('')
@@ -17,6 +18,7 @@ const skuVisible = ref(false)
 const skus = ref<BomSkuRow[]>([])
 const skuPage = ref(1)
 const skuPageSize = 8
+const historicalImportVisible = ref(false)
 
 const filteredRows = computed(() => {
   const value = keyword.value.trim().toLowerCase()
@@ -59,7 +61,7 @@ onMounted(load)
   <main class="bom-ledger" v-loading="loading">
     <header class="page-head">
       <div><h2>BOM 管理</h2><p>查询已进入正式台账的产品与型号 BOM。</p></div>
-      <el-button :icon="Refresh" circle title="刷新" @click="load" />
+      <div class="page-actions"><el-button data-test="historical-bom-import" type="primary" :icon="Upload" @click="historicalImportVisible = true">批量导入历史 BOM</el-button><el-button :icon="Refresh" circle title="刷新" @click="load" /></div>
     </header>
 
     <div class="filter-bar">
@@ -100,12 +102,13 @@ onMounted(load)
       <table class="inner-table"><thead><tr><th>SKU 编码</th><th>产品</th><th>手机型号</th><th>颜色</th><th>状态</th><th>路线</th></tr></thead><tbody><tr v-for="sku in pagedSkus" :key="sku.productId"><td><code>{{ sku.skuCode }}</code></td><td>{{ sku.productName }}</td><td>{{ sku.phoneModel }}</td><td>{{ sku.color }}</td><td>{{ sku.status }}</td><td>{{ sku.routeCode || '暂无适用路线' }}</td></tr></tbody></table>
       <el-pagination v-if="skus.length > skuPageSize" v-model:current-page="skuPage" :page-size="skuPageSize" :total="skus.length" layout="prev, pager, next" />
     </el-dialog>
+    <HistoricalBomImportDialog v-model="historicalImportVisible" @committed="load" />
   </main>
 </template>
 
 <style scoped>
 .bom-ledger { padding: 20px; min-width: 0; }
-.page-head, .filter-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.page-head, .filter-bar, .page-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .page-head h2, .page-head p { margin: 0; }.page-head p, small, .filter-bar span { color: var(--plm-color-text-secondary); font-size: 12px; }
 .filter-bar { margin: 16px 0 10px; }.filter-bar :deep(.el-input) { max-width: 420px; }
 .table-shell { overflow-x: auto; border: 1px solid var(--el-border-color-lighter); border-radius: 6px; }

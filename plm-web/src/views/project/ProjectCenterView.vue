@@ -6,7 +6,6 @@ import { useRoute, useRouter } from 'vue-router'
 
 import { getProductPresentation } from '@/api/modules/foundation'
 import {
-  advanceTimelineNode,
   confirmTimelineNode,
   getProjects,
   getProjectTimeline,
@@ -18,12 +17,15 @@ import PageContainer from '@/components/PageContainer/index.vue'
 import StatusTag from '@/components/StatusTag/index.vue'
 import ProjectBomPanel from './components/ProjectBomPanel.vue'
 import ProjectProcessRoutePanel from './components/ProjectProcessRoutePanel.vue'
+import ProjectReleaseGatePanel from './components/ProjectReleaseGatePanel.vue'
+import ProductionConfirmationDialog from './components/ProductionConfirmationDialog.vue'
 import TimelineAttachmentPanel from './components/TimelineAttachmentPanel.vue'
 import type { CommonStatus } from '@/types/common'
 import type { BomCompareRow, ProductBomItemRow, ProductDetailPresentation, ProductTimelineNode, ProductionDocumentPreviewFile, SkuProcessRouteRow } from '@/types/foundation'
 import type { ProductSummary } from '@/types/product'
 import { formatAmount, formatDate } from '@/utils/format'
 import { toArchivedProductRoute } from '@/utils/projectRoute'
+import { findCurrentTimelineStep, mapTimelineStages, mapTimelineSteps, type TimelineStageView } from '@/utils/timelineAdapter'
 
 type ProjectTab = 'all_projects' | 'in_progress' | 'archived' | 'abandoned'
 type ProjectQuickTag = 'all_projects' | 'in_progress' | 'archived_product' | 'archived_sku' | 'abandoned'
@@ -48,19 +50,9 @@ type ProcessDetailFilter = 'all' | 'key' | 'changed'
 type ProductProcessDetailTag = 'key' | 'changed' | 'outsourced'
 type TimelinePresentationNode = ProductTimelineNode & { confirmed?: boolean }
 
-interface AbandonedProject {
-  productId: number
-  productCode: string
-  productName: string
-  ownerUserName: string
-  currentStage: string
-  abandonReason: string
-  abandonedAt: string
-  reusableAssets: string
-}
-
 interface ProjectTimelineNode {
   nodeKey: string
+  stageCode?: string
   title: string
   phase: string
   gate?: boolean
@@ -78,6 +70,8 @@ interface ProductFlowStageNode {
   nodeName: string
   status: ProductFlowStageStatus
   actionLabel?: string
+  documentCount?: number
+  visualStatus?: string
 }
 
 interface ProductFlowStage {
@@ -164,6 +158,13 @@ const importVisible = ref(false)
 const importType = ref<'product' | 'sku'>('product')
 
 const detailVisible = ref(false)
+const productionConfirmationVisible = ref(false)
+const productionConfirmationMode = ref<'operations' | 'colors'>('operations')
+
+function openProductionConfirmation(mode: 'operations' | 'colors') {
+  productionConfirmationMode.value = mode
+  productionConfirmationVisible.value = true
+}
 const detailTarget = ref<ProductSummary | null>(null)
 const detailLoading = ref(false)
 const detailPresentation = ref<ProductDetailPresentation | null>(null)
@@ -174,6 +175,7 @@ const timelineLastAction = ref<string | null>(null)
 const timelineLastReason = ref<string | null>(null)
 const timelineLastOperatedAt = ref<string | null>(null)
 const timelineLastOperatorUserName = ref<string | null>(null)
+const timelineFlowStages = ref<ProductFlowStage[] | null>(null)
 const activeDetailSection = ref<DetailSectionKey>('basic')
 const activeProductFlowStageKey = ref('')
 const activeSkuFlowStageKey = ref('')
@@ -241,28 +243,20 @@ const modelVariantTimeline: ProjectTimelineDefinition[] = [
   { nodeKey: 'freeze-release', title: '冻结发布', phase: '投产发布阶段', gate: true, hint: '作为父产品线下子版本发布。', childStepNos: [15, 16], childNodes: ['版本冻结', '正式发布'] }
 ]
 
-const abandonedProjects = ref<AbandonedProject[]>([
-  {
-    productId: 901,
-    productCode: 'PRD-SC29-ABN-001',
-    productName: '超星 2.9 iPhone17 联名款',
-    ownerUserName: '张敏',
-    currentStage: '样品验证',
-    abandonReason: '市场需求撤回，联名渠道取消。',
-    abandonedAt: '2026-05-18',
-    reusableAssets: '外观图纸、包装结构和 TPU 材料验证记录可复用。'
-  },
-  {
-    productId: 902,
-    productCode: 'PRD-LJ29-ABN-003',
-    productName: '亮甲 2.9 镜面片试验版',
-    ownerUserName: '刘浩',
-    currentStage: '工艺验证',
-    abandonReason: '镜面片良率不稳定，工艺成本过高。',
-    abandonedAt: '2026-05-26',
-    reusableAssets: '测试项模板、镜面片样品记录和供应商对比可复用。'
-  }
-])
+const timelineStageCodeByKey: Record<string, string> = {
+  initiation: 'PRODUCT_LINE_INIT_CONFIRM',
+  design: 'PRODUCT_LINE_DESIGN_CONFIRM',
+  tooling: 'PRODUCT_LINE_MOLD_TRIAL',
+  'sampling-process': 'PRODUCT_LINE_SAMPLE_PROCESS',
+  'pilot-mx': 'PRODUCT_LINE_SMALL_BATCH_MX',
+  launch: 'PRODUCT_LINE_PRODUCTION_DECISION',
+  'ext-confirm': 'MODEL_VARIANT_EXTENSION_CONFIRM',
+  'diff-design': 'MODEL_VARIANT_DIFF_DESIGN',
+  'mold-branch': 'MODEL_VARIANT_MOLD_JUDGEMENT',
+  'diff-verify': 'MODEL_VARIANT_DIFF_VERIFY',
+  'variant-pilot': 'MODEL_VARIANT_SMALL_BATCH_MX',
+  'freeze-release': 'MODEL_VARIANT_FREEZE_RELEASE'
+}
 
 const archiveView = computed<ArchiveView>(() => {
   const value = String(route.query.archiveView || 'overview')
@@ -285,6 +279,10 @@ const filteredRows = computed(() => {
       .some((value) => String(value).toLowerCase().includes(search))
   )
 })
+
+function isAbandonedProject(item: ProductSummary) {
+  return item.lockStatus === 'abandoned' || Boolean(item.abandonedAt)
+}
 
 const runningProjects = computed(() =>
   filteredRows.value.filter((item) => ['developing', 'reviewing', 'pending'].includes(item.status))
@@ -310,12 +308,13 @@ const timelineProjects = computed(() => {
 })
 
 const archivedProjects = computed(() =>
-  rows.value.filter((item) => ['released', 'archived'].includes(item.status) && item.completionRate >= 1)
+  rows.value.filter((item) => !isAbandonedProject(item) && ['released', 'archived'].includes(item.status) && item.completionRate >= 1)
 )
 const archivedProductRows = computed(() => archivedProjects.value.filter((item) => item.productType === 'product_line'))
 const archivedSkuRows = computed(() =>
   archivedProjects.value.filter((item) => item.productType === 'model_variant' || Boolean(item.parentProductId))
 )
+const abandonedProjectRows = computed(() => filteredRows.value.filter(isAbandonedProject))
 
 const archiveSummary = computed(() => ({
   total: archivedProjects.value.length,
@@ -323,13 +322,15 @@ const archiveSummary = computed(() => ({
   skus: archivedSkuRows.value.length
 }))
 
-const allProjectRows = computed<AllProjectRow[]>(() => [
-  ...rows.value.map((item) => ({
+const allProjectRows = computed<AllProjectRow[]>(() =>
+  rows.value.map((item) => ({
     productId: item.productId,
     productCode: item.productCode,
     productName: item.productName,
     projectType: item.productType === 'product_line' ? '产品' : 'SKU',
-    projectTag: ['released', 'archived'].includes(item.status)
+    projectTag: isAbandonedProject(item)
+      ? '已放弃'
+      : ['released', 'archived'].includes(item.status)
       ? item.productType === 'product_line'
         ? '已归档（产品）'
         : '已归档（SKU）'
@@ -337,23 +338,12 @@ const allProjectRows = computed<AllProjectRow[]>(() => [
     currentStage: item.currentStage,
     ownerUserName: item.ownerUserName,
     versionNo: item.versionNo,
-    updatedAt: item.releasedAt || '',
+    updatedAt: item.abandonedAt || item.releasedAt || '',
     sourceStatus: item.status,
+    abandoned: isAbandonedProject(item),
     source: item
-  })),
-  ...abandonedProjects.value.map((item) => ({
-    productId: item.productId,
-    productCode: item.productCode,
-    productName: item.productName,
-    projectType: '项目',
-    projectTag: '已放弃',
-    currentStage: item.currentStage,
-    ownerUserName: item.ownerUserName,
-    versionNo: '--',
-    updatedAt: item.abandonedAt,
-    abandoned: true
   }))
-])
+)
 
 const skuProductCards = computed(() =>
   archivedSkuRows.value.reduce<ProductSummary[]>((acc, item) => {
@@ -387,7 +377,7 @@ const currentModuleCount = computed(() => {
   if (projectQuickTag.value === 'in_progress') return runningProjects.value.length
   if (projectQuickTag.value === 'archived_product') return archivedProductRows.value.length
   if (projectQuickTag.value === 'archived_sku') return archivedSkuRows.value.length
-  return abandonedProjects.value.length
+  return abandonedProjectRows.value.length
 })
 
 const currentModuleTitle = computed(() => {
@@ -399,7 +389,7 @@ const currentModuleDescription = computed(() => {
   if (projectQuickTag.value === 'in_progress') return '展示正在推进的新产品线和新型号线项目，可按关键节点查看当前环节。'
   if (projectQuickTag.value === 'archived_product') return '只展示已完成并已发布 / 已归档的新产品线产品，详情弹窗用于追溯最终版本资料和流程结果。'
   if (projectQuickTag.value === 'archived_sku') return '按产品卡片进入已归档 SKU 列表与详情，仍通过 Product 对象承载。'
-  return '已放弃项目永久保留，可查看放弃原因和可复用资产。'
+  return '已放弃项目永久保留，数据来自后端 Product 放弃状态。'
 })
 
 const detailBomItems = computed<ProductBomItemRow[]>(() => {
@@ -434,6 +424,8 @@ const canAdvanceCurrentTimelineNode = computed(() => {
 })
 
 function stageMatchesNode(stage: ProjectTimelineDefinition, node: ProductTimelineNode, stepNo: number) {
+  const expectedStageCode = stage.stageCode || timelineStageCodeByKey[stage.nodeKey]
+  if (expectedStageCode && node.stageCode) return node.stageCode === expectedStageCode
   const phaseMatched = node.phaseName ? node.phaseName === stage.phase : false
   const nameMatched = stage.childNodes.some((childName) => node.nodeName.includes(childName) || childName.includes(node.nodeName))
   const stepMatched = !node.phaseName && !nameMatched && stage.childStepNos.includes(stepNo)
@@ -501,6 +493,7 @@ function buildFlowStages(timelineNodes: ProductTimelineNode[], definitions: Proj
 }
 
 const productFlowStages = computed<ProductFlowStage[]>(() => {
+  if (timelineFlowStages.value?.length) return timelineFlowStages.value
   const timelineNodes = detailPresentation.value?.timeline || []
   return buildFlowStages(timelineNodes, newProductLineTimeline)
 })
@@ -515,6 +508,7 @@ const activeProductFlowStage = computed(() => {
 })
 
 const skuProjectFlowStages = computed<ProductFlowStage[]>(() => {
+  if (timelineFlowStages.value?.length) return timelineFlowStages.value
   const timelineNodes = detailPresentation.value?.timeline || []
   return buildFlowStages(timelineNodes, modelVariantTimeline)
 })
@@ -689,12 +683,13 @@ function openProjectOverview(row: ProductSummary | AllProjectRow) {
       productCode: row.productCode,
       productName: row.productName,
       projectType: row.productType === 'product_line' ? '产品' : 'SKU',
-      projectTag: ['released', 'archived'].includes(row.status) ? '已归档' : '进行中',
+      projectTag: isAbandonedProject(row) ? '已放弃' : ['released', 'archived'].includes(row.status) ? '已归档' : '进行中',
       currentStage: row.currentStage,
       ownerUserName: row.ownerUserName,
       versionNo: row.versionNo,
-      updatedAt: row.releasedAt || '',
+      updatedAt: row.abandonedAt || row.releasedAt || '',
       sourceStatus: row.status,
+      abandoned: isAbandonedProject(row),
       source: row
     }
   } else {
@@ -737,34 +732,71 @@ function getTimelineActionLabel(action?: string | null) {
 }
 
 function getErrorMessage(error: unknown) {
+  if (typeof error === 'object' && error && 'response' in error) {
+    const response = (error as { response?: { data?: { message?: string } } }).response
+    if (response?.data?.message) return response.data.message
+  }
   if (error instanceof Error) return error.message
   return '操作失败，请稍后重试'
 }
 
 function mapTimelineToPresentationNodes(timeline: TimelineDetailVO): TimelinePresentationNode[] {
-  return timeline.nodes.map((node) => ({
-    nodeKey: node.nodeKey,
-    nodeName: node.nodeName,
-    status: node.status,
-    ownerRole: node.ownerRole,
-    summary: node.summary,
-    nextAction: node.nextAction,
-    riskNote: node.riskNote,
-    gateLabel: node.gateLabel,
-    detailLines: node.detailLines,
-    receiverRole: node.receiverRole,
-    receiverUserName: node.receiverUserName,
-    receivedAt: node.receivedAt,
-    promoterRole: node.promoterRole,
-    promoterUserName: node.promoterUserName,
-    promotedAt: node.promotedAt,
-    experienceSummary: node.experienceSummary,
-    documentCount: node.documentCount,
-    phaseName: node.phaseName,
-    confirmed: node.confirmed,
-    canAdvance: node.status === 'current' && Boolean(node.confirmed),
-    canReject: node.status === 'current'
+  return mapTimelineSteps(timeline).map((step) => ({
+    nodeKey: step.nodeKey,
+    nodeName: step.stepName,
+    status: step.status,
+    ownerRole: step.source.ownerRole,
+    summary: step.source.summary,
+    nextAction: step.source.nextAction,
+    riskNote: step.source.riskNote,
+    gateLabel: step.source.gateLabel,
+    detailLines: step.source.detailLines,
+    receiverRole: step.source.receiverRole,
+    receiverUserName: step.source.receiverUserName,
+    receivedAt: step.source.receivedAt,
+    promoterRole: step.source.promoterRole,
+    promoterUserName: step.source.promoterUserName,
+    promotedAt: step.source.promotedAt,
+    experienceSummary: step.source.experienceSummary,
+    documentCount: step.documentCount,
+    phaseName: step.phaseName,
+    stageCode: step.stageCode,
+    stageName: step.stageName,
+    requiredFileCategory: step.requiredFileCategory,
+    confirmed: step.confirmed,
+    canAdvance: step.status === 'current' && step.confirmed,
+    canReject: step.status === 'current'
   }))
+}
+
+function mapTimelineStageToProductFlowStage(stage: TimelineStageView): ProductFlowStage {
+  const current = stage.steps.find((step) => step.isCurrent)
+    || stage.steps.find((step) => step.status === 'rejected')
+    || stage.steps[stage.steps.length - 1]
+  return {
+    stageKey: stage.stageCode,
+    stageName: stage.stageName,
+    phaseName: stage.phaseName,
+    status: stage.status,
+    summary: current?.source.experienceSummary || current?.source.summary || stage.stageName,
+    receiverRole: current?.source.receiverRole,
+    receiverUserName: current?.source.receiverUserName,
+    receivedAt: current?.source.receivedAt,
+    promoterRole: current?.source.promoterRole || current?.source.ownerRole,
+    promoterUserName: current?.source.promoterUserName,
+    promotedAt: current?.source.promotedAt,
+    nextAction: current?.source.nextAction || (stage.status === 'completed' ? '已完成' : '待推进'),
+    riskNote: current?.source.riskNote,
+    childNodes: stage.steps.map((step) => ({
+      stepNo: step.stepNo,
+      nodeKey: step.nodeKey,
+      nodeName: step.stepName,
+      status: step.status,
+      actionLabel: step.source.nextAction,
+      documentCount: step.documentCount,
+      visualStatus: step.visualStatus
+    }))
+  }
 }
 
 function applyTimelineMetadata(timeline: TimelineDetailVO) {
@@ -775,12 +807,36 @@ function applyTimelineMetadata(timeline: TimelineDetailVO) {
   timelineLastOperatorUserName.value = timeline.lastOperatorUserName || null
 }
 
+function buildPresentationFallback(row: ProductSummary): ProductDetailPresentation {
+  return {
+    productId: row.productId,
+    title: row.productName,
+    flowLabel: row.productType === 'model_variant' ? '新型号线' : '新产品线',
+    currentNode: row.currentStage || '--',
+    nextNode: row.nextAction || '--',
+    summary: `${row.productCode} / ${row.seriesName || '--'}`,
+    costPanel: { showEstimated: false, actualTotal: 0, actualLines: [] },
+    timeline: [],
+    bomCompareRows: [],
+    bomItems: [],
+    bomItemsByVersion: {},
+    toolingSummary: { totalCount: 0, availableCount: 0, trialCount: 0, toolingNames: [] },
+    materialCategories: [],
+    suppliers: [],
+    documents: [],
+    qualityRecords: [],
+    processRoutes: []
+  }
+}
+
 async function refreshProjectTimeline(projectId: number) {
   if (!detailPresentation.value) return
   const timeline = await getProjectTimeline(projectId)
   applyTimelineMetadata(timeline)
   const nodes = mapTimelineToPresentationNodes(timeline)
   const currentNode = nodes.find((node) => node.status === 'current')
+  const currentStep = findCurrentTimelineStep(timeline)
+  timelineFlowStages.value = mapTimelineStages(timeline).map(mapTimelineStageToProductFlowStage)
   detailPresentation.value = {
     ...detailPresentation.value,
     currentNode: currentNode?.nodeName || timeline.currentNode || detailPresentation.value.currentNode,
@@ -794,11 +850,19 @@ async function refreshProjectTimeline(projectId: number) {
       currentStepNo: timeline.currentStepNo
     }
   }
+  activeProductFlowStageKey.value = currentStep?.stageCode || timelineFlowStages.value[0]?.stageKey || activeProductFlowStageKey.value
+  activeSkuFlowStageKey.value = currentStep?.stageCode || timelineFlowStages.value[0]?.stageKey || activeSkuFlowStageKey.value
 }
 
 async function handleM4AttachmentChanged() {
   if (!detailTarget.value) return
   await refreshProjectTimeline(detailTarget.value.productId)
+}
+
+async function handleLifecycleChanged() {
+  if (!detailTarget.value) return
+  await refreshProjectTimeline(detailTarget.value.productId)
+  await loadData()
 }
 
 async function handleConfirmCurrentNode() {
@@ -833,8 +897,8 @@ async function handleAdvanceCurrentNode() {
       cancelButtonText: '取消',
       type: 'warning'
     })
-    timelineActionLoading.value = 'advance'
-    await advanceTimelineNode(detailTarget.value.productId, activeProductFlowNode.value.nodeKey)
+    timelineActionLoading.value = 'confirm'
+    await confirmTimelineNode(detailTarget.value.productId, activeProductFlowNode.value.nodeKey)
     await refreshProjectTimeline(detailTarget.value.productId)
     await loadData()
     ElMessage.success('已推进到下一节点')
@@ -884,7 +948,10 @@ async function openDetail(row: ProductSummary) {
   detailPresentation.value = null
   detailBomVersion.value = ''
   detailTarget.value = row
-  activeDetailSection.value = row.productType === 'product_line' ? 'current_node' : 'basic'
+  const routeSection = String(route.query.section || '')
+  activeDetailSection.value = activeDetailSections.value.some((section) => section.key === routeSection)
+    ? (routeSection as DetailSectionKey)
+    : row.productType === 'product_line' ? 'current_node' : 'basic'
   activeProductFlowStageKey.value = ''
   activeSkuFlowStageKey.value = ''
   processDetailFilter.value = 'all'
@@ -894,29 +961,39 @@ async function openDetail(row: ProductSummary) {
   timelineLastReason.value = null
   timelineLastOperatedAt.value = null
   timelineLastOperatorUserName.value = null
+  timelineFlowStages.value = null
   detailVisible.value = true
   detailLoading.value = true
   try {
-    const presentation = await getProductPresentation(row.productId)
+    let presentation = buildPresentationFallback(row)
     try {
-      const timeline = await getProjectTimeline(row.productId)
-      applyTimelineMetadata(timeline)
-      const nodes = mapTimelineToPresentationNodes(timeline)
-      const currentNode = nodes.find((node) => node.status === 'current')
-      detailPresentation.value = {
-        ...presentation,
-        currentNode: currentNode?.nodeName || timeline.currentNode || presentation.currentNode,
-        nextNode: currentNode?.nextAction || presentation.nextNode,
-        timeline: nodes.length ? nodes : presentation.timeline
-      }
+      presentation = await getProductPresentation(row.productId)
     } catch {
-      detailPresentation.value = presentation
+      presentation = buildPresentationFallback(row)
     }
+    detailPresentation.value = presentation
+    const timeline = await getProjectTimeline(row.productId)
+    applyTimelineMetadata(timeline)
+    const nodes = mapTimelineToPresentationNodes(timeline)
+    const currentNode = nodes.find((node) => node.status === 'current')
+    const currentStep = findCurrentTimelineStep(timeline)
+    timelineFlowStages.value = mapTimelineStages(timeline).map(mapTimelineStageToProductFlowStage)
+    detailPresentation.value = {
+      ...presentation,
+      currentNode: currentNode?.nodeName || timeline.currentNode || presentation.currentNode,
+      nextNode: currentNode?.nextAction || presentation.nextNode,
+      timeline: nodes.length ? nodes : presentation.timeline
+    }
+    activeProductFlowStageKey.value = currentStep?.stageCode || timelineFlowStages.value[0]?.stageKey || ''
+    activeSkuFlowStageKey.value = currentStep?.stageCode || timelineFlowStages.value[0]?.stageKey || ''
     detailBomVersion.value =
       detailPresentation.value.defaultBomVersion ||
       detailPresentation.value.bomCompareRows.find((item) => item.statusLabel === '当前')?.versionNo ||
       detailPresentation.value.bomCompareRows[0]?.versionNo ||
       ''
+  } catch {
+    detailPresentation.value = null
+    detailBomVersion.value = ''
   } finally {
     detailLoading.value = false
   }
@@ -1043,11 +1120,12 @@ watch(
 )
 
 watch(
-  () => [route.query.archiveView, route.query.productId, route.query.skuId, rows.value.length],
+  () => [route.query.archiveView, route.query.productId, route.query.skuId, route.query.section, rows.value.length],
   () => {
     const productId = Number(route.query.productId || 0)
-    if (productId && archiveView.value === 'product') {
-      const target = archivedProductRows.value.find((item) => item.productId === productId) || rows.value.find((item) => item.productId === productId)
+    if (productId) {
+      const target = (archiveView.value === 'product' ? archivedProductRows.value : rows.value).find((item) => item.productId === productId)
+        || rows.value.find((item) => item.productId === productId)
       if (target) openDetail(target)
       return
     }
@@ -1343,17 +1421,23 @@ onMounted(loadData)
         <template v-else>
           <div class="list-context-bar">
             <strong>已放弃项目</strong>
-            <span class="subtle-text">已放弃项目永久保留，可查看原因和可复用资产。</span>
+            <span class="subtle-text">已放弃项目永久保留，列表来自后端 Product 放弃字段。</span>
           </div>
           <section class="project-list-shell" v-loading="loading">
-            <el-table :data="abandonedProjects" border stripe>
+            <el-table :data="abandonedProjectRows" border stripe>
               <el-table-column prop="productCode" label="项目编码" min-width="170" />
               <el-table-column prop="productName" label="项目对象" min-width="220" />
               <el-table-column prop="currentStage" label="停止阶段" min-width="140" />
               <el-table-column prop="ownerUserName" label="负责人" width="110" />
-              <el-table-column prop="abandonedAt" label="放弃日期" width="130" />
-              <el-table-column prop="abandonReason" label="放弃原因" min-width="220" />
-              <el-table-column prop="reusableAssets" label="可复用资产" min-width="240" />
+              <el-table-column label="放弃时间" width="150">
+                <template #default="{ row }">{{ formatDate(row.abandonedAt) }}</template>
+              </el-table-column>
+              <el-table-column label="放弃人" width="120">
+                <template #default="{ row }">{{ row.abandonedBy || '--' }}</template>
+              </el-table-column>
+              <el-table-column label="放弃原因" min-width="220">
+                <template #default="{ row }">{{ row.abandonReason || '后端未返回放弃原因' }}</template>
+              </el-table-column>
             </el-table>
           </section>
         </template>
@@ -1471,6 +1555,7 @@ onMounted(loadData)
             <div class="timeline-action-panel__buttons">
               <el-button
                 v-if="activeProductFlowNode && !currentTimelineConfirmed"
+                data-test="project-timeline-confirm"
                 type="primary"
                 :loading="timelineActionLoading === 'confirm'"
                 :disabled="Boolean(timelineActionLoading)"
@@ -1480,8 +1565,9 @@ onMounted(loadData)
               </el-button>
               <el-button
                 v-if="activeProductFlowNode && currentTimelineConfirmed"
+                data-test="project-timeline-advance"
                 type="primary"
-                :loading="timelineActionLoading === 'advance'"
+                :loading="timelineActionLoading === 'confirm'"
                 :disabled="Boolean(timelineActionLoading) || !canAdvanceCurrentTimelineNode"
                 @click="handleAdvanceCurrentNode"
               >
@@ -1489,6 +1575,7 @@ onMounted(loadData)
               </el-button>
               <el-dropdown
                 v-if="activeProductFlowNode"
+                data-test="project-timeline-return"
                 :disabled="Boolean(timelineActionLoading)"
                 @command="handleReturnCommand"
               >
@@ -1547,6 +1634,12 @@ onMounted(loadData)
               <li v-for="line in activeProductFlowNode.detailLines" :key="line">{{ line }}</li>
             </ul>
           </div>
+
+          <ProjectReleaseGatePanel
+            :project-id="detailTarget.productId"
+            :product-status="detailTarget.status"
+            @changed="handleLifecycleChanged"
+          />
         </section>
 
         <section v-show="activeDetailSection === 'basic'" class="detail-section">
@@ -1634,6 +1727,11 @@ onMounted(loadData)
                   <strong>第 {{ node.stepNo }} 步：{{ node.nodeName }}</strong>
                   <div>
                     <span v-if="node.actionLabel" class="subtle-text">{{ node.actionLabel }}</span>
+                    <el-button v-if="node.nodeKey === 'PRODUCT_LINE_PROCESS_CONFIRM'" size="small" type="primary" plain @click="openProductionConfirmation('operations')">敲定投产工序</el-button>
+                    <el-button v-if="node.nodeKey === 'PRODUCT_LINE_PRODUCTION_DECISION_STEP'" size="small" type="primary" @click="openProductionConfirmation('colors')">确认批量投产颜色</el-button>
+                    <el-tag v-if="node.documentCount" size="small" type="success" effect="light">
+                      已上传 {{ node.documentCount }} 个
+                    </el-tag>
                     <el-tag size="small" effect="light" :type="getFlowStatusType(node.status)">
                       {{ getFlowStatusLabel(node.status) }}
                     </el-tag>
@@ -1649,7 +1747,12 @@ onMounted(loadData)
         </section>
 
         <section v-if="isProductDetailDialog" v-show="activeDetailSection === 'process_detail'" class="detail-section">
-          <ProjectProcessRoutePanel :project-id="detailTarget.productId" />
+          <ProjectProcessRoutePanel
+            :project-id="detailTarget.productId"
+            :product-code="detailTarget.productCode"
+            :product-name="detailTarget.productName"
+            :auto-create="route.query.createProcessRoute === '1'"
+          />
         </section>
 
         <section v-if="isProductDetailDialog && activeDetailSection === 'materials'" class="detail-section">
@@ -1706,7 +1809,12 @@ onMounted(loadData)
         </section>
 
         <section v-show="activeDetailSection === 'process'" class="detail-section">
-          <ProjectProcessRoutePanel :project-id="detailTarget.productId" />
+          <ProjectProcessRoutePanel
+            :project-id="detailTarget.productId"
+            :product-code="detailTarget.productCode"
+            :product-name="detailTarget.productName"
+            :auto-create="route.query.createProcessRoute === '1'"
+          />
         </section>
 
         <section v-if="!isProductDetailDialog" v-show="activeDetailSection === 'project_flow'" class="detail-section">
@@ -1776,6 +1884,10 @@ onMounted(loadData)
                   <strong>第 {{ node.stepNo }} 步：{{ node.nodeName }}</strong>
                   <div>
                     <span v-if="node.actionLabel" class="subtle-text">{{ node.actionLabel }}</span>
+                    <el-button v-if="node.nodeKey === 'MODEL_VARIANT_RELEASE'" size="small" type="primary" @click="openProductionConfirmation('colors')">确认批量投产并创建 SKU</el-button>
+                    <el-tag v-if="node.documentCount" size="small" type="success" effect="light">
+                      已上传 {{ node.documentCount }} 个
+                    </el-tag>
                     <el-tag size="small" effect="light" :type="getFlowStatusType(node.status)">
                       {{ getFlowStatusLabel(node.status) }}
                     </el-tag>
@@ -1844,7 +1956,13 @@ onMounted(loadData)
         v-model="productionPreviewVisible"
         :file="activeProductionDoc"
       />
-    </el-dialog>
+  </el-dialog>
+  <ProductionConfirmationDialog
+    v-if="detailTarget"
+    v-model="productionConfirmationVisible"
+    :project-id="detailTarget.productId"
+    :mode="productionConfirmationMode"
+  />
 
     <el-dialog v-model="importVisible" :title="importType === 'product' ? '导入产品数据' : '导入 SKU 数据'" width="640px">
       <el-alert type="info" show-icon :closable="false" title="用于导入历史归档数据，导入后仍按 Product 对象保存和追溯。" />

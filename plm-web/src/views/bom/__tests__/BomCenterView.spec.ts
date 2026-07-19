@@ -2,7 +2,11 @@ import { mount } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const api = vi.hoisted(() => ({ getBomLedger: vi.fn(), getBomWorkbench: vi.fn(), getBomSkus: vi.fn() }))
+const api = vi.hoisted(() => ({
+  getBomLedger: vi.fn(), getBomWorkbench: vi.fn(), getBomSkus: vi.fn(),
+  previewHistoricalBomImport: vi.fn(), commitHistoricalBomImport: vi.fn(),
+  downloadHistoricalBomTemplate: vi.fn(), downloadBomImportErrors: vi.fn()
+}))
 vi.mock('@/api/modules/bom', () => api)
 
 import BomCenterView from '../BomCenterView.vue'
@@ -37,5 +41,11 @@ describe('BomCenterView', () => {
     await vi.waitFor(() => expect(api.getBomSkus).toHaveBeenCalledWith(31))
     expect(document.body.textContent).toContain('Samsung A56')
     wrapper.unmount()
+  })
+
+  it('provides historical BOM batch import from the ledger', async () => {
+    const wrapper = mount(BomCenterView, { global: { plugins: [ElementPlus] } })
+    await vi.waitFor(() => expect(api.getBomLedger).toHaveBeenCalled())
+    expect(wrapper.find('[data-test="historical-bom-import"]').exists()).toBe(true)
   })
 })
