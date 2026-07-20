@@ -68,6 +68,8 @@ public class BomLedgerServiceImpl implements BomLedgerService {
                 .processId(route.getProcessId()).routeCode(route.getRouteCode()).routeName(route.getRouteName())
                 .status(route.getStatus()).colors(activeColors(route.getProductBomRouteId()).stream()
                     .map(ProductBomRouteColor::getColorName).toList())
+                .colorItems(activeColors(route.getProductBomRouteId()).stream()
+                    .map(com.yuewei.plm.module.bom.vo.ProductBomRouteColorVO::from).toList())
                 .items(activeItems(route.getProductBomRouteId()).stream().map(ProductBomItemVO::from).toList())
                 .costSnapshot(currentCost(bomId, route.getProductBomRouteId())).build()
         ).toList();

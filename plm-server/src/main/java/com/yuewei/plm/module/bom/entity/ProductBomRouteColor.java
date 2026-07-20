@@ -15,6 +15,8 @@ public class ProductBomRouteColor extends BaseEntity {
     private Long productBomRouteColorId;
     private Long productBomId;
     private Long productBomRouteId;
+    private Long codeItemId;
+    private String colorCode;
     private String colorName;
     private String status;
 }

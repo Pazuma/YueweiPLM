@@ -18,7 +18,9 @@ describe('ProductionConfirmationDialog', () => {
     bomApi.getProjectBoms.mockResolvedValue([{ productBomId: 31, bomType: 'mbom', status: 'reviewing' }])
     bomApi.getBomWorkbench.mockResolvedValue({
       productBomId: 31, productId: 7, versionNo: 'V1', status: 'reviewing', routes: [
-        { productBomRouteId: 81, processId: 9, routeCode: 'DYE', routeName: '染色路线', colors: ['黑色', '蓝色'], items: [], costSnapshot: { totalCost: 12.5, currencyCode: 'CNY' } }
+        { productBomRouteId: 81, processId: 9, routeCode: 'DYE', routeName: '染色路线', colors: ['Negro', 'Azul Rey'], colorItems: [
+          { codeItemId: 2, codeValue: '02', codeName: 'Negro' }, { codeItemId: 8, codeValue: '08', codeName: 'Azul Rey' }
+        ], items: [], costSnapshot: { totalCost: 12.5, currencyCode: 'CNY' } }
       ]
     })
     processApi.getProjectProcessRoutes.mockResolvedValue([{ processId: 9, processName: '染色路线', operations: [
@@ -34,10 +36,11 @@ describe('ProductionConfirmationDialog', () => {
       props: { modelValue: true, projectId: 7, mode: 'colors' },
       global: { plugins: [ElementPlus], stubs: { teleport: true, transition: false } }
     })
-    await vi.waitFor(() => expect(wrapper.text()).toContain('黑色'))
+    await vi.waitFor(() => expect(wrapper.text()).toContain('02 · Negro'))
     expect(wrapper.text()).toContain('已选择 2 个颜色')
     await wrapper.get('[data-test="confirm-production-colors"]').trigger('click')
     await vi.waitFor(() => expect(bomApi.confirmProductionColors).toHaveBeenCalled())
     expect(bomApi.confirmProductionColors.mock.calls[0][1].colors).toHaveLength(2)
+    expect(bomApi.confirmProductionColors.mock.calls[0][1].colors[0]).toMatchObject({ codeItemId: 2, colorCode: '02', colorName: 'Negro' })
   })
 })

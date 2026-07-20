@@ -104,6 +104,16 @@ const routes: RouteRecordRaw[] = [
         } satisfies RouteMetaConfig
       },
       {
+        path: 'code-center',
+        name: 'CodeCenter',
+        component: () => import('@/views/code/CodeCenterView.vue'),
+        meta: {
+          title: '编码中心',
+          permission: 'product:view',
+          breadcrumb: ['基础资料', '编码中心']
+        } satisfies RouteMetaConfig
+      },
+      {
         path: 'customers',
         name: 'CustomerList',
         component: () => import('@/views/customer/CustomerList.vue'),

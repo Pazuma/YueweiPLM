@@ -20,9 +20,9 @@ const routes = computed<RouteCandidate[]>(() => workbenches.value.flatMap(bom =>
 const selectedRoute = computed(() => routes.value.find(route => route.productBomRouteId === selectedRouteId.value) || null)
 const selectedProcessRoute = computed(() => processRoutes.value.find(route => route.processId === selectedRoute.value?.processId) || null)
 const colorOptions = computed(() => {
-  const values = new Map<string, RouteCandidate>()
-  routes.value.forEach(route => route.colors.forEach(color => { if (!values.has(color)) values.set(color, route) }))
-  return [...values.entries()].map(([colorName, route]) => ({ colorName, route }))
+  const values = new Map<number, { codeItemId: number; codeValue: string; codeName: string; route: RouteCandidate }>()
+  routes.value.forEach(route => (route.colorItems || []).forEach(color => { if (!values.has(color.codeItemId)) values.set(color.codeItemId, { ...color, route }) }))
+  return [...values.values()]
 })
 
 async function load() {
@@ -35,7 +35,7 @@ async function load() {
     processRoutes.value = processes
     selectedRouteId.value = routes.value[0]?.productBomRouteId || null
     selectedOperationIds.value = confirmation.operationProcessIds || []
-    selectedColors.value = confirmation.colors?.length ? [...confirmation.colors] : colorOptions.value.map(value => value.colorName)
+    selectedColors.value = confirmation.colors?.length ? [...confirmation.colors] : colorOptions.value.map(value => value.codeValue)
   } catch (error) { ElMessage.error(error instanceof Error ? error.message : '投产方案加载失败') }
   finally { loading.value = false }
 }
@@ -54,8 +54,9 @@ async function confirm() {
       await confirmProductionOperations(props.projectId, { productBomRouteId: selectedRoute.value.productBomRouteId!, operationProcessIds: selectedOperationIds.value })
       ElMessage.success('投产工序已确认')
     } else {
-      const colors = colorOptions.value.filter(value => selectedColors.value.includes(value.colorName)).map(value => ({
-        colorName: value.colorName, productBomId: value.route.productBomId, productBomRouteId: value.route.productBomRouteId!
+      const colors = colorOptions.value.filter(value => selectedColors.value.includes(value.codeValue)).map(value => ({
+        codeItemId: value.codeItemId, colorCode: value.codeValue, colorName: value.codeName,
+        productBomId: value.route.productBomId, productBomRouteId: value.route.productBomRouteId!
       }))
       if (!colors.length) return ElMessage.warning('请至少选择一个批量投产颜色')
       const result = await confirmProductionColors(props.projectId, { colors })
@@ -85,9 +86,9 @@ async function confirm() {
       <template v-else>
         <el-alert title="默认选择全部已验证颜色。取消勾选的颜色不会创建 SKU。" type="info" show-icon :closable="false" />
         <el-checkbox-group v-model="selectedColors" class="color-list">
-          <label v-for="item in colorOptions" :key="item.colorName" class="color-row">
-            <el-checkbox :value="item.colorName" />
-            <strong>{{ item.colorName }}</strong><span>{{ item.route.routeName }}</span><code>{{ item.route.routeCode }}</code><span>{{ item.route.costSnapshot?.currencyCode || 'CNY' }} {{ item.route.costSnapshot?.totalCost ?? '--' }}</span>
+          <label v-for="item in colorOptions" :key="item.codeItemId" class="color-row">
+            <el-checkbox :value="item.codeValue" />
+            <strong>{{ item.codeValue }} · {{ item.codeName }}</strong><span>{{ item.route.routeName }}</span><code>{{ item.route.routeCode }}</code><span>{{ item.route.costSnapshot?.currencyCode || 'CNY' }} {{ item.route.costSnapshot?.totalCost ?? '--' }}</span>
           </label>
         </el-checkbox-group>
         <div class="selection-count">已选择 {{ selectedColors.length }} 个颜色</div>

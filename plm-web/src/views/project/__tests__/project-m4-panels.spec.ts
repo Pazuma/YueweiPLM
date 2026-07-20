@@ -20,6 +20,10 @@ const bomApi = vi.hoisted(() => ({
   submitBomReview: vi.fn()
 }))
 
+const codeApi = vi.hoisted(() => ({
+  getEnabledColorCodes: vi.fn()
+}))
+
 const processApi = vi.hoisted(() => ({
   getProcessRouteTemplates: vi.fn(),
   getProcessOperationMasters: vi.fn(),
@@ -56,6 +60,7 @@ const routeState = vi.hoisted(() => ({
 const routerPush = vi.hoisted(() => vi.fn())
 
 vi.mock('@/api/modules/bom', () => bomApi)
+vi.mock('@/api/modules/code', () => codeApi)
 vi.mock('@/api/modules/process', () => processApi)
 vi.mock('@/api/modules/attachment', () => attachmentApi)
 vi.mock('@/api/modules/foundation', () => foundationApi)
@@ -157,6 +162,7 @@ function createTimeline(projectId = 9, nodeKey = 'PRODUCT_LINE_DESIGN_CONFIRM') 
 describe('project M4 panels', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    codeApi.getEnabledColorCodes.mockResolvedValue([])
     document.body.innerHTML = ''
     routeState.query = {}
     bomApi.getProjectBoms.mockResolvedValue([])

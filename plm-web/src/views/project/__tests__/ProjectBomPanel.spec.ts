@@ -17,13 +17,19 @@ const api = vi.hoisted(() => ({
   inheritBom: vi.fn()
 }))
 
+const codeApi = vi.hoisted(() => ({
+  getEnabledColorCodes: vi.fn()
+}))
+
 vi.mock('@/api/modules/bom', () => api)
+vi.mock('@/api/modules/code', () => codeApi)
 
 import ProjectBomPanel from '../components/ProjectBomPanel.vue'
 
 describe('ProjectBomPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    codeApi.getEnabledColorCodes.mockResolvedValue([])
     api.getProjectBoms.mockResolvedValue([{ productBomId: 31, productId: 7, bomCode: 'BOM-31', bomName: '正式 BOM', bomType: 'mbom', versionNo: 'V1', status: 'draft', items: [] }])
     api.getBomWorkbench.mockResolvedValue({
       productBomId: 31,

@@ -87,6 +87,7 @@ export interface BomRoute {
   routeName: string
   status?: 'active' | 'inactive'
   colors: string[]
+  colorItems?: Array<{ codeItemId: number; codeValue: string; codeName: string }>
   items: BomItem[]
   costSnapshot?: BomCostSnapshot | null
   processCost?: number

@@ -15,6 +15,10 @@ public class ProductionColorConfirmDTO {
 
     @Data
     public static class ColorSelection {
+        @NotNull
+        private Long codeItemId;
+        @NotBlank
+        private String colorCode;
         @NotBlank
         private String colorName;
         @NotNull

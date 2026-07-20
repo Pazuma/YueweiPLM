@@ -14,6 +14,7 @@ public class ProductBomRouteVO {
     private String routeName;
     private String status;
     private List<String> colors;
+    private List<ProductBomRouteColorVO> colorItems;
     private List<ProductBomItemVO> items;
     private ProductBomCostSnapshotVO costSnapshot;
 }

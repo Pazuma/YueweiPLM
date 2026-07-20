@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.yuewei.plm.common.constant.ErrorCodeConstants;
 import com.yuewei.plm.common.exception.BusinessException;
 import com.yuewei.plm.module.bom.dto.BomRouteSaveDTO;
+import com.yuewei.plm.module.bom.dto.BomRouteColorDTO;
 import com.yuewei.plm.module.bom.dto.ProductBomItemDTO;
 import com.yuewei.plm.module.bom.dto.TestBomSaveDTO;
 import com.yuewei.plm.module.bom.entity.ProductBom;
@@ -16,6 +17,8 @@ import com.yuewei.plm.module.bom.repository.ProductBomItemRepository;
 import com.yuewei.plm.module.bom.repository.ProductBomRepository;
 import com.yuewei.plm.module.bom.repository.ProductBomRouteColorRepository;
 import com.yuewei.plm.module.bom.repository.ProductBomRouteRepository;
+import com.yuewei.plm.module.code.entity.CodeItem;
+import com.yuewei.plm.module.code.service.CodeItemService;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.HashSet;
@@ -37,6 +40,7 @@ public class ProductBomWorkflowService {
     private final ProductBomCostSnapshotRepository costRepository;
     private final BomCostCalculator costCalculator;
     private final BomTimelineGate timelineGate;
+    private final CodeItemService codeItemService;
 
     @Transactional
     public ProductBom saveTestBom(Long productId, TestBomSaveDTO dto) {
@@ -117,11 +121,14 @@ public class ProductBomWorkflowService {
             route.setStatus(ACTIVE);
             fillCreate(route, now);
             routeRepository.insert(route);
-            for (String colorName : dto.getColors()) {
+            for (BomRouteColorDTO selected : normalizedColors(dto)) {
+                CodeItem code = codeItemService.requireEnabledColor(selected.getCodeItemId(), selected.getCodeValue());
                 ProductBomRouteColor color = new ProductBomRouteColor();
                 color.setProductBomId(bomId);
                 color.setProductBomRouteId(route.getProductBomRouteId());
-                color.setColorName(colorName.trim());
+                color.setCodeItemId(code.getCodeItemId());
+                color.setColorCode(code.getCodeValue());
+                color.setColorName(code.getCodeName());
                 color.setStatus(ACTIVE);
                 fillCreate(color, now);
                 colorRepository.insert(color);
@@ -205,20 +212,30 @@ public class ProductBomWorkflowService {
         }
         Set<String> assignedColors = new HashSet<>();
         for (BomRouteSaveDTO route : routes) {
-            if (route.getColors() == null || route.getColors().isEmpty()) {
+            if ((route.getColorItems() == null || route.getColorItems().isEmpty())
+                && (route.getColors() == null || route.getColors().isEmpty())) {
                 throw validation("工艺路线至少需要一个适用颜色");
             }
-            for (String color : route.getColors()) {
-                String normalized = color == null ? "" : color.trim();
+            for (BomRouteColorDTO color : normalizedColors(route)) {
+                String normalized = color.getCodeValue() == null ? "" : color.getCodeValue().trim();
                 if (normalized.isEmpty()) {
                     throw validation("适用颜色不能为空");
                 }
                 if (!assignedColors.add(normalized)) {
                     throw new BusinessException(ErrorCodeConstants.CODE_CONFLICT,
-                        "颜色 " + normalized + " 不能同时归属多条有效工艺路线");
+                        "颜色编码 " + normalized + " 不能同时归属多条有效工艺路线");
                 }
             }
         }
+    }
+
+    private List<BomRouteColorDTO> normalizedColors(BomRouteSaveDTO route) {
+        if (route.getColorItems() != null && !route.getColorItems().isEmpty()) return route.getColorItems();
+        return route.getColors().stream().map(name -> {
+            BomRouteColorDTO value = new BomRouteColorDTO();
+            value.setCodeItemId(null); value.setCodeValue(name); value.setCodeName(name);
+            return value;
+        }).toList();
     }
 
     private void requireCompleteRoutes(Long bomId, boolean requireCost) {

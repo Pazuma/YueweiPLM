@@ -17,6 +17,10 @@ import java.math.BigDecimal;
 import java.util.Optional;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.Test;
+import com.yuewei.plm.module.code.entity.CodeItem;
+import com.yuewei.plm.module.code.repository.CodeItemRepository;
+import com.baomidou.mybatisplus.core.conditions.Wrapper;
+import java.util.List;
 
 class BomImportServiceImplTest {
 
@@ -34,7 +38,7 @@ class BomImportServiceImplTest {
             new BomProcessRouteLookup.Route(100L, "DYE", "染色路线")
         ));
         BomImportServiceImpl service = new BomImportServiceImpl(
-            batchRepository, bomRepository, materialLookup, routeLookup, workflowService
+            batchRepository, bomRepository, materialLookup, routeLookup, workflowService, colorCodes()
         );
 
         var preview = service.preview(10L, 20L, "formal.xlsx", workbook(true));
@@ -51,7 +55,7 @@ class BomImportServiceImplTest {
         ProductBomImportBatchRepository batchRepository = mock(ProductBomImportBatchRepository.class);
         BomImportServiceImpl service = new BomImportServiceImpl(
             batchRepository, editableBomRepository(), mock(BomMaterialLookup.class), mock(BomProcessRouteLookup.class),
-            mock(ProductBomWorkflowService.class)
+            mock(ProductBomWorkflowService.class), colorCodes()
         );
 
         var preview = service.preview(10L, 20L, "broken.xlsx", workbook(false));
@@ -75,7 +79,7 @@ class BomImportServiceImplTest {
         when(bomRepository.selectById(20L)).thenReturn(bom);
         BomImportServiceImpl service = new BomImportServiceImpl(
             mock(ProductBomImportBatchRepository.class), bomRepository, mock(BomMaterialLookup.class),
-            mock(BomProcessRouteLookup.class), mock(ProductBomWorkflowService.class)
+            mock(BomProcessRouteLookup.class), mock(ProductBomWorkflowService.class), colorCodes()
         );
 
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.preview(10L, 20L, "formal.xlsx", workbook(true)))
@@ -109,7 +113,7 @@ class BomImportServiceImplTest {
             row.createCell(0).setCellValue(1);
             row.createCell(1).setCellValue("DYE");
             row.createCell(2).setCellValue("染色路线");
-            row.createCell(3).setCellValue("黑色,蓝色");
+            row.createCell(3).setCellValue("02,08");
             row.createCell(4).setCellValue("MAT-001");
             row.createCell(5).setCellValue("TPU 原料");
             row.createCell(7).setCellValue("kg");
@@ -118,5 +122,16 @@ class BomImportServiceImplTest {
             workbook.write(output);
             return output.toByteArray();
         }
+    }
+
+    private CodeItemRepository colorCodes() {
+        CodeItemRepository repository = mock(CodeItemRepository.class);
+        when(repository.selectOne(any(Wrapper.class))).thenReturn(color(2L, "02", "Negro"), color(8L, "08", "Azul Rey"));
+        return repository;
+    }
+
+    private CodeItem color(Long id, String code, String name) {
+        CodeItem item = new CodeItem(); item.setCodeItemId(id); item.setCodeType("color"); item.setCodeValue(code);
+        item.setCodeName(name); item.setStatus("enabled"); item.setDeletedFlag(0); return item;
     }
 }

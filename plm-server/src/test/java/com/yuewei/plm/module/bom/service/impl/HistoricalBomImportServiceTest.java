@@ -14,6 +14,8 @@ import com.yuewei.plm.module.bom.service.ProductBomWorkflowService;
 import com.yuewei.plm.module.bom.vo.BomImportErrorVO;
 import com.yuewei.plm.repository.ProductRepository;
 import com.yuewei.plm.repository.entity.Product;
+import com.yuewei.plm.module.code.entity.CodeItem;
+import com.yuewei.plm.module.code.repository.CodeItemRepository;
 import java.io.ByteArrayOutputStream;
 import java.math.BigDecimal;
 import java.util.List;
@@ -34,7 +36,7 @@ class HistoricalBomImportServiceTest {
             new BomProcessRouteLookup.Route(100L, "DYE", "染色路线")));
         HistoricalBomImportService service = new HistoricalBomImportService(
             mock(ProductBomImportBatchRepository.class), mock(ProductBomRepository.class), products,
-            materials, routes, mock(ProductBomWorkflowService.class));
+            materials, routes, mock(ProductBomWorkflowService.class), colorCodes());
 
         var preview = service.preview("history.xlsx", workbook());
 
@@ -50,7 +52,7 @@ class HistoricalBomImportServiceTest {
         when(products.selectList(any(Wrapper.class))).thenReturn(List.of(product(10L, "P-LJ"), product(11L, "P-LJ")));
         HistoricalBomImportService service = new HistoricalBomImportService(
             mock(ProductBomImportBatchRepository.class), mock(ProductBomRepository.class), products,
-            mock(BomMaterialLookup.class), mock(BomProcessRouteLookup.class), mock(ProductBomWorkflowService.class));
+            mock(BomMaterialLookup.class), mock(BomProcessRouteLookup.class), mock(ProductBomWorkflowService.class), colorCodes());
 
         var preview = service.preview("history.xlsx", workbook());
 
@@ -81,7 +83,7 @@ class HistoricalBomImportServiceTest {
             row.createCell(2).setCellValue(1);
             row.createCell(3).setCellValue("DYE");
             row.createCell(4).setCellValue("染色路线");
-            row.createCell(5).setCellValue("黑色,蓝色");
+            row.createCell(5).setCellValue("02,08");
             row.createCell(6).setCellValue("MAT-001");
             row.createCell(7).setCellValue("TPU");
             row.createCell(9).setCellValue("kg");
@@ -90,5 +92,20 @@ class HistoricalBomImportServiceTest {
             workbook.write(output);
             return output.toByteArray();
         }
+    }
+
+    private CodeItemRepository colorCodes() {
+        CodeItemRepository repository = mock(CodeItemRepository.class);
+        CodeItem black = color(2L, "02", "Negro");
+        CodeItem blue = color(8L, "08", "Azul Rey");
+        when(repository.selectOne(any(Wrapper.class))).thenReturn(black, blue);
+        return repository;
+    }
+
+    private CodeItem color(Long id, String code, String name) {
+        CodeItem item = new CodeItem();
+        item.setCodeItemId(id); item.setCodeType("color"); item.setCodeValue(code);
+        item.setCodeName(name); item.setStatus("enabled"); item.setDeletedFlag(0);
+        return item;
     }
 }

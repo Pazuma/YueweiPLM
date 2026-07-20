@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.yuewei.plm.common.constant.ErrorCodeConstants;
 import com.yuewei.plm.common.exception.BusinessException;
 import com.yuewei.plm.module.bom.dto.BomRouteSaveDTO;
+import com.yuewei.plm.module.bom.dto.BomRouteColorDTO;
 import com.yuewei.plm.module.bom.dto.ProductBomItemDTO;
 import com.yuewei.plm.module.bom.entity.ProductBomImportBatch;
 import com.yuewei.plm.module.bom.entity.ProductBom;
@@ -18,6 +19,8 @@ import com.yuewei.plm.module.bom.service.ProductBomWorkflowService;
 import com.yuewei.plm.module.bom.vo.BomImportErrorVO;
 import com.yuewei.plm.module.bom.vo.BomImportPreviewVO;
 import com.yuewei.plm.module.bom.vo.BomImportRowVO;
+import com.yuewei.plm.module.code.entity.CodeItem;
+import com.yuewei.plm.module.code.repository.CodeItemRepository;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.math.BigDecimal;
@@ -48,6 +51,7 @@ public class BomImportServiceImpl implements BomImportService {
     private final BomMaterialLookup materialLookup;
     private final BomProcessRouteLookup routeLookup;
     private final ProductBomWorkflowService workflowService;
+    private final CodeItemRepository codeItemRepository;
     private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
 
     @Override
@@ -220,8 +224,11 @@ public class BomImportServiceImpl implements BomImportService {
             value.setProcessId(route.get().processId());
             value.setRouteCode(route.get().routeCode());
             value.setRouteName(route.get().routeName());
-            value.setColors(Arrays.stream(required(text(row, 3, formatter), "适用颜色").split("[,，]"))
-                .map(String::trim).filter(color -> !color.isBlank()).distinct().toList());
+            List<String> colorCodes = Arrays.stream(required(text(row, 3, formatter), "适用颜色").split("[,，]"))
+                .map(String::trim).filter(color -> !color.isBlank()).distinct().toList();
+            List<BomRouteColorDTO> colors = colorCodes.stream().map(this::requireEnabledColor).toList();
+            value.setColorItems(colors);
+            value.setColors(colors.stream().map(BomRouteColorDTO::getCodeName).toList());
             value.setInventoryId(material.get().inventoryId());
             value.setItemCode(materialCode);
             value.setItemName(material.get().inventoryName());
@@ -250,6 +257,9 @@ public class BomImportServiceImpl implements BomImportService {
         route.setRouteCode(first.getRouteCode());
         route.setRouteName(first.getRouteName());
         route.setColors(rows.stream().flatMap(row -> row.getColors().stream()).distinct().toList());
+        route.setColorItems(rows.stream().flatMap(row -> row.getColorItems().stream())
+            .collect(java.util.stream.Collectors.toMap(BomRouteColorDTO::getCodeItemId, value -> value,
+                (existing, ignored) -> existing, java.util.LinkedHashMap::new)).values().stream().toList());
         route.setItems(rows.stream().map(this::toItem).toList());
         return route;
     }
@@ -268,6 +278,16 @@ public class BomImportServiceImpl implements BomImportService {
         item.setSubstituteFlag(row.getSubstituteFlag());
         item.setRemark(row.getRemark());
         return item;
+    }
+
+    private BomRouteColorDTO requireEnabledColor(String colorCode) {
+        CodeItem item = codeItemRepository.selectOne(new LambdaQueryWrapper<CodeItem>()
+            .eq(CodeItem::getCodeType, "color").eq(CodeItem::getCodeValue, colorCode)
+            .eq(CodeItem::getStatus, "enabled").eq(CodeItem::getDeletedFlag, 0));
+        if (item == null) throw new IllegalArgumentException("颜色编码不存在或已停用：" + colorCode);
+        BomRouteColorDTO value = new BomRouteColorDTO();
+        value.setCodeItemId(item.getCodeItemId()); value.setCodeValue(item.getCodeValue()); value.setCodeName(item.getCodeName());
+        return value;
     }
 
     private List<BomImportRowVO> readRows(String json) {

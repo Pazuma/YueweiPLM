@@ -239,6 +239,6 @@ export async function confirmProductionOperations(projectId: number, payload: { 
   return unwrapResponse<ProductionConfirmation>(await request.post(`/projects/${projectId}/production-operations/confirm`, payload))
 }
 
-export async function confirmProductionColors(projectId: number, payload: { colors: Array<{ colorName: string; productBomId: number; productBomRouteId: number }> }) {
+export async function confirmProductionColors(projectId: number, payload: { colors: Array<{ codeItemId: number; colorCode: string; colorName: string; productBomId: number; productBomRouteId: number }> }) {
   return unwrapResponse<ProductionConfirmation>(await request.post(`/projects/${projectId}/production-colors/confirm`, payload))
 }

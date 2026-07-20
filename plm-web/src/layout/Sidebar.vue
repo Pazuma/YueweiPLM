@@ -23,6 +23,7 @@ const menuGroups: MenuGroup[] = [
       { path: '/files', title: '文件中心', icon: 'FolderOpened', permission: 'product:view' },
       { path: '/processes', title: '工艺路线', icon: 'Connection', permission: 'process:view' },
       { path: '/bom', title: 'BOM 管理', icon: 'List', permission: 'product:view' },
+      { path: '/code-center', title: '编码中心', icon: 'CollectionTag', permission: 'product:view' },
       { path: '/production-orders', title: '测试管理', icon: 'Finished', permission: 'production-order:view' },
       { path: '/suppliers', title: '供应商管理', icon: 'Van', permission: 'supplier:view' },
       { path: '/inventories', title: '物料库存', icon: 'Box', permission: 'inventory:view' },

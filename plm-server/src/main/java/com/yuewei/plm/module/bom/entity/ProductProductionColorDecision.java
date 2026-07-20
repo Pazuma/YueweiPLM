@@ -15,6 +15,8 @@ public class ProductProductionColorDecision extends BaseEntity {
     @TableId(value = "product_production_color_decision_id", type = IdType.AUTO)
     private Long productProductionColorDecisionId;
     private Long productId;
+    private Long codeItemId;
+    private String colorCode;
     private String colorName;
     private Long productBomId;
     private Long productBomRouteId;

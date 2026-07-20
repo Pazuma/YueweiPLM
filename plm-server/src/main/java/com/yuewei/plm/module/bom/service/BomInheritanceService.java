@@ -170,6 +170,8 @@ public class BomInheritanceService {
         ProductBomRouteColor target = new ProductBomRouteColor();
         target.setProductBomId(targetBom.getProductBomId());
         target.setProductBomRouteId(targetRoute.getProductBomRouteId());
+        target.setCodeItemId(source.getCodeItemId());
+        target.setColorCode(source.getColorCode());
         target.setColorName(source.getColorName());
         target.setStatus("active");
         fillCreate(target, now);

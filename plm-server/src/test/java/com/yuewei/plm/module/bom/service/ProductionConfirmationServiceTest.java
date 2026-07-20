@@ -25,6 +25,8 @@ import com.yuewei.plm.module.bom.repository.ProcessProductionOperationSelectionR
 import com.yuewei.plm.module.bom.repository.ProductProductionColorDecisionRepository;
 import com.yuewei.plm.module.process.entity.ProcessEntity;
 import com.yuewei.plm.module.process.repository.ProcessRepository;
+import com.yuewei.plm.module.code.entity.CodeItem;
+import com.yuewei.plm.module.code.service.CodeItemService;
 import com.yuewei.plm.repository.ProductRepository;
 import com.yuewei.plm.repository.entity.Product;
 import java.util.List;
@@ -40,6 +42,7 @@ class ProductionConfirmationServiceTest {
     private ProductBomCostSnapshotRepository costRepository;
     private ProcessProductionOperationSelectionRepository operationRepository;
     private ProductProductionColorDecisionRepository colorRepository;
+    private CodeItemService codeItemService;
     private ProductionConfirmationService service;
 
     @BeforeEach
@@ -52,8 +55,9 @@ class ProductionConfirmationServiceTest {
         costRepository = mock(ProductBomCostSnapshotRepository.class);
         operationRepository = mock(ProcessProductionOperationSelectionRepository.class);
         colorRepository = mock(ProductProductionColorDecisionRepository.class);
+        codeItemService = mock(CodeItemService.class);
         service = new ProductionConfirmationService(productRepository, bomRepository, routeRepository,
-            processRepository, routeColorRepository, costRepository, operationRepository, colorRepository);
+            processRepository, routeColorRepository, costRepository, operationRepository, colorRepository, codeItemService);
     }
 
     @Test
@@ -87,7 +91,9 @@ class ProductionConfirmationServiceTest {
         when(bomRepository.selectById(400L)).thenReturn(bom);
         when(routeRepository.selectById(401L)).thenReturn(route);
         ProductBomRouteColor routeColor = new ProductBomRouteColor();
-        routeColor.setColorName("黑色");
+        routeColor.setCodeItemId(2L);
+        routeColor.setColorCode("02");
+        routeColor.setColorName("Negro");
         ProductBomCostSnapshot cost = new ProductBomCostSnapshot();
         ProcessProductionOperationSelection selection = new ProcessProductionOperationSelection();
         selection.setOperationProcessId(601L);
@@ -101,9 +107,15 @@ class ProductionConfirmationServiceTest {
         when(processRepository.selectById(601L)).thenReturn(selectedOperation);
         when(colorRepository.selectList(any(Wrapper.class))).thenReturn(List.of());
         when(productRepository.selectList(any(Wrapper.class))).thenReturn(List.of(), List.of(product(900L, "sku", 1)));
+        CodeItem codeItem = new CodeItem();
+        codeItem.setCodeItemId(2L); codeItem.setCodeType("color"); codeItem.setCodeValue("02");
+        codeItem.setCodeName("Negro"); codeItem.setStatus("enabled"); codeItem.setDeletedFlag(0);
+        when(codeItemService.requireEnabledColor(2L, "02")).thenReturn(codeItem);
 
         ProductionColorConfirmDTO.ColorSelection color = new ProductionColorConfirmDTO.ColorSelection();
-        color.setColorName("黑色");
+        color.setCodeItemId(2L);
+        color.setColorCode("02");
+        color.setColorName("Negro");
         color.setProductBomId(400L);
         color.setProductBomRouteId(401L);
         ProductionColorConfirmDTO dto = new ProductionColorConfirmDTO();
@@ -115,6 +127,21 @@ class ProductionConfirmationServiceTest {
         assertThat(first.getSelectedColorCount()).isEqualTo(1);
         assertThat(second.getSelectedColorCount()).isEqualTo(1);
         verify(productRepository).insert(any(Product.class));
+    }
+
+    @Test
+    void confirmColorsRejectsDisabledCodeItemBeforeCreatingSku() {
+        Product project = product(20L, "model_variant", 16);
+        when(productRepository.selectById(20L)).thenReturn(project);
+        when(codeItemService.requireEnabledColor(2L, "02"))
+            .thenThrow(new BusinessException(40001, "颜色编码已停用"));
+        ProductionColorConfirmDTO.ColorSelection color = new ProductionColorConfirmDTO.ColorSelection();
+        color.setCodeItemId(2L); color.setColorCode("02"); color.setColorName("Negro");
+        color.setProductBomId(400L); color.setProductBomRouteId(401L);
+        ProductionColorConfirmDTO dto = new ProductionColorConfirmDTO(); dto.setColors(List.of(color));
+
+        assertThatThrownBy(() -> service.confirmColors(20L, dto)).hasMessageContaining("颜色编码已停用");
+        verify(productRepository, never()).insert(any(Product.class));
     }
 
     private Product product(Long id, String type, int step) {

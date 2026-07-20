@@ -1,0 +1,139 @@
+package com.yuewei.plm.module.code.service;
+
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.yuewei.plm.common.constant.ErrorCodeConstants;
+import com.yuewei.plm.common.exception.BusinessException;
+import com.yuewei.plm.common.vo.PageVO;
+import com.yuewei.plm.module.code.dto.CodeItemQueryDTO;
+import com.yuewei.plm.module.code.dto.CodeItemSaveDTO;
+import com.yuewei.plm.module.code.entity.CodeItem;
+import com.yuewei.plm.module.code.repository.CodeItemRepository;
+import com.yuewei.plm.module.code.vo.CodeItemVO;
+import java.time.LocalDateTime;
+import java.util.Locale;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
+
+@Service
+@RequiredArgsConstructor
+public class CodeItemService {
+    private final CodeItemRepository repository;
+
+    public PageVO<CodeItemVO> page(CodeItemQueryDTO query) {
+        String normalizedStatus = StringUtils.hasText(query.getStatus()) ? normalizeStatus(query.getStatus()) : null;
+        LambdaQueryWrapper<CodeItem> wrapper = new LambdaQueryWrapper<CodeItem>()
+            .eq(CodeItem::getDeletedFlag, 0)
+            .eq(StringUtils.hasText(query.getCodeType()), CodeItem::getCodeType, normalizeType(query.getCodeType()))
+            .eq(normalizedStatus != null, CodeItem::getStatus, normalizedStatus)
+            .and(StringUtils.hasText(query.getKeyword()), value -> value
+                .like(CodeItem::getCodeValue, query.getKeyword().trim())
+                .or().like(CodeItem::getCodeName, query.getKeyword().trim()))
+            .orderByAsc(CodeItem::getSortOrder, CodeItem::getCodeValue);
+        IPage<CodeItem> result = repository.selectPage(new Page<>(query.getPage(), query.getSize()), wrapper);
+        return PageVO.<CodeItemVO>builder()
+            .content(result.getRecords().stream().map(this::toVO).toList())
+            .page(result.getCurrent()).size(result.getSize())
+            .totalElements(result.getTotal()).totalPages(result.getPages()).build();
+    }
+
+    @Transactional
+    public CodeItemVO create(CodeItemSaveDTO dto) {
+        String type = normalizeType(dto.getCodeType());
+        String value = required(dto.getCodeValue(), "编码值");
+        ensureUnique(type, value, null);
+        CodeItem item = new CodeItem();
+        item.setCodeType(type);
+        item.setCodeValue(value);
+        item.setCodeName(required(dto.getCodeName(), "编码名称"));
+        item.setStatus("enabled");
+        item.setSortOrder(dto.getSortOrder());
+        fillCreate(item);
+        repository.insert(item);
+        return toVO(item);
+    }
+
+    @Transactional
+    public CodeItemVO update(Long id, CodeItemSaveDTO dto) {
+        CodeItem item = requireItem(id);
+        item.setCodeName(required(dto.getCodeName(), "编码名称"));
+        item.setSortOrder(dto.getSortOrder());
+        touch(item);
+        repository.updateById(item);
+        return toVO(item);
+    }
+
+    @Transactional
+    public CodeItemVO changeStatus(Long id, String status) {
+        CodeItem item = requireItem(id);
+        item.setStatus(normalizeStatus(status));
+        touch(item);
+        repository.updateById(item);
+        return toVO(item);
+    }
+
+    public CodeItem requireEnabledColor(Long id, String codeValue) {
+        CodeItem item = requireItem(id);
+        if (!"color".equals(item.getCodeType()) || !item.getCodeValue().equals(codeValue)) {
+            throw validation("颜色编码不存在或与选择值不一致");
+        }
+        if (!"enabled".equals(item.getStatus())) {
+            throw validation("颜色编码已停用");
+        }
+        return item;
+    }
+
+    private void ensureUnique(String type, String value, Long excludedId) {
+        long count = repository.selectCount(new LambdaQueryWrapper<CodeItem>()
+            .eq(CodeItem::getCodeType, type).eq(CodeItem::getCodeValue, value)
+            .eq(CodeItem::getDeletedFlag, 0)
+            .ne(excludedId != null, CodeItem::getCodeItemId, excludedId));
+        if (count > 0) throw new BusinessException(ErrorCodeConstants.CODE_CONFLICT, "编码已存在");
+    }
+
+    private CodeItem requireItem(Long id) {
+        CodeItem item = repository.selectById(id);
+        if (item == null || Integer.valueOf(1).equals(item.getDeletedFlag())) {
+            throw new BusinessException(ErrorCodeConstants.RESOURCE_NOT_FOUND, "编码不存在");
+        }
+        return item;
+    }
+
+    private String normalizeType(String value) {
+        return required(value, "编码类型").toLowerCase(Locale.ROOT);
+    }
+
+    private String normalizeStatus(String value) {
+        String status = required(value, "状态").toLowerCase(Locale.ROOT);
+        if (!"enabled".equals(status) && !"disabled".equals(status)) throw validation("编码状态无效");
+        return status;
+    }
+
+    private String required(String value, String field) {
+        if (!StringUtils.hasText(value)) throw validation(field + "不能为空");
+        return value.trim();
+    }
+
+    private void fillCreate(CodeItem item) {
+        LocalDateTime now = LocalDateTime.now();
+        item.setCreatedAt(now); item.setCreatedBy("system");
+        item.setUpdatedAt(now); item.setUpdatedBy("system"); item.setDeletedFlag(0);
+    }
+
+    private void touch(CodeItem item) {
+        item.setUpdatedAt(LocalDateTime.now()); item.setUpdatedBy("system");
+    }
+
+    private CodeItemVO toVO(CodeItem item) {
+        return CodeItemVO.builder().codeItemId(item.getCodeItemId()).codeType(item.getCodeType())
+            .codeValue(item.getCodeValue()).codeName(item.getCodeName()).status(item.getStatus())
+            .sortOrder(item.getSortOrder()).updatedAt(item.getUpdatedAt()).build();
+    }
+
+    private BusinessException validation(String message) {
+        return new BusinessException(ErrorCodeConstants.VALIDATION_ERROR, message);
+    }
+}

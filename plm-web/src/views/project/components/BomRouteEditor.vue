@@ -1,16 +1,21 @@
 <script setup lang="ts">
 import { Delete, Plus } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { ref, watch } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 
 import type { BomRoute } from '@/types/bom'
+import { getEnabledColorCodes, type CodeItem } from '@/api/modules/code'
 
 const props = defineProps<{ modelValue: boolean; routes: BomRoute[]; loading?: boolean }>()
 const emit = defineEmits<{ (event: 'update:modelValue', value: boolean): void; (event: 'save', value: BomRoute[]): void }>()
-const draft = ref<BomRoute[]>([])
+type EditableBomRoute = BomRoute & { selectedColorIds: number[] }
+const draft = ref<EditableBomRoute[]>([])
+const colorCodes = ref<CodeItem[]>([])
 
 function cloneRoutes(routes: BomRoute[]) {
-  return JSON.parse(JSON.stringify(routes)) as BomRoute[]
+  return (JSON.parse(JSON.stringify(routes)) as BomRoute[]).map(route => ({
+    ...route, selectedColorIds: (route.colorItems || []).map(color => color.codeItemId)
+  }))
 }
 
 watch(() => props.modelValue, (visible) => {
@@ -18,7 +23,7 @@ watch(() => props.modelValue, (visible) => {
 }, { immediate: true })
 
 function addRoute() {
-  draft.value.push({ processId: 0, routeCode: '', routeName: '', colors: [], items: [] })
+  draft.value.push({ processId: 0, routeCode: '', routeName: '', colors: [], colorItems: [], selectedColorIds: [], items: [] })
 }
 
 function addItem(route: BomRoute) {
@@ -33,8 +38,11 @@ function addItem(route: BomRoute) {
   })
 }
 
-function updateColors(route: BomRoute, value: string) {
-  route.colors = [...new Set(value.split(/[,，、;；]/).map((color) => color.trim()).filter(Boolean))]
+function updateColors(route: BomRoute, ids: number[]) {
+  route.colorItems = colorCodes.value.filter(color => ids.includes(color.codeItemId)).map(color => ({
+    codeItemId: color.codeItemId, codeValue: color.codeValue, codeName: color.codeName
+  }))
+  route.colors = route.colorItems.map(color => color.codeName)
 }
 
 function save() {
@@ -56,8 +64,10 @@ function save() {
       return
     }
   }
-  emit('save', cloneRoutes(draft.value))
+  emit('save', draft.value.map(({ selectedColorIds, ...route }) => JSON.parse(JSON.stringify(route)) as BomRoute))
 }
+
+onMounted(async () => { colorCodes.value = await getEnabledColorCodes() })
 </script>
 
 <template>
@@ -69,11 +79,11 @@ function save() {
           <el-input-number v-model="route.processId" :min="1" controls-position="right" placeholder="工艺 ID" />
           <el-input v-model="route.routeCode" placeholder="路线编码" />
           <el-input v-model="route.routeName" placeholder="路线名称" />
-          <el-input
-            :model-value="route.colors.join('、')"
-            placeholder="适用颜色，多个用逗号分隔"
-            @update:model-value="updateColors(route, $event)"
-          />
+          <el-checkbox-group v-model="route.selectedColorIds" class="route-color-codes" @change="updateColors(route, route.selectedColorIds)">
+            <el-checkbox v-for="color in colorCodes" :key="color.codeItemId" :value="color.codeItemId" border>
+              {{ color.codeValue }} · {{ color.codeName }}
+            </el-checkbox>
+          </el-checkbox-group>
           <el-button data-test="route-item-add" :icon="Plus" @click="addItem(route)">添加物料</el-button>
           <el-button :icon="Delete" circle title="移除路线" @click="draft.splice(index, 1)" />
         </div>
@@ -109,6 +119,8 @@ function save() {
 .route-editor-list { display: grid; gap: 8px; }
 .route-editor { display: grid; gap: 10px; padding: 10px 0 16px; border-bottom: 1px solid var(--el-border-color-lighter); }
 .route-editor__header { display: grid; grid-template-columns: 120px 140px minmax(150px, 1fr) minmax(180px, 1fr) auto 34px; align-items: center; gap: 8px; }
+.route-color-codes { display: flex; flex-wrap: wrap; gap: 6px; max-height: 84px; overflow-y: auto; padding: 5px; border: 1px solid var(--el-border-color); border-radius: 5px; }
+.route-color-codes :deep(.el-checkbox) { margin: 0; }
 .item-table-wrap { overflow-x: auto; }
 .item-table { width: 100%; min-width: 930px; border-collapse: collapse; table-layout: fixed; }
 .item-table th, .item-table td { padding: 6px; border: 1px solid var(--el-border-color-lighter); text-align: left; }

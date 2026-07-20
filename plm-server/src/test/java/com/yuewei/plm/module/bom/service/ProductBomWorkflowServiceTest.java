@@ -20,6 +20,7 @@ import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.yuewei.plm.module.bom.dto.ProductBomItemDTO;
 import com.yuewei.plm.module.bom.entity.ProductBomItem;
 import org.junit.jupiter.api.Test;
+import com.yuewei.plm.module.code.service.CodeItemService;
 
 class ProductBomWorkflowServiceTest {
 
@@ -54,7 +55,8 @@ class ProductBomWorkflowServiceTest {
         ProductBomItemRepository itemRepository = mock(ProductBomItemRepository.class);
         ProductBomWorkflowService service = new ProductBomWorkflowService(
             bomRepository, mock(ProductBomRouteRepository.class), mock(ProductBomRouteColorRepository.class),
-            itemRepository, mock(ProductBomCostSnapshotRepository.class), new BomCostCalculator(), mock(BomTimelineGate.class)
+            itemRepository, mock(ProductBomCostSnapshotRepository.class), new BomCostCalculator(), mock(BomTimelineGate.class),
+            mock(CodeItemService.class)
         );
         ProductBom testBom = bom(30L, "draft", 0);
         testBom.setBomScope("test");
@@ -81,7 +83,8 @@ class ProductBomWorkflowServiceTest {
             mock(ProductBomItemRepository.class),
             mock(ProductBomCostSnapshotRepository.class),
             new BomCostCalculator(),
-            mock(BomTimelineGate.class)
+            mock(BomTimelineGate.class),
+            mock(CodeItemService.class)
         );
     }
 

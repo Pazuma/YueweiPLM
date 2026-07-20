@@ -19,6 +19,8 @@ public class BomRouteSaveDTO {
     @NotEmpty
     private List<@NotBlank String> colors;
     @Valid
+    private List<BomRouteColorDTO> colorItems;
+    @Valid
     @NotEmpty
     private List<ProductBomItemDTO> items;
     private BigDecimal processCost;

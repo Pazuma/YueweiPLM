@@ -22,6 +22,8 @@ import com.yuewei.plm.module.process.entity.ProcessEntity;
 import com.yuewei.plm.module.process.repository.ProcessRepository;
 import com.yuewei.plm.repository.ProductRepository;
 import com.yuewei.plm.repository.entity.Product;
+import com.yuewei.plm.module.code.entity.CodeItem;
+import com.yuewei.plm.module.code.service.CodeItemService;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -42,6 +44,7 @@ public class ProductionConfirmationService {
     private final ProductBomCostSnapshotRepository costRepository;
     private final ProcessProductionOperationSelectionRepository operationRepository;
     private final ProductProductionColorDecisionRepository colorRepository;
+    private final CodeItemService codeItemService;
 
     @Transactional
     public ProductionConfirmationVO confirmOperations(Long projectId, ProductionOperationConfirmDTO dto) {
@@ -96,6 +99,7 @@ public class ProductionConfirmationService {
                 java.util.LinkedHashMap::new
             )).values().stream().toList();
         for (ProductionColorConfirmDTO.ColorSelection color : colors) {
+            codeItemService.requireEnabledColor(color.getCodeItemId(), color.getColorCode());
             requireColorRoute(projectId, color);
         }
         archiveColors(projectId);
@@ -111,6 +115,8 @@ public class ProductionConfirmationService {
             }
             ProductProductionColorDecision decision = new ProductProductionColorDecision();
             decision.setProductId(projectId);
+            decision.setCodeItemId(color.getCodeItemId());
+            decision.setColorCode(color.getColorCode());
             decision.setColorName(color.getColorName().trim());
             decision.setProductBomId(color.getProductBomId());
             decision.setProductBomRouteId(color.getProductBomRouteId());
@@ -204,7 +210,8 @@ public class ProductionConfirmationService {
         }
         boolean belongsToRoute = !safe(routeColorRepository.selectList(new LambdaQueryWrapper<ProductBomRouteColor>()
             .eq(ProductBomRouteColor::getProductBomRouteId, route.getProductBomRouteId())
-            .eq(ProductBomRouteColor::getColorName, color.getColorName().trim())
+            .eq(ProductBomRouteColor::getCodeItemId, color.getCodeItemId())
+            .eq(ProductBomRouteColor::getColorCode, color.getColorCode())
             .eq(ProductBomRouteColor::getStatus, "active")
             .eq(ProductBomRouteColor::getDeletedFlag, 0))).isEmpty();
         if (!belongsToRoute) {
