@@ -4,6 +4,7 @@ import com.yuewei.plm.common.util.RequestIdUtil;
 import com.yuewei.plm.common.vo.ResponseVO;
 import com.yuewei.plm.module.bom.dto.ProductionColorConfirmDTO;
 import com.yuewei.plm.module.bom.dto.ProductionOperationConfirmDTO;
+import com.yuewei.plm.module.bom.dto.ProductionRouteConfirmDTO;
 import com.yuewei.plm.module.bom.service.ProductionConfirmationService;
 import com.yuewei.plm.module.bom.vo.ProductionConfirmationVO;
 import jakarta.servlet.http.HttpServletRequest;
@@ -32,6 +33,12 @@ public class ProductionConfirmationController {
     public ResponseVO<ProductionConfirmationVO> confirmOperations(@PathVariable Long projectId,
         @Valid @RequestBody ProductionOperationConfirmDTO dto, HttpServletRequest request) {
         return ResponseVO.success(service.confirmOperations(projectId, dto), RequestIdUtil.getRequestId(request), OffsetDateTime.now());
+    }
+
+    @PostMapping("/production-routes/confirm")
+    public ResponseVO<ProductionConfirmationVO> confirmRoutes(@PathVariable Long projectId,
+        @Valid @RequestBody ProductionRouteConfirmDTO dto, HttpServletRequest request) {
+        return ResponseVO.success(service.confirmRoutes(projectId, dto), RequestIdUtil.getRequestId(request), OffsetDateTime.now());
     }
 
     @PostMapping("/production-colors/confirm")

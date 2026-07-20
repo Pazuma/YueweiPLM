@@ -5,7 +5,8 @@ import type {
   BomRoute,
   BomSkuRow,
   BomSummary,
-  BomWorkbench
+  BomWorkbench,
+  ProductionRouteSelection
 } from '@/types/bom'
 import { notConnected } from '../notConnected'
 import request, { unwrapResponse } from '../request'
@@ -42,8 +43,18 @@ export interface ProductBomVO {
   bomCode: string
   bomName: string
   bomType: string
+  bomScope?: 'candidate' | 'formal' | 'test'
   versionNo: string
   status: ProductBomStatus
+  productBomRouteId?: number | null
+  processId?: number | null
+  routeCode?: string | null
+  routeName?: string | null
+  candidateStatus?: string | null
+  currentFormal?: boolean | null
+  materialCount?: number | null
+  totalCost?: number | null
+  frozenFlag?: number | null
   frozenAt?: string | null
   frozenBy?: string | null
   remark?: string | null
@@ -55,6 +66,10 @@ export interface ProductBomSavePayload {
   bomType: string
   versionNo: string
   remark?: string
+}
+
+export interface ProductBomCreatePayload extends ProductBomSavePayload {
+  processId: number
 }
 
 export interface ProductBomItemSavePayload {
@@ -84,7 +99,7 @@ export async function getBomDetail(bomId: number): Promise<ProductBomVO> {
 }
 
 /** POST /api/v1/projects/{projectId}/boms */
-export async function createProjectBom(projectId: number, payload: ProductBomSavePayload) {
+export async function createProjectBom(projectId: number, payload: ProductBomCreatePayload) {
   const response = await request.post(`/projects/${projectId}/boms`, payload)
   return unwrapResponse<ProductBomVO>(response)
 }
@@ -213,7 +228,18 @@ export interface ProductionConfirmation {
   selectedColorCount: number
   createdSkuCount: number
   operationProcessIds: number[]
+  routeSelections: ProductionRouteSelection[]
   colors: string[]
+}
+
+export interface ProductionRouteConfirmPayload {
+  routes: Array<{
+    processId: number
+    productBomId: number
+    productBomRouteId: number
+    operationProcessIds: number[]
+  }>
+  remark?: string
 }
 
 export async function previewHistoricalBomImport(file: File): Promise<BomImportPreview> {
@@ -237,6 +263,10 @@ export async function getProductionConfirmation(projectId: number): Promise<Prod
 
 export async function confirmProductionOperations(projectId: number, payload: { productBomRouteId: number; operationProcessIds: number[] }) {
   return unwrapResponse<ProductionConfirmation>(await request.post(`/projects/${projectId}/production-operations/confirm`, payload))
+}
+
+export async function confirmProductionRoutes(projectId: number, payload: ProductionRouteConfirmPayload) {
+  return unwrapResponse<ProductionConfirmation>(await request.post(`/projects/${projectId}/production-routes/confirm`, payload))
 }
 
 export async function confirmProductionColors(projectId: number, payload: { colors: Array<{ codeItemId: number; colorCode: string; colorName: string; productBomId: number; productBomRouteId: number }> }) {

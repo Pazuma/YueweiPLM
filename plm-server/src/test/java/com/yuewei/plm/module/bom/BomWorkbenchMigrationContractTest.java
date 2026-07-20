@@ -36,4 +36,32 @@ class BomWorkbenchMigrationContractTest {
         assertThat(migration).contains("updated_by");
         assertThat(migration).contains("deleted_flag");
     }
+
+    @Test
+    void migrationDefinesRouteFormalSelectionForCandidateBomConfirmation() throws Exception {
+        Path migrationPath = Path.of(
+            "src/main/resources/db/migration/V20260720_1001__bom_route_formal_selection.sql"
+        );
+
+        assertThat(Files.exists(migrationPath)).isTrue();
+
+        String migration = Files.readString(migrationPath).toLowerCase();
+        assertThat(migration).contains("create table if not exists plm_product_bom_route_formal_selection");
+        assertThat(migration).contains("product_bom_route_formal_selection_id");
+        assertThat(migration).contains("product_id bigint not null");
+        assertThat(migration).contains("product_bom_id bigint not null");
+        assertThat(migration).contains("product_bom_route_id bigint not null");
+        assertThat(migration).contains("process_id bigint not null");
+        assertThat(migration).contains("bom_version_no");
+        assertThat(migration).contains("status varchar(24) not null default 'active'");
+        assertThat(migration).contains("invalidated_at");
+        assertThat(migration).contains("invalidated_reason");
+        assertThat(migration).contains("created_at");
+        assertThat(migration).contains("created_by");
+        assertThat(migration).contains("updated_at");
+        assertThat(migration).contains("updated_by");
+        assertThat(migration).contains("deleted_flag");
+        assertThat(migration).contains("on plm_product_bom_route_formal_selection(product_id, process_id)");
+        assertThat(migration).contains("where status = 'active' and deleted_flag = 0");
+    }
 }

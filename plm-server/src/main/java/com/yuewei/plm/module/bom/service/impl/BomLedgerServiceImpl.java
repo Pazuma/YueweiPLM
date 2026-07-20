@@ -8,10 +8,12 @@ import com.yuewei.plm.module.bom.entity.ProductBomCostSnapshot;
 import com.yuewei.plm.module.bom.entity.ProductBomItem;
 import com.yuewei.plm.module.bom.entity.ProductBomRoute;
 import com.yuewei.plm.module.bom.entity.ProductBomRouteColor;
+import com.yuewei.plm.module.bom.entity.ProductBomRouteFormalSelection;
 import com.yuewei.plm.module.bom.repository.ProductBomCostSnapshotRepository;
 import com.yuewei.plm.module.bom.repository.ProductBomItemRepository;
 import com.yuewei.plm.module.bom.repository.ProductBomRepository;
 import com.yuewei.plm.module.bom.repository.ProductBomRouteColorRepository;
+import com.yuewei.plm.module.bom.repository.ProductBomRouteFormalSelectionRepository;
 import com.yuewei.plm.module.bom.repository.ProductBomRouteRepository;
 import com.yuewei.plm.module.bom.service.BomLedgerService;
 import com.yuewei.plm.module.bom.vo.BomLedgerRowVO;
@@ -27,6 +29,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -39,6 +42,7 @@ public class BomLedgerServiceImpl implements BomLedgerService {
     private final ProductBomRouteColorRepository colorRepository;
     private final ProductBomItemRepository itemRepository;
     private final ProductBomCostSnapshotRepository costRepository;
+    private final ProductBomRouteFormalSelectionRepository formalSelectionRepository;
 
     @Override
     public List<BomLedgerRowVO> listFormal() {
@@ -46,7 +50,8 @@ public class BomLedgerServiceImpl implements BomLedgerService {
             .eq(ProductBom::getBomScope, "formal").eq(ProductBom::getDeletedFlag, 0)
             .eq(ProductBom::getStatus, "released")
             .orderByDesc(ProductBom::getUpdatedAt)));
-        return boms.stream().filter(bom -> "formal".equals(bom.getBomScope()) && "released".equals(bom.getStatus())).map(bom -> {
+        Set<Long> activeFormalBomIds = activeFormalBomIds();
+        return boms.stream().filter(bom -> isLedgerVisible(bom, activeFormalBomIds)).map(bom -> {
             Product product = productRepository.selectById(bom.getProductId());
             return BomLedgerRowVO.builder()
                 .productBomId(bom.getProductBomId()).productId(bom.getProductId()).bomCode(bom.getBomCode())
@@ -57,6 +62,22 @@ public class BomLedgerServiceImpl implements BomLedgerService {
                 .skuCount(countSkusWithoutConflict(bom)).status(bom.getStatus())
                 .sourceType(bom.getSourceType()).updatedAt(bom.getUpdatedAt()).build();
         }).toList();
+    }
+
+    private boolean isLedgerVisible(ProductBom bom, Set<Long> activeFormalBomIds) {
+        if (!"formal".equals(bom.getBomScope()) || !"released".equals(bom.getStatus())) return false;
+        if ("import".equals(bom.getSourceType()) || "history-import".equals(bom.getReleasedBy())) return true;
+        return activeFormalBomIds.contains(bom.getProductBomId());
+    }
+
+    private Set<Long> activeFormalBomIds() {
+        return safe(formalSelectionRepository.selectList(new LambdaQueryWrapper<ProductBomRouteFormalSelection>()
+            .eq(ProductBomRouteFormalSelection::getStatus, "active")
+            .eq(ProductBomRouteFormalSelection::getDeletedFlag, 0)))
+            .stream()
+            .filter(selection -> "active".equals(selection.getStatus()))
+            .map(ProductBomRouteFormalSelection::getProductBomId)
+            .collect(java.util.stream.Collectors.toSet());
     }
 
     @Override

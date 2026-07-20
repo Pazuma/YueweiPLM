@@ -12,6 +12,8 @@ import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.yuewei.plm.common.exception.BusinessException;
 import com.yuewei.plm.module.bom.dto.ProductionColorConfirmDTO;
 import com.yuewei.plm.module.bom.dto.ProductionOperationConfirmDTO;
+import com.yuewei.plm.module.bom.dto.ProductionRouteConfirmDTO;
+import com.yuewei.plm.module.bom.entity.ProductBomRouteFormalSelection;
 import com.yuewei.plm.module.bom.entity.ProductBom;
 import com.yuewei.plm.module.bom.entity.ProductBomCostSnapshot;
 import com.yuewei.plm.module.bom.entity.ProductBomRoute;
@@ -21,6 +23,7 @@ import com.yuewei.plm.module.bom.repository.ProductBomRepository;
 import com.yuewei.plm.module.bom.repository.ProductBomRouteRepository;
 import com.yuewei.plm.module.bom.repository.ProductBomRouteColorRepository;
 import com.yuewei.plm.module.bom.repository.ProductBomCostSnapshotRepository;
+import com.yuewei.plm.module.bom.repository.ProductBomRouteFormalSelectionRepository;
 import com.yuewei.plm.module.bom.repository.ProcessProductionOperationSelectionRepository;
 import com.yuewei.plm.module.bom.repository.ProductProductionColorDecisionRepository;
 import com.yuewei.plm.module.process.entity.ProcessEntity;
@@ -32,6 +35,7 @@ import com.yuewei.plm.repository.entity.Product;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 class ProductionConfirmationServiceTest {
     private ProductRepository productRepository;
@@ -40,6 +44,7 @@ class ProductionConfirmationServiceTest {
     private ProcessRepository processRepository;
     private ProductBomRouteColorRepository routeColorRepository;
     private ProductBomCostSnapshotRepository costRepository;
+    private ProductBomRouteFormalSelectionRepository formalSelectionRepository;
     private ProcessProductionOperationSelectionRepository operationRepository;
     private ProductProductionColorDecisionRepository colorRepository;
     private CodeItemService codeItemService;
@@ -53,19 +58,89 @@ class ProductionConfirmationServiceTest {
         processRepository = mock(ProcessRepository.class);
         routeColorRepository = mock(ProductBomRouteColorRepository.class);
         costRepository = mock(ProductBomCostSnapshotRepository.class);
+        formalSelectionRepository = mock(ProductBomRouteFormalSelectionRepository.class);
         operationRepository = mock(ProcessProductionOperationSelectionRepository.class);
         colorRepository = mock(ProductProductionColorDecisionRepository.class);
         codeItemService = mock(CodeItemService.class);
         service = new ProductionConfirmationService(productRepository, bomRepository, routeRepository,
-            processRepository, routeColorRepository, costRepository, operationRepository, colorRepository, codeItemService);
+            processRepository, routeColorRepository, costRepository, formalSelectionRepository,
+            operationRepository, colorRepository, codeItemService);
+    }
+
+    @Test
+    void confirmRoutesInvalidatesPreviousFormalBomForSameProcess() {
+        Product project = product(10L, "product_line", 10);
+        ProductBom newBom = bom(400L, 10L, "draft");
+        ProductBomRoute newRoute = route(401L, 10L, 501L);
+        newRoute.setProductBomId(400L);
+        ProcessEntity selectedOperation = operation(601L, 501L);
+        ProductBomCostSnapshot cost = new ProductBomCostSnapshot();
+        ProductBomRouteFormalSelection previous = new ProductBomRouteFormalSelection();
+        previous.setProductBomRouteFormalSelectionId(1L);
+        previous.setProductId(10L);
+        previous.setProductBomId(300L);
+        previous.setProductBomRouteId(301L);
+        previous.setProcessId(501L);
+        previous.setStatus("active");
+        previous.setDeletedFlag(0);
+        when(productRepository.selectById(10L)).thenReturn(project);
+        when(bomRepository.selectById(400L)).thenReturn(newBom);
+        when(routeRepository.selectById(401L)).thenReturn(newRoute);
+        when(processRepository.selectById(501L)).thenReturn(operation(501L, null));
+        when(processRepository.selectById(601L)).thenReturn(selectedOperation);
+        when(costRepository.selectList(any(Wrapper.class))).thenReturn(List.of(cost));
+        when(formalSelectionRepository.selectList(any(Wrapper.class))).thenReturn(List.of(previous), List.of());
+
+        ProductionRouteConfirmDTO.RouteSelection routeSelection = new ProductionRouteConfirmDTO.RouteSelection();
+        routeSelection.setProcessId(501L);
+        routeSelection.setProductBomId(400L);
+        routeSelection.setProductBomRouteId(401L);
+        routeSelection.setOperationProcessIds(List.of(601L));
+        ProductionRouteConfirmDTO dto = new ProductionRouteConfirmDTO();
+        dto.setRoutes(List.of(routeSelection));
+        dto.setRemark("切换为新版 BOM");
+
+        service.confirmRoutes(10L, dto);
+
+        ArgumentCaptor<ProductBomRouteFormalSelection> updateCaptor = ArgumentCaptor.forClass(ProductBomRouteFormalSelection.class);
+        verify(formalSelectionRepository).updateById(updateCaptor.capture());
+        assertThat(updateCaptor.getValue().getStatus()).isEqualTo("invalidated");
+        assertThat(updateCaptor.getValue().getInvalidatedReason()).contains("切换为新版 BOM");
+        ArgumentCaptor<ProductBomRouteFormalSelection> insertCaptor = ArgumentCaptor.forClass(ProductBomRouteFormalSelection.class);
+        verify(formalSelectionRepository).insert(insertCaptor.capture());
+        assertThat(insertCaptor.getValue().getProductBomId()).isEqualTo(400L);
+        assertThat(insertCaptor.getValue().getProductBomRouteId()).isEqualTo(401L);
+        assertThat(insertCaptor.getValue().getProcessId()).isEqualTo(501L);
+        verify(operationRepository).insert(any(ProcessProductionOperationSelection.class));
+    }
+
+    @Test
+    void confirmRoutesRejectsOperationsWithoutFormalBomSelection() {
+        Product project = product(10L, "product_line", 10);
+        when(productRepository.selectById(10L)).thenReturn(project);
+        ProductionRouteConfirmDTO.RouteSelection routeSelection = new ProductionRouteConfirmDTO.RouteSelection();
+        routeSelection.setProcessId(501L);
+        routeSelection.setProductBomId(400L);
+        routeSelection.setProductBomRouteId(401L);
+        routeSelection.setOperationProcessIds(List.of());
+        ProductionRouteConfirmDTO dto = new ProductionRouteConfirmDTO();
+        dto.setRoutes(List.of(routeSelection));
+
+        assertThatThrownBy(() -> service.confirmRoutes(10L, dto))
+            .isInstanceOf(BusinessException.class)
+            .hasMessageContaining("请至少选择一道投产工序");
+        verify(formalSelectionRepository, never()).insert(any(ProductBomRouteFormalSelection.class));
+        verify(operationRepository, never()).insert(any(ProcessProductionOperationSelection.class));
     }
 
     @Test
     void confirmOperationsRejectsOperationOutsideSelectedRoute() {
         Product project = product(10L, "product_line", 10);
         ProductBomRoute route = route(100L, 10L, 200L);
+        route.setProductBomId(400L);
         ProcessEntity foreignOperation = operation(301L, 999L);
         when(productRepository.selectById(10L)).thenReturn(project);
+        when(bomRepository.selectById(400L)).thenReturn(bom(400L, 10L, "draft"));
         when(routeRepository.selectById(100L)).thenReturn(route);
         when(processRepository.selectById(301L)).thenReturn(foreignOperation);
 
@@ -95,6 +170,13 @@ class ProductionConfirmationServiceTest {
         routeColor.setColorCode("02");
         routeColor.setColorName("Negro");
         ProductBomCostSnapshot cost = new ProductBomCostSnapshot();
+        ProductBomRouteFormalSelection formal = new ProductBomRouteFormalSelection();
+        formal.setProductId(20L);
+        formal.setProductBomId(400L);
+        formal.setProductBomRouteId(401L);
+        formal.setProcessId(501L);
+        formal.setStatus("active");
+        formal.setDeletedFlag(0);
         ProcessProductionOperationSelection selection = new ProcessProductionOperationSelection();
         selection.setOperationProcessId(601L);
         ProcessEntity routeProcess = operation(501L, null);
@@ -102,6 +184,7 @@ class ProductionConfirmationServiceTest {
         ProcessEntity selectedOperation = operation(601L, 501L);
         when(routeColorRepository.selectList(any(Wrapper.class))).thenReturn(List.of(routeColor));
         when(costRepository.selectList(any(Wrapper.class))).thenReturn(List.of(cost));
+        when(formalSelectionRepository.selectList(any(Wrapper.class))).thenReturn(List.of(formal));
         when(operationRepository.selectList(any(Wrapper.class))).thenReturn(List.of(selection));
         when(processRepository.selectById(501L)).thenReturn(routeProcess);
         when(processRepository.selectById(601L)).thenReturn(selectedOperation);

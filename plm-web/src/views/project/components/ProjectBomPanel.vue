@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { DocumentCopy, Lock, Plus, Promotion, Refresh, Upload } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { computed, ref, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 
 import {
-  confirmTestBom,
   copyBomVersion,
   createProjectBom,
   freezeBom,
@@ -16,6 +15,7 @@ import {
   submitBomReview,
   type ProductBomVO
 } from '@/api/modules/bom'
+import { getProjectProcessRoutes, type ProcessRouteVO } from '@/api/modules/process'
 import type { BomRoute, BomWorkbench } from '@/types/bom'
 
 import BomImportDialog from './BomImportDialog.vue'
@@ -24,21 +24,29 @@ import BomRouteEditor from './BomRouteEditor.vue'
 const props = defineProps<{ projectId: number }>()
 const emit = defineEmits<{ (event: 'changed'): void }>()
 
-const mode = ref<'test' | 'formal'>('formal')
 const loading = ref(false)
 const actionLoading = ref(false)
 const loadError = ref('')
 const boms = ref<ProductBomVO[]>([])
+const processRoutes = ref<ProcessRouteVO[]>([])
 const selectedBomId = ref<number | null>(null)
 const workbench = ref<BomWorkbench | null>(null)
 const importVisible = ref(false)
 const routeEditorVisible = ref(false)
+const createVisible = ref(false)
+const createForm = reactive({
+  bomName: '',
+  bomType: 'mbom',
+  versionNo: '',
+  processId: null as number | null,
+  remark: ''
+})
 
-const formalBoms = computed(() => boms.value.filter((bom) => bom.bomType !== 'test'))
+const candidateBoms = computed(() => boms.value.filter((bom) => bom.bomType !== 'test'))
 const selectedBom = computed(() => boms.value.find((bom) => bom.productBomId === selectedBomId.value) || null)
 const isReadOnly = computed(() => ['released', 'archived'].includes(workbench.value?.status || ''))
 const isFrozen = computed(() =>
-  Boolean((selectedBom.value as ProductBomVO & { frozenFlag?: number })?.frozenFlag)
+  Boolean(selectedBom.value?.frozenFlag)
   || selectedBom.value?.status === 'frozen'
   || isReadOnly.value
 )
@@ -51,8 +59,13 @@ async function load(preferredBomId?: number) {
   loading.value = true
   loadError.value = ''
   try {
-    boms.value = await getProjectBoms(props.projectId)
-    const candidates = boms.value.filter((bom) => bom.bomType !== 'test')
+    const [projectBoms, routes] = await Promise.all([
+      getProjectBoms(props.projectId),
+      getProjectProcessRoutes(props.projectId)
+    ])
+    boms.value = projectBoms
+    processRoutes.value = routes
+    const candidates = projectBoms.filter((bom) => bom.bomType !== 'test')
     selectedBomId.value = candidates.some((bom) => bom.productBomId === preferredBomId)
       ? preferredBomId || null
       : candidates[0]?.productBomId || null
@@ -68,16 +81,42 @@ async function changeVersion() {
   workbench.value = selectedBomId.value ? await getBomWorkbench(selectedBomId.value) : null
 }
 
-async function createFormalBom() {
-  const next = formalBoms.value.length + 1
-  const result = await createProjectBom(props.projectId, {
-    bomName: `正式 BOM V${next}`,
-    bomType: 'mbom',
-    versionNo: `V${next}`,
-    remark: '工作台创建'
-  })
-  await load(result.productBomId)
-  emit('changed')
+function selectBom(row: ProductBomVO) {
+  selectedBomId.value = row.productBomId
+  void changeVersion()
+}
+
+function openCreateBom() {
+  const next = candidateBoms.value.length + 1
+  createForm.bomName = `候选 BOM V${next}`
+  createForm.versionNo = `V${next}`
+  createForm.bomType = 'mbom'
+  createForm.processId = null
+  createForm.remark = '工作台新建候选 BOM'
+  createVisible.value = true
+}
+
+async function submitCreateBom() {
+  if (!createForm.processId) {
+    ElMessage.warning('请选择关联工艺路线')
+    return
+  }
+  actionLoading.value = true
+  try {
+    const result = await createProjectBom(props.projectId, {
+      bomName: createForm.bomName,
+      bomType: createForm.bomType,
+      versionNo: createForm.versionNo,
+      processId: createForm.processId,
+      remark: createForm.remark
+    })
+    createVisible.value = false
+    await load(result.productBomId)
+    emit('changed')
+    ElMessage.success('候选 BOM 已创建')
+  } finally {
+    actionLoading.value = false
+  }
 }
 
 async function saveRoutes(routes: BomRoute[]) {
@@ -114,12 +153,6 @@ async function lifecycle(action: 'cost' | 'review' | 'freeze' | 'publish' | 'cop
   }
 }
 
-async function confirmTest() {
-  await confirmTestBom(props.projectId)
-  ElMessage.success('测试 BOM 成本已确认')
-  emit('changed')
-}
-
 watch(() => props.projectId, () => load(), { immediate: true })
 </script>
 
@@ -128,45 +161,52 @@ watch(() => props.projectId, () => load(), { immediate: true })
     <header class="bom-workbench__header">
       <div>
         <h4>BOM 工作台</h4>
-        <p>在项目流程中维护测试成本、正式版本、路线颜色和路线 BOM。</p>
+        <p>在项目流程中维护候选 BOM、关联工艺路线、路线成本和后续正式确认资料。</p>
       </div>
       <div class="command-row">
         <el-tooltip content="刷新"><el-button :icon="Refresh" circle @click="load(selectedBomId || undefined)" /></el-tooltip>
-        <el-button data-test="bom-create" type="primary" :icon="Plus" @click="createFormalBom">新建正式 BOM</el-button>
+        <el-button data-test="bom-create" type="primary" :icon="Plus" @click="openCreateBom">新建 BOM</el-button>
       </div>
     </header>
 
     <el-alert v-if="loadError" type="error" :title="loadError" show-icon :closable="false" />
 
-    <div class="mode-switch" role="tablist" aria-label="BOM 类型">
-      <button :class="{ active: mode === 'test' }" role="tab" @click="mode = 'test'">测试 BOM</button>
-      <button :class="{ active: mode === 'formal' }" role="tab" @click="mode = 'formal'">正式 BOM</button>
-    </div>
-
-    <div v-if="mode === 'test'" class="mode-panel">
-      <div class="mode-panel__title">
-        <div><strong>测试 BOM</strong><span>确认后只保存单一测试总成本</span></div>
-        <div class="command-row">
-          <el-button :icon="Upload" @click="importVisible = true">导入 XLSX</el-button>
-          <el-button type="primary" :icon="Promotion" @click="confirmTest">确认测试成本</el-button>
-        </div>
-      </div>
-      <el-empty description="测试 BOM 明细通过导入或人工维护后在此显示" />
-    </div>
-
-    <div v-else-if="formalBoms.length" class="mode-panel">
+    <div v-if="candidateBoms.length" class="mode-panel">
       <div class="formal-toolbar">
-        <el-select v-model="selectedBomId" aria-label="选择正式 BOM 版本" @change="changeVersion">
-          <el-option v-for="bom in formalBoms" :key="bom.productBomId" :label="`${bom.versionNo} · ${bom.bomName}`" :value="bom.productBomId" />
+        <el-select v-model="selectedBomId" aria-label="选择候选 BOM 版本" @change="changeVersion">
+          <el-option v-for="bom in candidateBoms" :key="bom.productBomId" :label="`${bom.versionNo} · ${bom.bomName}`" :value="bom.productBomId" />
         </el-select>
+        <el-tag v-if="selectedBom?.currentFormal" type="success" effect="light">当前正式</el-tag>
+        <el-tag v-else effect="light">候选</el-tag>
         <el-tag v-if="isFrozen" type="warning" effect="light">已冻结</el-tag>
-        <el-tag v-else-if="workbench" effect="light">{{ workbench.status }}</el-tag>
+        <el-tag v-if="selectedBom?.routeName" effect="plain">{{ selectedBom.routeName }}</el-tag>
         <div class="command-row command-row--push">
-          <el-button :icon="Upload" :disabled="isFrozen" @click="importVisible = true">导入 XLSX</el-button>
-          <el-button data-test="bom-edit" :disabled="isFrozen" @click="routeEditorVisible = true">维护路线与 BOM</el-button>
-          <el-button data-test="bom-item-add" :disabled="isFrozen" @click="routeEditorVisible = true">添加明细</el-button>
+          <el-button :icon="Upload" :disabled="!selectedBomId || isFrozen" @click="importVisible = true">导入 XLSX</el-button>
+          <el-button data-test="bom-edit" :disabled="!selectedBomId || isFrozen" @click="routeEditorVisible = true">维护路线与 BOM</el-button>
+          <el-button data-test="bom-item-add" :disabled="!selectedBomId || isFrozen" @click="routeEditorVisible = true">添加明细</el-button>
         </div>
       </div>
+
+      <el-table :data="candidateBoms" class="candidate-table" size="small" @row-click="selectBom">
+        <el-table-column prop="versionNo" label="版本" width="90" />
+        <el-table-column prop="bomName" label="BOM 名称" min-width="150" />
+        <el-table-column prop="routeName" label="关联工艺路线" min-width="150" />
+        <el-table-column label="候选状态" width="110">
+          <template #default="{ row }">{{ row.candidateStatus || row.status }}</template>
+        </el-table-column>
+        <el-table-column label="物料数" width="90">
+          <template #default="{ row }">{{ row.materialCount ?? row.items?.length ?? 0 }}</template>
+        </el-table-column>
+        <el-table-column label="试算成本" width="120">
+          <template #default="{ row }">{{ row.totalCost ?? '--' }}</template>
+        </el-table-column>
+        <el-table-column label="正式关系" width="110">
+          <template #default="{ row }">
+            <el-tag v-if="row.currentFormal" type="success" size="small">当前正式</el-tag>
+            <span v-else>候选</span>
+          </template>
+        </el-table-column>
+      </el-table>
 
       <div v-if="workbench?.routes.length" class="route-list">
         <article v-for="route in workbench.routes" :key="route.routeCode" class="route-row">
@@ -176,7 +216,7 @@ watch(() => props.projectId, () => load(), { immediate: true })
           <strong>{{ route.costSnapshot ? `${route.costSnapshot.currencyCode} ${route.costSnapshot.totalCost}` : '待计算' }}</strong>
         </article>
       </div>
-      <el-empty v-else description="当前正式版本尚未维护工艺路线" />
+      <el-empty v-else description="当前候选 BOM 尚未维护工艺路线明细" />
 
       <footer class="lifecycle-bar">
         <el-button :loading="actionLoading" :disabled="isReadOnly" @click="lifecycle('cost')">刷新成本</el-button>
@@ -188,26 +228,54 @@ watch(() => props.projectId, () => load(), { immediate: true })
     </div>
     <el-empty v-else description="当前项目还没有 BOM" />
 
+    <el-dialog v-model="createVisible" title="新建候选 BOM" width="520px" destroy-on-close>
+      <p class="create-dialog__hint">关联工艺路线决定这份候选 BOM 后续在哪条路线下参与成本试算和正式敲定。</p>
+      <el-form label-width="110px">
+        <el-form-item label="BOM 名称">
+          <el-input v-model="createForm.bomName" placeholder="例如：候选 BOM V1" />
+        </el-form-item>
+        <el-form-item label="BOM 类型">
+          <el-select v-model="createForm.bomType">
+            <el-option label="MBOM" value="mbom" />
+            <el-option label="EBOM" value="ebom" />
+            <el-option label="包装 BOM" value="pack" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="版本号">
+          <el-input v-model="createForm.versionNo" placeholder="例如：V1" />
+        </el-form-item>
+        <el-form-item label="关联工艺路线" required>
+          <el-select data-test="bom-route-select" v-model="createForm.processId" placeholder="请选择关联工艺路线" filterable>
+            <el-option v-for="route in processRoutes" :key="route.processId" :label="route.processName" :value="route.processId" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input v-model="createForm.remark" type="textarea" :rows="2" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="createVisible = false">取消</el-button>
+        <el-button data-test="bom-create-submit" type="primary" :loading="actionLoading" @click="submitCreateBom">保存候选 BOM</el-button>
+      </template>
+    </el-dialog>
+
     <BomImportDialog v-model="importVisible" :product-id="projectId" :bom-id="selectedBomId" @committed="load(selectedBomId || undefined)" />
-    <BomRouteEditor v-if="workbench" v-model="routeEditorVisible" :routes="workbench.routes" :loading="actionLoading" @save="saveRoutes" />
+    <BomRouteEditor v-if="routeEditorVisible && workbench" v-model="routeEditorVisible" :routes="workbench.routes" :loading="actionLoading" @save="saveRoutes" />
   </section>
 </template>
 
 <style scoped>
 .bom-workbench { min-width: 0; }
-.bom-workbench__header, .mode-panel__title, .formal-toolbar, .command-row, .lifecycle-bar { display: flex; align-items: center; gap: 10px; }
+.bom-workbench__header, .formal-toolbar, .command-row, .lifecycle-bar { display: flex; align-items: center; gap: 10px; }
 .bom-workbench__header { justify-content: space-between; margin-bottom: 14px; }
 .bom-workbench__header h4, .bom-workbench__header p { margin: 0; }
-.bom-workbench__header p, .mode-panel__title span { color: var(--plm-color-text-secondary); font-size: 13px; }
+.bom-workbench__header p { color: var(--plm-color-text-secondary); font-size: 13px; }
 .mode-panel { margin-top: 14px; }
-.mode-switch { display: inline-grid; grid-template-columns: 1fr 1fr; padding: 3px; border: 1px solid var(--el-border-color); border-radius: 6px; background: var(--el-fill-color-light); }
-.mode-switch button { min-width: 108px; padding: 6px 12px; border: 0; border-radius: 4px; color: var(--plm-color-text-secondary); background: transparent; cursor: pointer; }
-.mode-switch button.active { color: var(--el-color-primary); background: var(--el-bg-color); box-shadow: 0 1px 3px rgb(0 0 0 / 10%); }
-.mode-panel__title { justify-content: space-between; margin-bottom: 12px; }
-.mode-panel__title div:first-child { display: grid; gap: 3px; }
 .formal-toolbar { flex-wrap: wrap; margin-bottom: 12px; }
 .formal-toolbar :deep(.el-select) { width: 260px; }
 .command-row--push { margin-left: auto; }
+.candidate-table { margin-bottom: 14px; }
+.create-dialog__hint { margin: 0 0 12px; color: var(--plm-color-text-secondary); font-size: 13px; }
 .route-list { border-top: 1px solid var(--el-border-color-lighter); }
 .route-row { display: grid; grid-template-columns: minmax(170px, 1.2fr) minmax(180px, 1fr) 100px 110px; align-items: center; gap: 12px; min-height: 58px; border-bottom: 1px solid var(--el-border-color-lighter); }
 .route-row__identity { display: grid; gap: 3px; }
@@ -215,7 +283,7 @@ watch(() => props.projectId, () => load(), { immediate: true })
 .color-list { display: flex; flex-wrap: wrap; gap: 5px; }
 .lifecycle-bar { justify-content: flex-end; flex-wrap: wrap; margin-top: 14px; }
 @media (max-width: 760px) {
-  .bom-workbench__header, .mode-panel__title { align-items: flex-start; flex-direction: column; }
+  .bom-workbench__header { align-items: flex-start; flex-direction: column; }
   .route-row { grid-template-columns: 1fr; padding: 10px 0; }
   .command-row--push { width: 100%; margin-left: 0; flex-wrap: wrap; }
 }

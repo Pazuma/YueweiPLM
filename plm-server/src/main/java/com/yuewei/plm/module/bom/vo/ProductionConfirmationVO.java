@@ -12,5 +12,17 @@ public class ProductionConfirmationVO {
     private Integer selectedColorCount;
     private Integer createdSkuCount;
     private List<Long> operationProcessIds;
+    private List<RouteSelectionVO> routeSelections;
     private List<String> colors;
+
+    @Data
+    @Builder
+    public static class RouteSelectionVO {
+        private Long processId;
+        private Long productBomId;
+        private Long productBomRouteId;
+        private String routeName;
+        private String bomVersionNo;
+        private List<Long> operationProcessIds;
+    }
 }

@@ -5,17 +5,20 @@ import com.yuewei.plm.common.constant.ErrorCodeConstants;
 import com.yuewei.plm.common.exception.BusinessException;
 import com.yuewei.plm.module.bom.dto.ProductionColorConfirmDTO;
 import com.yuewei.plm.module.bom.dto.ProductionOperationConfirmDTO;
+import com.yuewei.plm.module.bom.dto.ProductionRouteConfirmDTO;
 import com.yuewei.plm.module.bom.entity.ProcessProductionOperationSelection;
 import com.yuewei.plm.module.bom.entity.ProductBom;
 import com.yuewei.plm.module.bom.entity.ProductBomRoute;
 import com.yuewei.plm.module.bom.entity.ProductBomRouteColor;
 import com.yuewei.plm.module.bom.entity.ProductBomCostSnapshot;
+import com.yuewei.plm.module.bom.entity.ProductBomRouteFormalSelection;
 import com.yuewei.plm.module.bom.entity.ProductProductionColorDecision;
 import com.yuewei.plm.module.bom.repository.ProcessProductionOperationSelectionRepository;
 import com.yuewei.plm.module.bom.repository.ProductBomRepository;
 import com.yuewei.plm.module.bom.repository.ProductBomRouteRepository;
 import com.yuewei.plm.module.bom.repository.ProductBomRouteColorRepository;
 import com.yuewei.plm.module.bom.repository.ProductBomCostSnapshotRepository;
+import com.yuewei.plm.module.bom.repository.ProductBomRouteFormalSelectionRepository;
 import com.yuewei.plm.module.bom.repository.ProductProductionColorDecisionRepository;
 import com.yuewei.plm.module.bom.vo.ProductionConfirmationVO;
 import com.yuewei.plm.module.process.entity.ProcessEntity;
@@ -26,9 +29,14 @@ import com.yuewei.plm.module.code.entity.CodeItem;
 import com.yuewei.plm.module.code.service.CodeItemService;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,44 +50,84 @@ public class ProductionConfirmationService {
     private final ProcessRepository processRepository;
     private final ProductBomRouteColorRepository routeColorRepository;
     private final ProductBomCostSnapshotRepository costRepository;
+    private final ProductBomRouteFormalSelectionRepository formalSelectionRepository;
     private final ProcessProductionOperationSelectionRepository operationRepository;
     private final ProductProductionColorDecisionRepository colorRepository;
     private final CodeItemService codeItemService;
 
     @Transactional
     public ProductionConfirmationVO confirmOperations(Long projectId, ProductionOperationConfirmDTO dto) {
-        Product project = requireProject(projectId);
         ProductBomRoute route = routeRepository.selectById(dto.getProductBomRouteId());
-        if (route == null || !projectId.equals(route.getProductId()) || !"active".equals(route.getStatus())) {
+        if (route == null) {
             throw validation("工艺路线不属于当前项目或已失效");
         }
-        if (dto.getOperationProcessIds() == null || dto.getOperationProcessIds().isEmpty()) {
-            throw validation("请至少选择一道投产工序");
+        ProductionRouteConfirmDTO.RouteSelection selection = new ProductionRouteConfirmDTO.RouteSelection();
+        selection.setProcessId(route.getProcessId());
+        selection.setProductBomId(route.getProductBomId());
+        selection.setProductBomRouteId(route.getProductBomRouteId());
+        selection.setOperationProcessIds(dto.getOperationProcessIds());
+        ProductionRouteConfirmDTO command = new ProductionRouteConfirmDTO();
+        command.setRoutes(List.of(selection));
+        return confirmRoutes(projectId, command);
+    }
+
+    @Transactional
+    public ProductionConfirmationVO confirmRoutes(Long projectId, ProductionRouteConfirmDTO dto) {
+        Product project = requireProject(projectId);
+        if (dto.getRoutes() == null || dto.getRoutes().isEmpty()) {
+            throw validation("请至少选择一条工艺路线");
         }
-        List<ProcessEntity> operations = dto.getOperationProcessIds().stream().distinct().map(operationId -> {
-            ProcessEntity operation = processRepository.selectById(operationId);
-            if (operation == null || !route.getProcessId().equals(operation.getParentProcessId())) {
-                throw validation("所选工序不属于当前工艺路线");
-            }
-            return operation;
-        }).toList();
-        archiveOperations(projectId, route.getProductBomRouteId());
+        Set<Long> processIds = new HashSet<>();
         String batchNo = UUID.randomUUID().toString();
         LocalDateTime now = LocalDateTime.now();
-        for (ProcessEntity operation : operations) {
-            ProcessProductionOperationSelection value = new ProcessProductionOperationSelection();
-            value.setProductId(projectId);
-            value.setProductBomRouteId(route.getProductBomRouteId());
-            value.setProcessId(route.getProcessId());
-            value.setOperationProcessId(operation.getProcessId());
+        for (ProductionRouteConfirmDTO.RouteSelection selection : dto.getRoutes()) {
+            if (selection.getOperationProcessIds() == null || selection.getOperationProcessIds().isEmpty()) {
+                throw validation("请至少选择一道投产工序");
+            }
+            if (!processIds.add(selection.getProcessId())) {
+                throw validation("同一工艺路线只能选择一份正式 BOM");
+            }
+            ProductBom bom = requireConfirmableBom(projectId, selection.getProductBomId());
+            ProductBomRoute route = requireConfirmableBomRoute(projectId, bom, selection);
+            List<ProcessEntity> operations = requireRouteOperations(route, selection.getOperationProcessIds());
+            requireRouteCost(bom, route);
+            archiveFormalSelections(projectId, route.getProcessId(), dto.getRemark());
+            archiveOperationsByProcess(projectId, route.getProcessId());
+            ProductBomRouteFormalSelection formal = new ProductBomRouteFormalSelection();
+            formal.setProductId(projectId);
+            formal.setProductBomId(bom.getProductBomId());
+            formal.setProductBomRouteId(route.getProductBomRouteId());
+            formal.setProcessId(route.getProcessId());
+            formal.setBomVersionNo(bom.getVersionNo());
+            formal.setSelectionBatchNo(batchNo);
+            formal.setStatus("active");
+            formal.setConfirmedAt(now);
+            formal.setConfirmedBy("system");
+            formal.setRemark(dto.getRemark());
+            fillCreate(formal, now);
+            formalSelectionRepository.insert(formal);
+            if (!"formal".equals(bom.getBomScope())) {
+                bom.setBomScope("formal");
+                bom.setUpdatedAt(now);
+                bom.setUpdatedBy("system");
+                bomRepository.updateById(bom);
+            }
             ProcessEntity routeProcess = processRepository.selectById(route.getProcessId());
-            value.setRouteVersionNo(routeProcess == null ? null : routeProcess.getVersionNo());
-            value.setSelectionBatchNo(batchNo);
-            value.setStatus("confirmed");
-            value.setConfirmedAt(now);
-            value.setConfirmedBy("system");
-            fillCreate(value, now);
-            operationRepository.insert(value);
+            String routeVersionNo = routeProcess == null ? null : routeProcess.getVersionNo();
+            for (ProcessEntity operation : operations) {
+                ProcessProductionOperationSelection value = new ProcessProductionOperationSelection();
+                value.setProductId(projectId);
+                value.setProductBomRouteId(route.getProductBomRouteId());
+                value.setProcessId(route.getProcessId());
+                value.setOperationProcessId(operation.getProcessId());
+                value.setRouteVersionNo(routeVersionNo);
+                value.setSelectionBatchNo(batchNo);
+                value.setStatus("confirmed");
+                value.setConfirmedAt(now);
+                value.setConfirmedBy("system");
+                fillCreate(value, now);
+                operationRepository.insert(value);
+            }
         }
         return get(project.getProductId());
     }
@@ -148,20 +196,41 @@ public class ProductionConfirmationService {
                 .eq(ProductProductionColorDecision::getProductId, projectId)
                 .eq(ProductProductionColorDecision::getStatus, "confirmed")
                 .eq(ProductProductionColorDecision::getDeletedFlag, 0)));
+        Map<Long, List<Long>> operationIdsByRoute = operations.stream()
+            .filter(selection -> selection.getProductBomRouteId() != null)
+            .collect(Collectors.groupingBy(ProcessProductionOperationSelection::getProductBomRouteId,
+                Collectors.mapping(ProcessProductionOperationSelection::getOperationProcessId, Collectors.toList())));
+        List<ProductionConfirmationVO.RouteSelectionVO> routeSelections = activeFormalSelections(projectId).stream()
+            .map(selection -> {
+                ProductBomRoute route = routeRepository.selectById(selection.getProductBomRouteId());
+                return ProductionConfirmationVO.RouteSelectionVO.builder()
+                    .processId(selection.getProcessId())
+                    .productBomId(selection.getProductBomId())
+                    .productBomRouteId(selection.getProductBomRouteId())
+                    .routeName(route == null ? null : route.getRouteName())
+                    .bomVersionNo(selection.getBomVersionNo())
+                    .operationProcessIds(operationIdsByRoute.getOrDefault(selection.getProductBomRouteId(), List.of()))
+                    .build();
+            }).toList();
         return ProductionConfirmationVO.builder().productId(projectId)
             .selectedOperationCount(operations.size()).selectedColorCount(colors.size()).createdSkuCount(0)
             .operationProcessIds(operations.stream().map(ProcessProductionOperationSelection::getOperationProcessId).toList())
+            .routeSelections(routeSelections)
             .colors(colors.stream().map(ProductProductionColorDecision::getColorName).toList()).build();
     }
 
     public void requireOperationsConfirmed(Long projectId) {
         requireProject(projectId);
-        List<ProductBom> boms = activeFormalBoms(projectId);
-        List<ProductBomRoute> routes = boms.stream().flatMap(bom -> activeRoutes(bom.getProductBomId()).stream()).toList();
-        if (routes.isEmpty()) {
+        List<ProductBomRouteFormalSelection> selections = activeFormalSelections(projectId);
+        if (selections.isEmpty()) {
             throw new BusinessException(ErrorCodeConstants.STATUS_TRANSITION_ILLEGAL, "没有可确认的有效 BOM 路线");
         }
-        for (ProductBomRoute route : routes) {
+        for (ProductBomRouteFormalSelection selection : selections) {
+            ProductBomRoute route = routeRepository.selectById(selection.getProductBomRouteId());
+            if (route == null || !"active".equals(route.getStatus()) || Integer.valueOf(1).equals(route.getDeletedFlag())) {
+                throw new BusinessException(ErrorCodeConstants.STATUS_TRANSITION_ILLEGAL,
+                    "已确认路线失效，请重新敲定工序");
+            }
             ProcessEntity routeProcess = processRepository.selectById(route.getProcessId());
             String currentVersion = routeProcess == null ? null : routeProcess.getVersionNo();
             boolean confirmed = safe(operationRepository.selectList(
@@ -181,7 +250,7 @@ public class ProductionConfirmationService {
 
     public void requireBomRoutesDetermined(Long projectId) {
         requireProject(projectId);
-        List<ProductBom> boms = activeFormalBoms(projectId);
+        List<ProductBom> boms = activeProjectBoms(projectId);
         boolean ready = boms.stream().anyMatch(bom -> !safe(routeRepository.selectList(
             new LambdaQueryWrapper<ProductBomRoute>()
                 .eq(ProductBomRoute::getProductBomId, bom.getProductBomId())
@@ -198,6 +267,87 @@ public class ProductionConfirmationService {
         }
     }
 
+    private ProductBom requireConfirmableBom(Long projectId, Long productBomId) {
+        ProductBom bom = bomRepository.selectById(productBomId);
+        if (bom == null || !projectId.equals(bom.getProductId()) || Integer.valueOf(1).equals(bom.getDeletedFlag())) {
+            throw validation("正式 BOM 必须属于当前项目");
+        }
+        if ("archived".equals(bom.getStatus())) {
+            throw validation("已归档 BOM 不能选为正式 BOM");
+        }
+        return bom;
+    }
+
+    private ProductBomRoute requireConfirmableBomRoute(Long projectId, ProductBom bom,
+                                                       ProductionRouteConfirmDTO.RouteSelection selection) {
+        ProductBomRoute route = routeRepository.selectById(selection.getProductBomRouteId());
+        if (route == null || Integer.valueOf(1).equals(route.getDeletedFlag()) || !"active".equals(route.getStatus())) {
+            throw validation("正式 BOM 路线无效");
+        }
+        if (!projectId.equals(route.getProductId()) || !bom.getProductBomId().equals(route.getProductBomId())) {
+            throw validation("正式 BOM 路线不属于当前项目或当前 BOM");
+        }
+        if (!selection.getProcessId().equals(route.getProcessId())) {
+            throw validation("正式 BOM 路线与工艺路线不一致");
+        }
+        return route;
+    }
+
+    private List<ProcessEntity> requireRouteOperations(ProductBomRoute route, List<Long> operationProcessIds) {
+        return operationProcessIds.stream().filter(Objects::nonNull).distinct().map(operationId -> {
+            ProcessEntity operation = processRepository.selectById(operationId);
+            if (operation == null || !route.getProcessId().equals(operation.getParentProcessId())
+                || Integer.valueOf(1).equals(operation.getDeletedFlag())) {
+                throw validation("所选工序不属于当前工艺路线");
+            }
+            return operation;
+        }).toList();
+    }
+
+    private void requireRouteCost(ProductBom bom, ProductBomRoute route) {
+        boolean hasCost = !safe(costRepository.selectList(new LambdaQueryWrapper<ProductBomCostSnapshot>()
+            .eq(ProductBomCostSnapshot::getProductBomId, bom.getProductBomId())
+            .eq(ProductBomCostSnapshot::getProductBomRouteId, route.getProductBomRouteId())
+            .in(ProductBomCostSnapshot::getStatus, List.of("current", "baseline"))
+            .eq(ProductBomCostSnapshot::getDeletedFlag, 0))).isEmpty();
+        if (!hasCost) {
+            throw validation("路线 " + route.getRouteName() + " 尚未完成成本计算");
+        }
+    }
+
+    private void archiveFormalSelections(Long projectId, Long processId, String reason) {
+        LocalDateTime now = LocalDateTime.now();
+        for (ProductBomRouteFormalSelection selection : activeFormalSelections(projectId, processId)) {
+            selection.setStatus("invalidated");
+            selection.setInvalidatedAt(now);
+            selection.setInvalidatedReason(reason == null || reason.isBlank() ? "重新敲定正式 BOM" : reason);
+            selection.setUpdatedAt(now);
+            selection.setUpdatedBy("system");
+            formalSelectionRepository.updateById(selection);
+        }
+    }
+
+    private void archiveOperationsByProcess(Long projectId, Long processId) {
+        LocalDateTime now = LocalDateTime.now();
+        for (ProcessProductionOperationSelection value : safe(operationRepository.selectList(
+            new LambdaQueryWrapper<ProcessProductionOperationSelection>()
+                .eq(ProcessProductionOperationSelection::getProductId, projectId)
+                .eq(ProcessProductionOperationSelection::getProcessId, processId)
+                .eq(ProcessProductionOperationSelection::getDeletedFlag, 0)))) {
+            value.setStatus("archived");
+            value.setDeletedFlag(1);
+            value.setUpdatedAt(now);
+            value.setUpdatedBy("system");
+            operationRepository.updateById(value);
+        }
+    }
+
+    private boolean hasActiveFormalSelection(Long projectId, Long bomId, Long routeId, Long processId) {
+        return activeFormalSelections(projectId, processId).stream()
+            .anyMatch(selection -> bomId.equals(selection.getProductBomId())
+                && routeId.equals(selection.getProductBomRouteId()));
+    }
+
     private void requireColorRoute(Long projectId, ProductionColorConfirmDTO.ColorSelection color) {
         ProductBom bom = bomRepository.selectById(color.getProductBomId());
         ProductBomRoute route = routeRepository.selectById(color.getProductBomRouteId());
@@ -207,6 +357,9 @@ public class ProductionConfirmationService {
         }
         if (route == null || !bom.getProductBomId().equals(route.getProductBomId()) || !"active".equals(route.getStatus())) {
             throw validation("投产颜色关联的工艺路线无效");
+        }
+        if (!hasActiveFormalSelection(projectId, bom.getProductBomId(), route.getProductBomRouteId(), route.getProcessId())) {
+            throw validation("投产颜色必须引用已确认的正式 BOM 路线");
         }
         boolean belongsToRoute = !safe(routeColorRepository.selectList(new LambdaQueryWrapper<ProductBomRouteColor>()
             .eq(ProductBomRouteColor::getProductBomRouteId, route.getProductBomRouteId())
@@ -248,10 +401,29 @@ public class ProductionConfirmationService {
             && !Integer.valueOf(1).equals(operation.getDeletedFlag());
     }
 
-    private List<ProductBom> activeFormalBoms(Long projectId) {
+    private List<ProductBom> activeProjectBoms(Long projectId) {
         return safe(bomRepository.selectList(new LambdaQueryWrapper<ProductBom>()
-            .eq(ProductBom::getProductId, projectId).eq(ProductBom::getBomScope, "formal")
+            .eq(ProductBom::getProductId, projectId)
             .notIn(ProductBom::getStatus, List.of("archived")).eq(ProductBom::getDeletedFlag, 0)));
+    }
+
+    private List<ProductBomRouteFormalSelection> activeFormalSelections(Long projectId) {
+        return safe(formalSelectionRepository.selectList(new LambdaQueryWrapper<ProductBomRouteFormalSelection>()
+            .eq(ProductBomRouteFormalSelection::getProductId, projectId)
+            .eq(ProductBomRouteFormalSelection::getStatus, "active")
+            .eq(ProductBomRouteFormalSelection::getDeletedFlag, 0))).stream()
+            .filter(selection -> "active".equals(selection.getStatus()) && !Integer.valueOf(1).equals(selection.getDeletedFlag()))
+            .toList();
+    }
+
+    private List<ProductBomRouteFormalSelection> activeFormalSelections(Long projectId, Long processId) {
+        return safe(formalSelectionRepository.selectList(new LambdaQueryWrapper<ProductBomRouteFormalSelection>()
+            .eq(ProductBomRouteFormalSelection::getProductId, projectId)
+            .eq(ProductBomRouteFormalSelection::getProcessId, processId)
+            .eq(ProductBomRouteFormalSelection::getStatus, "active")
+            .eq(ProductBomRouteFormalSelection::getDeletedFlag, 0))).stream()
+            .filter(selection -> "active".equals(selection.getStatus()) && !Integer.valueOf(1).equals(selection.getDeletedFlag()))
+            .toList();
     }
 
     private List<ProductBomRoute> activeRoutes(Long bomId) {

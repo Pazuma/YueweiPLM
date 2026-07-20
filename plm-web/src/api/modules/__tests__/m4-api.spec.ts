@@ -36,7 +36,9 @@ import {
   downloadBomImportTemplate,
   downloadBomImportErrors,
   getBomDetail,
-  getProjectBoms
+  getProjectBoms,
+  getProductionConfirmation,
+  confirmProductionRoutes
 } from '../bom'
 import {
   createProcessOperationMaster,
@@ -75,6 +77,7 @@ describe('M4 API contract', () => {
       bomName: '样品 BOM',
       bomType: 'ebom',
       versionNo: 'A',
+      processId: 81,
       remark: 'M4'
     })
     await addBomItem(31, {
@@ -91,6 +94,7 @@ describe('M4 API contract', () => {
       bomName: '样品 BOM',
       bomType: 'ebom',
       versionNo: 'A',
+      processId: 81,
       remark: 'M4'
     })
     expect(requestMock.post).toHaveBeenNthCalledWith(2, '/boms/31/items', {
@@ -100,6 +104,42 @@ describe('M4 API contract', () => {
       unit: 'pcs'
     })
     expect(requestMock.post).toHaveBeenNthCalledWith(3, '/boms/31/freeze')
+  })
+
+  it('confirms formal BOM and production operations per process route', async () => {
+    const confirmation = {
+      productId: 7,
+      selectedOperationCount: 1,
+      selectedColorCount: 0,
+      createdSkuCount: 0,
+      operationProcessIds: [91],
+      routeSelections: [{
+        processId: 9,
+        productBomId: 31,
+        productBomRouteId: 81,
+        routeName: '染色工艺路线',
+        bomVersionNo: 'V1',
+        operationProcessIds: [91]
+      }],
+      colors: []
+    }
+    const payload = {
+      routes: [{
+        processId: 9,
+        productBomId: 31,
+        productBomRouteId: 81,
+        operationProcessIds: [91]
+      }],
+      remark: 'M4 route confirmation'
+    }
+    requestMock.get.mockReturnValueOnce(apiResponse(confirmation))
+    requestMock.post.mockReturnValueOnce(apiResponse(confirmation))
+
+    await expect(getProductionConfirmation(7)).resolves.toEqual(confirmation)
+    await expect(confirmProductionRoutes(7, payload)).resolves.toEqual(confirmation)
+
+    expect(requestMock.get).toHaveBeenCalledWith('/projects/7/production-confirmation')
+    expect(requestMock.post).toHaveBeenCalledWith('/projects/7/production-routes/confirm', payload)
   })
 
   it('uses workbench ledger route cost lifecycle inheritance and import endpoints', async () => {

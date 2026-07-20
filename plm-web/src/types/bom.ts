@@ -48,7 +48,7 @@ export interface BomCenterSnapshot {
   trend: BomTrendPoint[]
 }
 
-export type BomScope = 'test' | 'formal'
+export type BomScope = 'test' | 'formal' | 'candidate'
 export type BomLifecycleStatus = 'draft' | 'reviewing' | 'released' | 'archived' | 'confirmed'
 
 export interface BomItem {
@@ -109,6 +109,15 @@ export interface BomWorkbench {
   calculatedAt?: string | null
   testItems: BomItem[]
   routes: BomRoute[]
+}
+
+export interface ProductionRouteSelection {
+  processId: number
+  productBomId: number
+  productBomRouteId: number
+  routeName?: string | null
+  bomVersionNo?: string | null
+  operationProcessIds: number[]
 }
 
 export interface BomLedgerRow {

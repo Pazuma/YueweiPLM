@@ -10,10 +10,12 @@ import com.yuewei.plm.common.exception.BusinessException;
 import com.yuewei.plm.module.bom.entity.ProductBom;
 import com.yuewei.plm.module.bom.entity.ProductBomRoute;
 import com.yuewei.plm.module.bom.entity.ProductBomRouteColor;
+import com.yuewei.plm.module.bom.entity.ProductBomRouteFormalSelection;
 import com.yuewei.plm.module.bom.repository.ProductBomCostSnapshotRepository;
 import com.yuewei.plm.module.bom.repository.ProductBomItemRepository;
 import com.yuewei.plm.module.bom.repository.ProductBomRepository;
 import com.yuewei.plm.module.bom.repository.ProductBomRouteColorRepository;
+import com.yuewei.plm.module.bom.repository.ProductBomRouteFormalSelectionRepository;
 import com.yuewei.plm.module.bom.repository.ProductBomRouteRepository;
 import com.yuewei.plm.repository.ProductRepository;
 import com.yuewei.plm.repository.entity.Product;
@@ -27,16 +29,24 @@ class BomLedgerServiceImplTest {
     void ledgerReturnsFormalBomsOnly() {
         ProductBomRepository bomRepository = mock(ProductBomRepository.class);
         ProductRepository productRepository = mock(ProductRepository.class);
-        BomLedgerServiceImpl service = service(bomRepository, productRepository);
+        ProductBomRouteFormalSelectionRepository formalSelectionRepository = mock(ProductBomRouteFormalSelectionRepository.class);
+        BomLedgerServiceImpl service = service(bomRepository, productRepository, formalSelectionRepository);
         ProductBom formal = bom(10L, "formal", "released");
-        ProductBom draft = bom(11L, "formal", "draft");
-        ProductBom test = bom(12L, "test", "confirmed");
-        when(bomRepository.selectList(Mockito.<Wrapper<ProductBom>>any())).thenReturn(List.of(formal, draft, test));
+        ProductBom unselectedCandidate = bom(11L, "candidate", "released");
+        ProductBom draft = bom(12L, "formal", "draft");
+        ProductBom test = bom(13L, "test", "confirmed");
+        ProductBom unselectedFormal = bom(14L, "formal", "released");
+        ProductBom historicalImport = bom(15L, "formal", "released");
+        historicalImport.setSourceType("import");
+        when(bomRepository.selectList(Mockito.<Wrapper<ProductBom>>any()))
+            .thenReturn(List.of(formal, unselectedCandidate, draft, test, unselectedFormal, historicalImport));
+        when(formalSelectionRepository.selectList(Mockito.<Wrapper<ProductBomRouteFormalSelection>>any()))
+            .thenReturn(List.of(formalSelection(10L)));
         when(productRepository.selectById(1L)).thenReturn(product(1L, null, "蓝色"));
 
         var rows = service.listFormal();
 
-        assertThat(rows).extracting("productBomId").containsExactly(10L);
+        assertThat(rows).extracting("productBomId").containsExactly(10L, 15L);
     }
 
     @Test
@@ -47,7 +57,8 @@ class BomLedgerServiceImplTest {
         ProductBomRouteColorRepository colorRepository = mock(ProductBomRouteColorRepository.class);
         BomLedgerServiceImpl service = new BomLedgerServiceImpl(
             productRepository, bomRepository, routeRepository, colorRepository,
-            mock(ProductBomItemRepository.class), mock(ProductBomCostSnapshotRepository.class)
+            mock(ProductBomItemRepository.class), mock(ProductBomCostSnapshotRepository.class),
+            mock(ProductBomRouteFormalSelectionRepository.class)
         );
         when(bomRepository.selectById(10L)).thenReturn(bom(10L, "formal", "released"));
         when(productRepository.selectList(Mockito.<Wrapper<Product>>any()))
@@ -62,11 +73,12 @@ class BomLedgerServiceImplTest {
             .hasMessageContaining("蓝色");
     }
 
-    private BomLedgerServiceImpl service(ProductBomRepository bomRepository, ProductRepository productRepository) {
+    private BomLedgerServiceImpl service(ProductBomRepository bomRepository, ProductRepository productRepository,
+                                         ProductBomRouteFormalSelectionRepository formalSelectionRepository) {
         return new BomLedgerServiceImpl(
             productRepository, bomRepository, mock(ProductBomRouteRepository.class),
             mock(ProductBomRouteColorRepository.class), mock(ProductBomItemRepository.class),
-            mock(ProductBomCostSnapshotRepository.class)
+            mock(ProductBomCostSnapshotRepository.class), formalSelectionRepository
         );
     }
 
@@ -109,5 +121,16 @@ class BomLedgerServiceImplTest {
         color.setStatus("active");
         color.setDeletedFlag(0);
         return color;
+    }
+
+    private ProductBomRouteFormalSelection formalSelection(Long bomId) {
+        ProductBomRouteFormalSelection value = new ProductBomRouteFormalSelection();
+        value.setProductId(1L);
+        value.setProductBomId(bomId);
+        value.setProductBomRouteId(100L);
+        value.setProcessId(200L);
+        value.setStatus("active");
+        value.setDeletedFlag(0);
+        return value;
     }
 }

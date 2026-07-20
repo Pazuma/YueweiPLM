@@ -10,20 +10,27 @@ import com.yuewei.plm.module.bom.dto.ProductBomItemDTO;
 import com.yuewei.plm.module.bom.dto.ProductBomUpdateDTO;
 import com.yuewei.plm.module.bom.entity.ProductBom;
 import com.yuewei.plm.module.bom.entity.ProductBomItem;
+import com.yuewei.plm.module.bom.entity.ProductBomRoute;
+import com.yuewei.plm.module.bom.entity.ProductBomRouteFormalSelection;
 import com.yuewei.plm.module.bom.repository.ProductBomItemRepository;
 import com.yuewei.plm.module.bom.repository.ProductBomRepository;
+import com.yuewei.plm.module.bom.repository.ProductBomRouteFormalSelectionRepository;
+import com.yuewei.plm.module.bom.repository.ProductBomRouteRepository;
 import com.yuewei.plm.module.bom.service.ProductBomService;
 import com.yuewei.plm.module.bom.vo.ProductBomItemVO;
 import com.yuewei.plm.module.bom.vo.ProductBomVO;
 import com.yuewei.plm.module.operationlog.constant.OperationActionConstants;
 import com.yuewei.plm.module.operationlog.service.OperationLogCreateCommand;
 import com.yuewei.plm.module.operationlog.service.OperationLogService;
+import com.yuewei.plm.module.process.entity.ProcessEntity;
+import com.yuewei.plm.module.process.repository.ProcessRepository;
 import com.yuewei.plm.repository.ProductRepository;
 import com.yuewei.plm.repository.entity.Product;
 import jakarta.servlet.http.HttpServletRequest;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,34 +42,53 @@ public class ProductBomServiceImpl implements ProductBomService {
 
     private static final String STATUS_DRAFT = "draft";
     private static final String STATUS_FROZEN = "frozen";
+    private static final String BOM_SCOPE_CANDIDATE = "candidate";
+    private static final String PROCESS_TYPE_ROUTING = "routing";
 
     private final ProductRepository productRepository;
     private final ProductBomRepository productBomRepository;
     private final ProductBomItemRepository productBomItemRepository;
+    private final ProductBomRouteRepository productBomRouteRepository;
+    private final ProductBomRouteFormalSelectionRepository productBomRouteFormalSelectionRepository;
+    private final ProcessRepository processRepository;
     private final OperationLogService operationLogService;
 
     @Override
     public List<ProductBomVO> listByProject(Long projectId) {
         getProductOrThrow(projectId);
+        Set<Long> currentFormalBomIds = currentFormalBomIds(projectId);
         return productBomRepository.selectList(new LambdaQueryWrapper<ProductBom>()
                 .eq(ProductBom::getProductId, projectId)
                 .eq(ProductBom::getDeletedFlag, 0)
                 .orderByDesc(ProductBom::getProductBomId))
             .stream()
-            .map(bom -> ProductBomVO.from(bom, listItems(bom.getProductBomId())))
+            .map(bom -> ProductBomVO.from(
+                bom,
+                listItems(bom.getProductBomId()),
+                firstActiveRoute(bom.getProductBomId()),
+                currentFormalBomIds.contains(bom.getProductBomId()),
+                null
+            ))
             .toList();
     }
 
     @Override
     public ProductBomVO getById(Long bomId) {
         ProductBom bom = getBomOrThrow(bomId);
-        return ProductBomVO.from(bom, listItems(bom.getProductBomId()));
+        return ProductBomVO.from(
+            bom,
+            listItems(bom.getProductBomId()),
+            firstActiveRoute(bom.getProductBomId()),
+            currentFormalBomIds(bom.getProductId()).contains(bom.getProductBomId()),
+            null
+        );
     }
 
     @Override
     @Transactional
     public ProductBomVO create(Long projectId, ProductBomCreateDTO dto, HttpServletRequest request) {
         Product product = getProductOrThrow(projectId);
+        ProcessEntity processRoute = requireProjectRoute(projectId, dto.getProcessId());
         LocalDateTime now = LocalDateTime.now();
         String operator = currentUserName();
         ProductBom bom = new ProductBom();
@@ -70,11 +96,24 @@ public class ProductBomServiceImpl implements ProductBomService {
         bom.setBomCode("BOM-" + projectId + "-" + System.currentTimeMillis());
         bom.setBomName(dto.getBomName());
         bom.setBomType(dto.getBomType());
+        bom.setBomScope(BOM_SCOPE_CANDIDATE);
+        bom.setSourceType("manual");
         bom.setVersionNo(dto.getVersionNo());
         bom.setStatus(STATUS_DRAFT);
+        bom.setCurrencyCode("CNY");
+        bom.setFrozenFlag(0);
         bom.setRemark(dto.getRemark());
         fillCreateAudit(bom, now, operator);
         productBomRepository.insert(bom);
+        ProductBomRoute route = new ProductBomRoute();
+        route.setProductBomId(bom.getProductBomId());
+        route.setProductId(projectId);
+        route.setProcessId(processRoute.getProcessId());
+        route.setRouteCode(processRoute.getProcessCode());
+        route.setRouteName(processRoute.getProcessName());
+        route.setStatus("active");
+        fillCreateAudit(route, now, operator);
+        productBomRouteRepository.insert(route);
         writeLog(OperationActionConstants.BOM_CREATE, bom, product, "{\"action\":\"create\"}", request);
         return getById(bom.getProductBomId());
     }
@@ -203,6 +242,40 @@ public class ProductBomServiceImpl implements ProductBomService {
             .stream()
             .map(ProductBomItemVO::from)
             .toList();
+    }
+
+    private ProductBomRoute firstActiveRoute(Long bomId) {
+        List<ProductBomRoute> routes = productBomRouteRepository.selectList(new LambdaQueryWrapper<ProductBomRoute>()
+            .eq(ProductBomRoute::getProductBomId, bomId)
+            .eq(ProductBomRoute::getStatus, "active")
+            .eq(ProductBomRoute::getDeletedFlag, 0)
+            .orderByAsc(ProductBomRoute::getProductBomRouteId));
+        return routes == null || routes.isEmpty() ? null : routes.get(0);
+    }
+
+    private Set<Long> currentFormalBomIds(Long productId) {
+        List<ProductBomRouteFormalSelection> selections = productBomRouteFormalSelectionRepository.selectList(
+            new LambdaQueryWrapper<ProductBomRouteFormalSelection>()
+                .eq(ProductBomRouteFormalSelection::getProductId, productId)
+                .eq(ProductBomRouteFormalSelection::getStatus, "active")
+                .eq(ProductBomRouteFormalSelection::getDeletedFlag, 0));
+        return selections == null ? Set.of() : selections.stream()
+            .map(ProductBomRouteFormalSelection::getProductBomId)
+            .collect(java.util.stream.Collectors.toSet());
+    }
+
+    private ProcessEntity requireProjectRoute(Long projectId, Long processId) {
+        ProcessEntity route = processRepository.selectById(processId);
+        if (route == null || Integer.valueOf(1).equals(route.getDeletedFlag())) {
+            throw new BusinessException(ErrorCodeConstants.RESOURCE_NOT_FOUND, "工艺路线不存在");
+        }
+        if (!projectId.equals(route.getProductId()) || !PROCESS_TYPE_ROUTING.equals(route.getProcessType())) {
+            throw new BusinessException(ErrorCodeConstants.VALIDATION_ERROR, "工艺路线不属于当前项目");
+        }
+        if ("archived".equals(route.getStatus())) {
+            throw new BusinessException(ErrorCodeConstants.VALIDATION_ERROR, "工艺路线已归档，不能关联 BOM");
+        }
+        return route;
     }
 
     private void requireUniqueLineNo(Long bomId, Integer lineNo, Long currentItemId) {
