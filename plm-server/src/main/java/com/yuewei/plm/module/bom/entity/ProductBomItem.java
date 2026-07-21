@@ -29,7 +29,12 @@ public class ProductBomItem extends BaseEntity {
     private String unit;
     private BigDecimal lossRate;
     private BigDecimal unitCostSnapshot;
+    private String supplierCodeSnapshot;
+    private String supplierNameSnapshot;
+    private BigDecimal lineCostSnapshot;
     private String currencyCode;
+    private String materialSource;
+    private Integer unmatchedFlag;
     private Integer substituteFlag;
     private String remark;
     private String versionNo;

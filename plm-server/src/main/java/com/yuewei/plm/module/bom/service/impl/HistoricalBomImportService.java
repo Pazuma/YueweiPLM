@@ -44,7 +44,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class HistoricalBomImportService {
     private static final List<String> HEADERS = List.of(
         "产品编码", "BOM版本", "行号", "路线编码", "路线名称", "适用颜色", "物料编码", "物料名称",
-        "规格", "单位", "用量", "损耗率", "替代料标识", "备注"
+        "规格", "单位", "用量", "供应商", "单价", "单个成本", "损耗率", "替代料标识", "备注"
     );
 
     private final ProductBomImportBatchRepository batchRepository;
@@ -175,6 +175,18 @@ public class HistoricalBomImportService {
             return;
         }
         try {
+            BomMaterialLookup.Material matched = material.get();
+            String itemName = text(row, 7, formatter);
+            String specification = text(row, 8, formatter);
+            String unit = text(row, 9, formatter);
+            String supplierName = text(row, 11, formatter);
+            BigDecimal unitCost = decimalOrNull(text(row, 12, formatter));
+            BigDecimal lineCost = decimalOrNull(text(row, 13, formatter));
+            if (itemName.isBlank()) itemName = matched.inventoryName();
+            if (specification.isBlank()) specification = matched.specification();
+            if (unit.isBlank()) unit = matched.unit();
+            if (supplierName.isBlank()) supplierName = matched.supplierName();
+            if (unitCost == null) unitCost = matched.unitCost();
             BomImportRowVO value = new BomImportRowVO();
             value.setProductId(product.getProductId());
             value.setProductCode(productCode);
@@ -188,18 +200,24 @@ public class HistoricalBomImportService {
             List<BomRouteColorDTO> colorItems = colorCodes.stream().map(this::requireEnabledColor).toList();
             value.setColorItems(colorItems);
             value.setColors(colorItems.stream().map(BomRouteColorDTO::getCodeName).toList());
-            value.setInventoryId(material.get().inventoryId());
+            value.setInventoryId(matched.inventoryId());
             value.setItemCode(materialCode);
-            value.setItemName(material.get().inventoryName());
-            value.setSpecification(text(row, 8, formatter));
-            value.setUnit(required(text(row, 9, formatter), "单位"));
+            value.setItemName(required(itemName, "物料名称"));
+            value.setSpecification(specification);
+            value.setUnit(required(unit, "单位"));
             value.setQuantity(new BigDecimal(required(text(row, 10, formatter), "用量")));
-            value.setLossRate(text(row, 11, formatter).isBlank() ? BigDecimal.ZERO : new BigDecimal(text(row, 11, formatter)));
-            value.setUnitCost(material.get().unitCost());
-            value.setCurrencyCode(material.get().currencyCode());
-            value.setSubstituteFlag("1".equals(text(row, 12, formatter)) ? 1 : 0);
-            value.setRemark(text(row, 13, formatter));
+            value.setSupplierName(supplierName);
+            value.setUnitCost(unitCost == null ? BigDecimal.ZERO : unitCost);
+            value.setLineCost(lineCost == null ? value.getQuantity().multiply(value.getUnitCost()) : lineCost);
+            value.setLossRate(text(row, 14, formatter).isBlank() ? BigDecimal.ZERO : new BigDecimal(text(row, 14, formatter)));
+            value.setCurrencyCode(matched.currencyCode() == null || matched.currencyCode().isBlank() ? "CNY" : matched.currencyCode());
+            value.setMaterialSource("inventory");
+            value.setUnmatchedFlag(0);
+            value.setSubstituteFlag("1".equals(text(row, 15, formatter)) ? 1 : 0);
+            value.setRemark(text(row, 16, formatter));
             if (value.getQuantity().compareTo(BigDecimal.ZERO) <= 0) throw new IllegalArgumentException("用量必须大于 0");
+            if (value.getUnitCost().compareTo(BigDecimal.ZERO) < 0) throw new IllegalArgumentException("单价不能为负数");
+            if (value.getLineCost().compareTo(BigDecimal.ZERO) < 0) throw new IllegalArgumentException("单个成本不能为负数");
             rows.add(value);
         } catch (Exception exception) {
             errors.add(new BomImportErrorVO(sourceRowNo, "数据", "", exception.getMessage()));
@@ -254,6 +272,9 @@ public class HistoricalBomImportService {
         item.setInventoryId(row.getInventoryId()); item.setItemCode(row.getItemCode()); item.setItemName(row.getItemName());
         item.setSpecification(row.getSpecification()); item.setLineNo(row.getLineNo()); item.setQuantity(row.getQuantity());
         item.setUnit(row.getUnit()); item.setLossRate(row.getLossRate()); item.setUnitCost(row.getUnitCost());
+        item.setLineCost(row.getLineCost()); item.setSupplierCode(row.getSupplierCode()); item.setSupplierName(row.getSupplierName());
+        item.setCurrencyCode(row.getCurrencyCode()); item.setMaterialSource(row.getMaterialSource()); item.setUnmatchedFlag(row.getUnmatchedFlag());
+        item.setLookupMessage(row.getLookupMessage());
         item.setSubstituteFlag(row.getSubstituteFlag()); item.setRemark(row.getRemark());
         return item;
     }
@@ -294,6 +315,10 @@ public class HistoricalBomImportService {
 
     private String text(Row row, int cell, DataFormatter formatter) {
         return formatter.formatCellValue(row.getCell(cell)).trim();
+    }
+
+    private BigDecimal decimalOrNull(String value) {
+        return value == null || value.isBlank() ? null : new BigDecimal(value.trim());
     }
 
     private void fillCreate(com.yuewei.plm.repository.entity.BaseEntity value) {

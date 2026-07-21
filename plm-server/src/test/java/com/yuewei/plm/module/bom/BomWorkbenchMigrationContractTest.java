@@ -64,4 +64,23 @@ class BomWorkbenchMigrationContractTest {
         assertThat(migration).contains("on plm_product_bom_route_formal_selection(product_id, process_id)");
         assertThat(migration).contains("where status = 'active' and deleted_flag = 0");
     }
+
+    @Test
+    void migrationDefinesBomItemSupplierPriceAndManualMaterialSnapshots() throws Exception {
+        Path migrationPath = Path.of(
+            "src/main/resources/db/migration/V20260721_1000__bom_item_supplier_price_snapshot.sql"
+        );
+
+        assertThat(Files.exists(migrationPath)).isTrue();
+
+        String migration = Files.readString(migrationPath).toLowerCase();
+        assertThat(migration).contains("alter table if exists plm_product_bom_item");
+        assertThat(migration).contains("supplier_code_snapshot");
+        assertThat(migration).contains("supplier_name_snapshot");
+        assertThat(migration).contains("line_cost_snapshot");
+        assertThat(migration).contains("material_source varchar(16) not null default 'inventory'");
+        assertThat(migration).contains("unmatched_flag integer not null default 0");
+        assertThat(migration).contains("idx_plm_product_bom_item_material_source");
+        assertThat(migration).contains("where deleted_flag = 0");
+    }
 }

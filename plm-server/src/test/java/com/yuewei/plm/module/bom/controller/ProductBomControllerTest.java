@@ -28,6 +28,9 @@ class ProductBomControllerTest {
         assertThat(workbench).contains("/products/{productId}/boms/import/preview");
         assertThat(workbench).contains("/boms/import/{importToken}/commit");
         assertThat(workbench).contains("/boms/import/template");
+        assertThat(Files.readString(Path.of(
+            "src/main/java/com/yuewei/plm/module/bom/controller/BomMaterialLookupController.java"
+        ))).contains("/inventories/material-lookup");
         assertThat(ledger).contains("/bom-ledger");
         assertThat(ledger).contains("/boms/{bomId}/skus");
         assertThat(ledger).contains("/process-routes/{routeId}/skus");

@@ -1,7 +1,9 @@
 package com.yuewei.plm.module.bom.service;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.mockito.ArgumentMatchers.any;
 
@@ -15,11 +17,14 @@ import com.yuewei.plm.module.bom.repository.ProductBomRouteColorRepository;
 import com.yuewei.plm.module.bom.repository.ProductBomRouteRepository;
 import java.util.List;
 import java.math.BigDecimal;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.yuewei.plm.module.bom.dto.ProductBomItemDTO;
 import com.yuewei.plm.module.bom.entity.ProductBomItem;
+import com.yuewei.plm.module.bom.entity.ProductBomRoute;
 import org.junit.jupiter.api.Test;
+import com.yuewei.plm.module.code.entity.CodeItem;
 import com.yuewei.plm.module.code.service.CodeItemService;
 
 class ProductBomWorkflowServiceTest {
@@ -75,6 +80,60 @@ class ProductBomWorkflowServiceTest {
         org.mockito.Mockito.verify(bomRepository).updateById(testBom);
     }
 
+    @Test
+    void saveRoutesPersistsSupplierLineCostAndManualFlags() {
+        ProductBomRepository bomRepository = mock(ProductBomRepository.class);
+        ProductBomRouteRepository routeRepository = mock(ProductBomRouteRepository.class);
+        ProductBomRouteColorRepository colorRepository = mock(ProductBomRouteColorRepository.class);
+        ProductBomItemRepository itemRepository = mock(ProductBomItemRepository.class);
+        CodeItemService codeItemService = mock(CodeItemService.class);
+        ProductBom bom = bom(10L, "draft", 0);
+        bom.setVersionNo("V1");
+        bom.setCurrencyCode("CNY");
+        when(bomRepository.selectById(10L)).thenReturn(bom);
+        when(routeRepository.selectList(Mockito.<Wrapper<ProductBomRoute>>any())).thenReturn(List.of());
+        when(itemRepository.selectList(Mockito.<Wrapper<ProductBomItem>>any())).thenReturn(List.of());
+        when(codeItemService.requireEnabledColor(null, "02")).thenReturn(color(2L, "02", "Negro"));
+        Mockito.doAnswer(invocation -> {
+            ProductBomRoute inserted = invocation.getArgument(0);
+            inserted.setProductBomRouteId(700L);
+            return 1;
+        }).when(routeRepository).insert(any(ProductBomRoute.class));
+        ProductBomWorkflowService service = new ProductBomWorkflowService(
+            bomRepository, routeRepository, colorRepository, itemRepository, mock(ProductBomCostSnapshotRepository.class),
+            new BomCostCalculator(), mock(BomTimelineGate.class), codeItemService
+        );
+        ProductBomItemDTO item = new ProductBomItemDTO();
+        item.setLineNo(1);
+        item.setItemCode("MAT-001");
+        item.setItemName("TPU 原料");
+        item.setQuantity(new BigDecimal("2"));
+        item.setUnit("kg");
+        item.setUnitCost(new BigDecimal("12.50"));
+        item.setLineCost(new BigDecimal("25.00"));
+        item.setSupplierCode("SUP-A");
+        item.setSupplierName("东莞塑胶 A");
+        item.setCurrencyCode("MXN");
+        item.setMaterialSource("manual");
+        item.setUnmatchedFlag(1);
+        BomRouteSaveDTO route = route(100L, "DYE", List.of("02"));
+        route.setItems(List.of(item));
+
+        service.saveRoutes(10L, List.of(route));
+
+        ArgumentCaptor<ProductBomItem> captor = ArgumentCaptor.forClass(ProductBomItem.class);
+        verify(itemRepository).insert(captor.capture());
+        ProductBomItem inserted = captor.getValue();
+        assertThat(inserted.getProductBomRouteId()).isEqualTo(700L);
+        assertThat(inserted.getSupplierCodeSnapshot()).isEqualTo("SUP-A");
+        assertThat(inserted.getSupplierNameSnapshot()).isEqualTo("东莞塑胶 A");
+        assertThat(inserted.getUnitCostSnapshot()).isEqualByComparingTo("12.50");
+        assertThat(inserted.getLineCostSnapshot()).isEqualByComparingTo("25.00");
+        assertThat(inserted.getCurrencyCode()).isEqualTo("MXN");
+        assertThat(inserted.getMaterialSource()).isEqualTo("manual");
+        assertThat(inserted.getUnmatchedFlag()).isEqualTo(1);
+    }
+
     private ProductBomWorkflowService service(ProductBomRepository bomRepository) {
         return new ProductBomWorkflowService(
             bomRepository,
@@ -106,5 +165,16 @@ class ProductBomWorkflowServiceTest {
         route.setColors(colors);
         route.setItems(List.of());
         return route;
+    }
+
+    private CodeItem color(Long id, String code, String name) {
+        CodeItem item = new CodeItem();
+        item.setCodeItemId(id);
+        item.setCodeType("color");
+        item.setCodeValue(code);
+        item.setCodeName(name);
+        item.setStatus("enabled");
+        item.setDeletedFlag(0);
+        return item;
     }
 }

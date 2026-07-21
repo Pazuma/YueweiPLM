@@ -24,7 +24,13 @@ public class BomImportRowVO {
     private BigDecimal quantity;
     private BigDecimal lossRate;
     private BigDecimal unitCost;
+    private BigDecimal lineCost;
+    private String supplierCode;
+    private String supplierName;
     private String currencyCode;
+    private String materialSource;
+    private Integer unmatchedFlag;
+    private String lookupMessage;
     private Integer substituteFlag;
     private String remark;
 }

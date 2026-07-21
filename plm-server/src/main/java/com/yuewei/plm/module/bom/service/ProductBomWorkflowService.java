@@ -264,6 +264,14 @@ public class ProductBomWorkflowService {
             && (dto.getLossRate().compareTo(BigDecimal.ZERO) < 0 || dto.getLossRate().compareTo(BigDecimal.ONE) > 0)) {
             throw validation("损耗率必须在 0 到 1 之间");
         }
+        if (dto.getUnitCost() != null && dto.getUnitCost().compareTo(BigDecimal.ZERO) < 0) {
+            throw validation("单价不能为负数");
+        }
+        if (dto.getLineCost() != null && dto.getLineCost().compareTo(BigDecimal.ZERO) < 0) {
+            throw validation("单个成本不能为负数");
+        }
+        BigDecimal unitCost = dto.getUnitCost() == null ? BigDecimal.ZERO : dto.getUnitCost();
+        BigDecimal lineCost = dto.getLineCost() == null ? dto.getQuantity().multiply(unitCost) : dto.getLineCost();
         ProductBomItem item = new ProductBomItem();
         item.setProductBomId(bom.getProductBomId());
         item.setProductBomRouteId(route.getProductBomRouteId());
@@ -276,14 +284,38 @@ public class ProductBomWorkflowService {
         item.setQuantity(dto.getQuantity());
         item.setUnit(dto.getUnit());
         item.setLossRate(dto.getLossRate() == null ? BigDecimal.ZERO : dto.getLossRate());
-        item.setUnitCostSnapshot(dto.getUnitCost() == null ? BigDecimal.ZERO : dto.getUnitCost());
+        item.setUnitCostSnapshot(unitCost);
+        item.setSupplierCodeSnapshot(dto.getSupplierCode());
+        item.setSupplierNameSnapshot(dto.getSupplierName());
+        item.setLineCostSnapshot(lineCost);
         item.setSubstituteFlag(dto.getSubstituteFlag() == null ? 0 : dto.getSubstituteFlag());
         item.setRemark(dto.getRemark());
         item.setVersionNo(bom.getVersionNo());
         item.setStatus("draft");
-        item.setCurrencyCode(bom.getCurrencyCode() == null ? "CNY" : bom.getCurrencyCode());
+        item.setCurrencyCode(hasText(dto.getCurrencyCode()) ? dto.getCurrencyCode().trim() :
+            (bom.getCurrencyCode() == null ? "CNY" : bom.getCurrencyCode()));
+        item.setMaterialSource(normalizeMaterialSource(dto));
+        item.setUnmatchedFlag(normalizeUnmatchedFlag(dto, item.getMaterialSource()));
         fillCreate(item, now);
         return item;
+    }
+
+    private String normalizeMaterialSource(ProductBomItemDTO dto) {
+        if (hasText(dto.getMaterialSource())) {
+            return dto.getMaterialSource().trim();
+        }
+        return Integer.valueOf(1).equals(dto.getUnmatchedFlag()) ? "manual" : "inventory";
+    }
+
+    private Integer normalizeUnmatchedFlag(ProductBomItemDTO dto, String materialSource) {
+        if (dto.getUnmatchedFlag() != null) {
+            return dto.getUnmatchedFlag();
+        }
+        return "manual".equals(materialSource) ? 1 : 0;
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 
     private ProductBomItem toTestItem(ProductBom bom, ProductBomItemDTO dto, int fallbackLineNo, LocalDateTime now) {

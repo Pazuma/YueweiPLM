@@ -32,6 +32,14 @@ export interface ProductBomItemVO {
   quantity: number
   unit: string
   lossRate?: number | null
+  unitCost?: number | null
+  lineCost?: number | null
+  supplierCode?: string | null
+  supplierName?: string | null
+  currencyCode?: string | null
+  materialSource?: string | null
+  unmatchedFlag?: number | null
+  lookupMessage?: string | null
   substituteFlag?: number | null
   remark?: string | null
   status: ProductBomStatus
@@ -82,6 +90,13 @@ export interface ProductBomItemSavePayload {
   unit: string
   lossRate?: number | null
   unitCost?: number | null
+  lineCost?: number | null
+  supplierCode?: string | null
+  supplierName?: string | null
+  currencyCode?: string | null
+  materialSource?: string | null
+  unmatchedFlag?: number | null
+  lookupMessage?: string | null
   substituteFlag?: number | null
   remark?: string
 }

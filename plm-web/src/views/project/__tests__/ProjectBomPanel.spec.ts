@@ -73,7 +73,20 @@ describe('ProjectBomPanel', () => {
         routeName: '染色工艺路线',
         status: 'active',
         colors: ['黑色', '蓝色'],
-        items: []
+        items: [
+          {
+            lineNo: 1,
+            itemCode: 'MAT-404',
+            itemName: '人工录入辅料',
+            quantity: 1,
+            unit: 'PCS',
+            materialSource: 'manual',
+            unmatchedFlag: 1,
+            supplierName: '',
+            unitCost: null,
+            lineCost: null
+          }
+        ]
       }]
     })
   })
@@ -90,6 +103,9 @@ describe('ProjectBomPanel', () => {
     expect(wrapper.text()).toContain('染色工艺路线')
     expect(wrapper.text()).toContain('当前正式')
     expect(wrapper.text()).toContain('导入 XLSX')
+    expect(wrapper.text()).toContain('人工物料 1')
+    expect(wrapper.text()).toContain('供应商缺失 1')
+    expect(wrapper.text()).toContain('成本缺失 1')
     expect(wrapper.text()).toContain('提交审核')
     expect(wrapper.text()).toContain('冻结')
     expect(wrapper.text()).toContain('发布')

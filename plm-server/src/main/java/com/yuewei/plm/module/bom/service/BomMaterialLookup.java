@@ -6,6 +6,15 @@ import java.util.Optional;
 public interface BomMaterialLookup {
     Optional<Material> findByCode(String inventoryCode);
 
-    record Material(Long inventoryId, String inventoryName, BigDecimal unitCost, String currencyCode) {
+    record Material(
+        Long inventoryId,
+        String inventoryCode,
+        String inventoryName,
+        String specification,
+        String unit,
+        String supplierName,
+        BigDecimal unitCost,
+        String currencyCode
+    ) {
     }
 }

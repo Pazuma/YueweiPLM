@@ -299,9 +299,19 @@ public class ProductBomServiceImpl implements ProductBomService {
         if (!StringUtils.hasText(dto.getItemName()) || !StringUtils.hasText(dto.getUnit())) {
             throw new BusinessException(ErrorCodeConstants.VALIDATION_ERROR, "BOM明细名称和单位不能为空");
         }
+        if (dto.getUnitCost() != null && dto.getUnitCost().compareTo(BigDecimal.ZERO) < 0) {
+            throw new BusinessException(ErrorCodeConstants.VALIDATION_ERROR, "BOM明细单价不能为负数");
+        }
+        if (dto.getLineCost() != null && dto.getLineCost().compareTo(BigDecimal.ZERO) < 0) {
+            throw new BusinessException(ErrorCodeConstants.VALIDATION_ERROR, "BOM明细单个成本不能为负数");
+        }
     }
 
     private void applyItem(ProductBomItemDTO dto, ProductBomItem item) {
+        BigDecimal unitCost = dto.getUnitCost() == null ? BigDecimal.ZERO : dto.getUnitCost();
+        BigDecimal lineCost = dto.getLineCost() == null
+            ? (dto.getQuantity() == null ? BigDecimal.ZERO : dto.getQuantity().multiply(unitCost))
+            : dto.getLineCost();
         item.setInventoryId(dto.getInventoryId());
         item.setItemCode(dto.getItemCode());
         item.setItemName(dto.getItemName());
@@ -310,8 +320,29 @@ public class ProductBomServiceImpl implements ProductBomService {
         item.setQuantity(dto.getQuantity());
         item.setUnit(dto.getUnit());
         item.setLossRate(dto.getLossRate() == null ? BigDecimal.ZERO : dto.getLossRate());
+        item.setUnitCostSnapshot(unitCost);
+        item.setSupplierCodeSnapshot(dto.getSupplierCode());
+        item.setSupplierNameSnapshot(dto.getSupplierName());
+        item.setLineCostSnapshot(lineCost);
+        item.setCurrencyCode(StringUtils.hasText(dto.getCurrencyCode()) ? dto.getCurrencyCode() : "CNY");
+        item.setMaterialSource(normalizeMaterialSource(dto));
+        item.setUnmatchedFlag(normalizeUnmatchedFlag(dto, item.getMaterialSource()));
         item.setSubstituteFlag(dto.getSubstituteFlag() == null ? 0 : dto.getSubstituteFlag());
         item.setRemark(dto.getRemark());
+    }
+
+    private String normalizeMaterialSource(ProductBomItemDTO dto) {
+        if (StringUtils.hasText(dto.getMaterialSource())) {
+            return dto.getMaterialSource().trim();
+        }
+        return Integer.valueOf(1).equals(dto.getUnmatchedFlag()) ? "manual" : "inventory";
+    }
+
+    private Integer normalizeUnmatchedFlag(ProductBomItemDTO dto, String materialSource) {
+        if (dto.getUnmatchedFlag() != null) {
+            return dto.getUnmatchedFlag();
+        }
+        return "manual".equals(materialSource) ? 1 : 0;
     }
 
     private void fillCreateAudit(com.yuewei.plm.repository.entity.BaseEntity entity, LocalDateTime now, String operator) {

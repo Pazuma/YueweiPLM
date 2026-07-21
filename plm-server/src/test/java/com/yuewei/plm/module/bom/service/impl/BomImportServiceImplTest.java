@@ -2,12 +2,14 @@ package com.yuewei.plm.module.bom.service.impl;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.yuewei.plm.module.bom.repository.ProductBomImportBatchRepository;
 import com.yuewei.plm.module.bom.repository.ProductBomRepository;
 import com.yuewei.plm.module.bom.entity.ProductBom;
+import com.yuewei.plm.module.bom.entity.ProductBomImportBatch;
 import com.yuewei.plm.module.bom.service.BomMaterialLookup;
 import com.yuewei.plm.module.bom.service.BomProcessRouteLookup;
 import com.yuewei.plm.module.bom.service.ProductBomWorkflowService;
@@ -32,7 +34,8 @@ class BomImportServiceImplTest {
         ProductBomWorkflowService workflowService = mock(ProductBomWorkflowService.class);
         BomProcessRouteLookup routeLookup = mock(BomProcessRouteLookup.class);
         when(materialLookup.findByCode("MAT-001")).thenReturn(Optional.of(
-            new BomMaterialLookup.Material(1L, "TPU 原料", new BigDecimal("12.50"), "CNY")
+            new BomMaterialLookup.Material(1L, "MAT-001", "TPU 原料", null, "kg", "东莞塑胶 A",
+                new BigDecimal("12.50"), "CNY")
         ));
         when(routeLookup.findByCode(10L, "DYE")).thenReturn(Optional.of(
             new BomProcessRouteLookup.Route(100L, "DYE", "染色路线")
@@ -48,6 +51,34 @@ class BomImportServiceImplTest {
         assertThat(preview.getErrors()).isEmpty();
         assertThat(preview.getRows().get(0).getProcessId()).isEqualTo(100L);
         assertThat(preview.getImportToken()).isNotBlank();
+    }
+
+    @Test
+    void candidateImportAllowsUnmatchedMaterialAsManualReadyRow() throws Exception {
+        ProductBomImportBatchRepository batchRepository = mock(ProductBomImportBatchRepository.class);
+        ProductBomRepository bomRepository = editableBomRepository("candidate");
+        BomMaterialLookup materialLookup = mock(BomMaterialLookup.class);
+        ProductBomWorkflowService workflowService = mock(ProductBomWorkflowService.class);
+        BomProcessRouteLookup routeLookup = mock(BomProcessRouteLookup.class);
+        when(materialLookup.findByCode("MAT-001")).thenReturn(Optional.empty());
+        when(routeLookup.findByCode(10L, "DYE")).thenReturn(Optional.of(
+            new BomProcessRouteLookup.Route(100L, "DYE", "染色路线")
+        ));
+        BomImportServiceImpl service = new BomImportServiceImpl(
+            batchRepository, bomRepository, materialLookup, routeLookup, workflowService, colorCodes()
+        );
+
+        var preview = service.preview(10L, 20L, "candidate.xlsx", workbook(true));
+
+        assertThat(preview.getStatus()).isEqualTo("ready");
+        assertThat(preview.getValidRows()).isEqualTo(1);
+        assertThat(preview.getErrors()).isEmpty();
+        assertThat(preview.getRows().get(0).getMaterialSource()).isEqualTo("manual");
+        assertThat(preview.getRows().get(0).getUnmatchedFlag()).isEqualTo(1);
+        assertThat(preview.getRows().get(0).getLookupMessage()).contains("未匹配");
+        assertThat(preview.getRows().get(0).getItemName()).isEqualTo("TPU 原料");
+        assertThat(preview.getRows().get(0).getLineCost()).isEqualByComparingTo("25.00");
+        verify(batchRepository).insert(any(ProductBomImportBatch.class));
     }
 
     @Test
@@ -88,10 +119,14 @@ class BomImportServiceImplTest {
     }
 
     private ProductBomRepository editableBomRepository() {
+        return editableBomRepository("formal");
+    }
+
+    private ProductBomRepository editableBomRepository(String bomScope) {
         ProductBomRepository repository = mock(ProductBomRepository.class);
         ProductBom bom = new ProductBom();
         bom.setProductId(10L);
-        bom.setBomScope("formal");
+        bom.setBomScope(bomScope);
         bom.setStatus("draft");
         bom.setFrozenFlag(0);
         when(repository.selectById(20L)).thenReturn(bom);
@@ -104,7 +139,7 @@ class BomImportServiceImplTest {
             var header = sheet.createRow(0);
             String[] headers = {
                 "行号", "路线编码", "路线名称", "适用颜色", "物料编码", "物料名称",
-                "规格", "单位", "用量", "损耗率", "替代料标识", "备注"
+                "规格", "单位", "用量", "供应商", "单价", "单个成本", "损耗率", "替代料标识", "备注"
             };
             for (int index = 0; index < headers.length; index++) {
                 header.createCell(index).setCellValue(index == 0 && !validHeader ? "错误列" : headers[index]);
@@ -118,7 +153,10 @@ class BomImportServiceImplTest {
             row.createCell(5).setCellValue("TPU 原料");
             row.createCell(7).setCellValue("kg");
             row.createCell(8).setCellValue(2);
-            row.createCell(9).setCellValue(0.05);
+            row.createCell(9).setCellValue("东莞塑胶 A");
+            row.createCell(10).setCellValue(12.5);
+            row.createCell(11).setCellValue(25);
+            row.createCell(12).setCellValue(0.05);
             workbook.write(output);
             return output.toByteArray();
         }

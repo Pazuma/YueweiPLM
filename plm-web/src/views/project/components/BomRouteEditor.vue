@@ -3,23 +3,31 @@ import { Delete, Plus } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { onMounted, ref, watch } from 'vue'
 
-import type { BomRoute } from '@/types/bom'
+import type { BomItem, BomRoute } from '@/types/bom'
 import { getEnabledColorCodes, type CodeItem } from '@/api/modules/code'
+import { lookupMaterialByCode } from '@/api/modules/inventory'
 
 const props = defineProps<{ modelValue: boolean; routes: BomRoute[]; loading?: boolean }>()
 const emit = defineEmits<{ (event: 'update:modelValue', value: boolean): void; (event: 'save', value: BomRoute[]): void }>()
 type EditableBomRoute = BomRoute & { selectedColorIds: number[] }
 const draft = ref<EditableBomRoute[]>([])
 const colorCodes = ref<CodeItem[]>([])
+const lookupLoadingCodes = ref<Set<string>>(new Set())
+const supplierOptions = ref<string[]>([])
 
 function cloneRoutes(routes: BomRoute[]) {
   return (JSON.parse(JSON.stringify(routes)) as BomRoute[]).map(route => ({
-    ...route, selectedColorIds: (route.colorItems || []).map(color => color.codeItemId)
+    ...route,
+    items: route.items.map(normalizeItem),
+    selectedColorIds: (route.colorItems || []).map(color => color.codeItemId)
   }))
 }
 
 watch(() => props.modelValue, (visible) => {
-  if (visible) draft.value = cloneRoutes(props.routes)
+  if (visible) {
+    draft.value = cloneRoutes(props.routes)
+    seedSupplierOptions(draft.value)
+  }
 }, { immediate: true })
 
 function addRoute() {
@@ -34,8 +42,26 @@ function addItem(route: BomRoute) {
     quantity: 1,
     unit: 'PCS',
     lossRate: 0,
-    unitCost: 0
+    unitCost: 0,
+    lineCost: 0,
+    supplierName: null,
+    currencyCode: 'CNY',
+    materialSource: 'inventory',
+    unmatchedFlag: 0
   })
+}
+
+function normalizeItem(item: BomItem): BomItem {
+  const unitCost = item.unitCost ?? 0
+  const quantity = item.quantity ?? 0
+  return {
+    ...item,
+    supplierName: item.supplierName || null,
+    currencyCode: item.currencyCode || 'CNY',
+    materialSource: item.materialSource || (item.unmatchedFlag === 1 ? 'manual' : 'inventory'),
+    unmatchedFlag: item.unmatchedFlag ?? (item.materialSource === 'manual' ? 1 : 0),
+    lineCost: item.lineCost ?? roundCost(quantity * unitCost)
+  }
 }
 
 function updateColors(route: BomRoute, ids: number[]) {
@@ -43,6 +69,74 @@ function updateColors(route: BomRoute, ids: number[]) {
     codeItemId: color.codeItemId, codeValue: color.codeValue, codeName: color.codeName
   }))
   route.colors = route.colorItems.map(color => color.codeName)
+}
+
+function seedSupplierOptions(routes: BomRoute[]) {
+  const values = new Set<string>()
+  routes.forEach(route => route.items.forEach(item => {
+    if (item.supplierName?.trim()) values.add(item.supplierName.trim())
+  }))
+  supplierOptions.value = Array.from(values)
+}
+
+function addSupplierOption(value?: string | null) {
+  const supplier = value?.trim()
+  if (supplier && !supplierOptions.value.includes(supplier)) {
+    supplierOptions.value = [...supplierOptions.value, supplier]
+  }
+}
+
+function roundCost(value: number) {
+  return Number.isFinite(value) ? Number(value.toFixed(6)) : 0
+}
+
+function refreshLineCost(item: BomItem) {
+  item.lineCost = roundCost((item.quantity || 0) * (item.unitCost || 0))
+}
+
+async function lookupItem(item: BomItem) {
+  const code = item.itemCode?.trim()
+  if (!code) return
+  const loadingKey = `${item.lineNo}-${code}`
+  lookupLoadingCodes.value = new Set(lookupLoadingCodes.value).add(loadingKey)
+  try {
+    const result = await lookupMaterialByCode(code)
+    if (result.matched) {
+      item.inventoryId = result.inventoryId ?? null
+      item.itemCode = result.inventoryCode || code
+      item.itemName = result.inventoryName || item.itemName
+      item.specification = result.specification || item.specification
+      item.unit = result.unit || item.unit
+      item.supplierName = result.supplierName || item.supplierName
+      addSupplierOption(item.supplierName)
+      item.unitCost = result.unitCost ?? item.unitCost ?? 0
+      item.currencyCode = result.currencyCode || item.currencyCode || 'CNY'
+      item.materialSource = 'inventory'
+      item.unmatchedFlag = 0
+      item.lookupMessage = ''
+      refreshLineCost(item)
+      return
+    }
+    item.inventoryId = null
+    item.materialSource = 'manual'
+    item.unmatchedFlag = 1
+    item.lookupMessage = result.message || '物料编码未匹配到物料库，可人工录入候选 BOM'
+    ElMessage.warning(item.lookupMessage)
+  } catch (error) {
+    item.materialSource = 'manual'
+    item.unmatchedFlag = 1
+    item.lookupMessage = error instanceof Error ? error.message : '物料编码查询失败，可先人工录入'
+    ElMessage.warning(item.lookupMessage)
+  } finally {
+    const next = new Set(lookupLoadingCodes.value)
+    next.delete(loadingKey)
+    lookupLoadingCodes.value = next
+  }
+}
+
+function isLookupLoading(item: BomItem) {
+  const code = item.itemCode?.trim()
+  return Boolean(code && lookupLoadingCodes.value.has(`${item.lineNo}-${code}`))
 }
 
 function save() {
@@ -59,8 +153,8 @@ function save() {
       }
       colors.add(color)
     }
-    if (route.items.some((item) => !item.itemName.trim() || item.quantity <= 0 || (item.lossRate || 0) < 0 || (item.lossRate || 0) > 1 || (item.unitCost || 0) < 0)) {
-      ElMessage.warning('请检查物料名称、数量、损耗率和单价')
+    if (route.items.some((item) => !item.itemName.trim() || !item.unit.trim() || item.quantity <= 0 || (item.lossRate || 0) < 0 || (item.lossRate || 0) > 1 || (item.unitCost || 0) < 0 || (item.lineCost || 0) < 0)) {
+      ElMessage.warning('请检查物料名称、单位、数量、损耗率、单价和单个成本')
       return
     }
   }
@@ -89,17 +183,44 @@ onMounted(async () => { colorCodes.value = await getEnabledColorCodes() })
         </div>
         <div class="item-table-wrap">
           <table class="item-table">
-            <thead><tr><th>物料编码</th><th>物料名称</th><th>规格</th><th>数量</th><th>单位</th><th>损耗率</th><th>单价</th><th>操作</th></tr></thead>
+            <thead>
+              <tr>
+                <th>NO</th>
+                <th>物料编码</th>
+                <th>物料名称</th>
+                <th>规格</th>
+                <th>数量</th>
+                <th>单位</th>
+                <th>供应商</th>
+                <th>单价</th>
+                <th>单个成本</th>
+                <th>损耗率</th>
+                <th>备注</th>
+                <th>操作</th>
+              </tr>
+            </thead>
             <tbody>
-              <tr v-if="!route.items.length"><td colspan="8" class="item-table__empty">暂无物料明细</td></tr>
+              <tr v-if="!route.items.length"><td colspan="12" class="item-table__empty">暂无物料明细</td></tr>
               <tr v-for="(item, itemIndex) in route.items" :key="item.productBomItemId || itemIndex">
-                <td><el-input v-model="item.itemCode" data-test="route-item-code" /></td>
+                <td><el-input-number v-model="item.lineNo" :min="1" controls-position="right" /></td>
+                <td>
+                  <el-input v-model="item.itemCode" data-test="route-item-code" :disabled="isLookupLoading(item)" @blur="lookupItem(item)" />
+                  <el-tag v-if="item.unmatchedFlag === 1" class="manual-tag" type="warning" size="small">未匹配</el-tag>
+                </td>
                 <td><el-input v-model="item.itemName" data-test="route-item-name" /></td>
                 <td><el-input v-model="item.specification" /></td>
-                <td><el-input-number v-model="item.quantity" data-test="route-item-quantity" :min="0.000001" :precision="6" /></td>
-                <td><el-input v-model="item.unit" /></td>
+                <td><el-input-number v-model="item.quantity" data-test="route-item-quantity" :min="0.000001" :precision="6" @change="refreshLineCost(item)" /></td>
+                <td><el-input v-model="item.unit" data-test="route-item-unit" /></td>
+                <td>
+                  <select v-model="item.supplierName" data-test="route-item-supplier" class="supplier-select">
+                    <option :value="null">未选择</option>
+                    <option v-for="supplier in supplierOptions" :key="supplier" :value="supplier">{{ supplier }}</option>
+                  </select>
+                </td>
+                <td><el-input-number v-model="item.unitCost" data-test="route-item-unit-cost" :min="0" :precision="4" @change="refreshLineCost(item)" /></td>
+                <td><el-input-number v-model="item.lineCost" data-test="route-item-line-cost" :min="0" :precision="4" /></td>
                 <td><el-input-number v-model="item.lossRate" data-test="route-item-loss-rate" :min="0" :max="1" :precision="4" /></td>
-                <td><el-input-number v-model="item.unitCost" data-test="route-item-unit-cost" :min="0" :precision="4" /></td>
+                <td><el-input v-model="item.remark" type="textarea" :rows="1" /></td>
                 <td><el-button :icon="Delete" circle title="移除物料" @click="route.items.splice(itemIndex, 1)" /></td>
               </tr>
             </tbody>
@@ -122,13 +243,26 @@ onMounted(async () => { colorCodes.value = await getEnabledColorCodes() })
 .route-color-codes { display: flex; flex-wrap: wrap; gap: 6px; max-height: 84px; overflow-y: auto; padding: 5px; border: 1px solid var(--el-border-color); border-radius: 5px; }
 .route-color-codes :deep(.el-checkbox) { margin: 0; }
 .item-table-wrap { overflow-x: auto; }
-.item-table { width: 100%; min-width: 930px; border-collapse: collapse; table-layout: fixed; }
+.item-table { width: 100%; min-width: 1380px; border-collapse: collapse; table-layout: fixed; }
 .item-table th, .item-table td { padding: 6px; border: 1px solid var(--el-border-color-lighter); text-align: left; }
 .item-table th { color: var(--plm-color-text-secondary); background: var(--el-fill-color-light); font-size: 12px; font-weight: 600; }
-.item-table th:nth-child(1), .item-table th:nth-child(3) { width: 130px; }
-.item-table th:nth-child(4), .item-table th:nth-child(6), .item-table th:nth-child(7) { width: 120px; }
-.item-table th:nth-child(5) { width: 80px; }
+.item-table th:nth-child(1) { width: 72px; }
+.item-table th:nth-child(2), .item-table th:nth-child(4), .item-table th:nth-child(7) { width: 140px; }
+.item-table th:nth-child(5), .item-table th:nth-child(8), .item-table th:nth-child(9), .item-table th:nth-child(10) { width: 120px; }
+.item-table th:nth-child(6) { width: 90px; }
+.item-table th:nth-child(11) { width: 150px; }
 .item-table th:last-child { width: 52px; }
 .item-table__empty { color: var(--plm-color-text-secondary); text-align: center !important; }
+.manual-tag { margin-top: 4px; }
+.supplier-select {
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--el-border-color);
+  border-radius: 4px;
+  background: var(--el-fill-color-blank);
+  color: var(--el-text-color-regular);
+}
+.supplier-select:focus { border-color: var(--el-color-primary); outline: none; }
 @media (max-width: 900px) { .route-editor__header { grid-template-columns: 1fr 1fr; } }
 </style>

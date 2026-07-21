@@ -62,6 +62,13 @@ export interface BomItem {
   unit: string
   lossRate?: number | null
   unitCost?: number | null
+  lineCost?: number | null
+  supplierCode?: string | null
+  supplierName?: string | null
+  currencyCode?: string | null
+  materialSource?: 'inventory' | 'manual' | string | null
+  unmatchedFlag?: number | null
+  lookupMessage?: string | null
   substituteFlag?: number | null
   remark?: string | null
 }
@@ -160,12 +167,30 @@ export interface BomImportError {
   reason: string
 }
 
+export interface BomImportRow {
+  lineNo?: number
+  routeCode?: string
+  routeName?: string
+  itemCode?: string
+  itemName?: string
+  specification?: string
+  unit?: string
+  quantity?: number
+  supplierName?: string
+  unitCost?: number | null
+  lineCost?: number | null
+  materialSource?: string | null
+  unmatchedFlag?: number | null
+  lookupMessage?: string | null
+  remark?: string | null
+}
+
 export interface BomImportPreview {
   importToken: string
   status: 'ready' | 'invalid'
   totalRows: number
   validRows: number
   errorRows: number
-  rows: Array<Record<string, unknown>>
+  rows: BomImportRow[]
   errors: BomImportError[]
 }

@@ -30,7 +30,8 @@ class HistoricalBomImportServiceTest {
         when(products.selectList(any(Wrapper.class))).thenReturn(List.of(product(10L, "P-LJ")));
         BomMaterialLookup materials = mock(BomMaterialLookup.class);
         when(materials.findByCode("MAT-001")).thenReturn(Optional.of(
-            new BomMaterialLookup.Material(1L, "TPU", new BigDecimal("12.50"), "CNY")));
+            new BomMaterialLookup.Material(1L, "MAT-001", "TPU", null, "kg", "东莞塑胶 A",
+                new BigDecimal("12.50"), "CNY")));
         BomProcessRouteLookup routes = mock(BomProcessRouteLookup.class);
         when(routes.findByCode(10L, "DYE")).thenReturn(Optional.of(
             new BomProcessRouteLookup.Route(100L, "DYE", "染色路线")));
@@ -74,7 +75,7 @@ class HistoricalBomImportServiceTest {
     private byte[] workbook() throws Exception {
         try (XSSFWorkbook workbook = new XSSFWorkbook(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
             var sheet = workbook.createSheet("历史BOM导入");
-            String[] headers = {"产品编码", "BOM版本", "行号", "路线编码", "路线名称", "适用颜色", "物料编码", "物料名称", "规格", "单位", "用量", "损耗率", "替代料标识", "备注"};
+            String[] headers = {"产品编码", "BOM版本", "行号", "路线编码", "路线名称", "适用颜色", "物料编码", "物料名称", "规格", "单位", "用量", "供应商", "单价", "单个成本", "损耗率", "替代料标识", "备注"};
             var header = sheet.createRow(0);
             for (int index = 0; index < headers.length; index++) header.createCell(index).setCellValue(headers[index]);
             var row = sheet.createRow(1);
@@ -88,7 +89,10 @@ class HistoricalBomImportServiceTest {
             row.createCell(7).setCellValue("TPU");
             row.createCell(9).setCellValue("kg");
             row.createCell(10).setCellValue(2);
-            row.createCell(11).setCellValue(0.05);
+            row.createCell(11).setCellValue("东莞塑胶 A");
+            row.createCell(12).setCellValue(12.5);
+            row.createCell(13).setCellValue(25);
+            row.createCell(14).setCellValue(0.05);
             workbook.write(output);
             return output.toByteArray();
         }

@@ -43,7 +43,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class BomImportServiceImpl implements BomImportService {
     private static final List<String> HEADERS = List.of(
         "行号", "路线编码", "路线名称", "适用颜色", "物料编码", "物料名称",
-        "规格", "单位", "用量", "损耗率", "替代料标识", "备注"
+        "规格", "单位", "用量", "供应商", "单价", "单个成本", "损耗率", "替代料标识", "备注"
     );
 
     private final ProductBomImportBatchRepository batchRepository;
@@ -57,8 +57,8 @@ public class BomImportServiceImpl implements BomImportService {
     @Override
     public BomImportPreviewVO preview(Long productId, Long bomId, String fileName, byte[] content) {
         ProductBom bom = bomRepository.selectById(bomId);
-        if (bom == null || !productId.equals(bom.getProductId()) || !"formal".equals(bom.getBomScope())) {
-            throw new BusinessException(ErrorCodeConstants.VALIDATION_ERROR, "BOM 不属于当前产品或不是正式 BOM");
+        if (bom == null || !productId.equals(bom.getProductId()) || !List.of("candidate", "formal").contains(bom.getBomScope())) {
+            throw new BusinessException(ErrorCodeConstants.VALIDATION_ERROR, "BOM 不属于当前产品或不是可导入 BOM");
         }
         if ("released".equals(bom.getStatus()) || Integer.valueOf(1).equals(bom.getFrozenFlag())) {
             throw new BusinessException(ErrorCodeConstants.VERSION_FROZEN, "BOM 已冻结或发布，不可导入");
@@ -91,7 +91,7 @@ public class BomImportServiceImpl implements BomImportService {
         batch.setProductId(productId);
         batch.setProductBomId(bomId);
         batch.setImportToken(token);
-        batch.setBomScope("formal");
+        batch.setBomScope(bom.getBomScope());
         batch.setFileName(fileName);
         batch.setStatus(status);
         batch.setTotalRows(rows.size() + errors.size());
@@ -214,11 +214,21 @@ public class BomImportServiceImpl implements BomImportService {
             return;
         }
         var material = materialLookup.findByCode(materialCode);
-        if (material.isEmpty()) {
-            errors.add(new BomImportErrorVO(sourceRowNo, "物料编码", materialCode, "物料不存在"));
-            return;
-        }
         try {
+            String itemName = text(row, 5, formatter);
+            String specification = text(row, 6, formatter);
+            String unit = text(row, 7, formatter);
+            String supplierName = text(row, 9, formatter);
+            BigDecimal unitCost = decimalOrNull(text(row, 10, formatter));
+            BigDecimal lineCost = decimalOrNull(text(row, 11, formatter));
+            if (material.isPresent()) {
+                BomMaterialLookup.Material matched = material.get();
+                if (itemName.isBlank()) itemName = matched.inventoryName();
+                if (specification.isBlank()) specification = matched.specification();
+                if (unit.isBlank()) unit = matched.unit();
+                if (supplierName.isBlank()) supplierName = matched.supplierName();
+                if (unitCost == null) unitCost = matched.unitCost();
+            }
             BomImportRowVO value = new BomImportRowVO();
             value.setLineNo(Integer.valueOf(text(row, 0, formatter)));
             value.setProcessId(route.get().processId());
@@ -229,18 +239,25 @@ public class BomImportServiceImpl implements BomImportService {
             List<BomRouteColorDTO> colors = colorCodes.stream().map(this::requireEnabledColor).toList();
             value.setColorItems(colors);
             value.setColors(colors.stream().map(BomRouteColorDTO::getCodeName).toList());
-            value.setInventoryId(material.get().inventoryId());
+            value.setInventoryId(material.map(BomMaterialLookup.Material::inventoryId).orElse(null));
             value.setItemCode(materialCode);
-            value.setItemName(material.get().inventoryName());
-            value.setSpecification(text(row, 6, formatter));
-            value.setUnit(required(text(row, 7, formatter), "单位"));
+            value.setItemName(required(itemName, "物料名称"));
+            value.setSpecification(specification);
+            value.setUnit(required(unit, "单位"));
             value.setQuantity(new BigDecimal(required(text(row, 8, formatter), "用量")));
-            value.setLossRate(text(row, 9, formatter).isBlank() ? BigDecimal.ZERO : new BigDecimal(text(row, 9, formatter)));
-            value.setUnitCost(material.get().unitCost());
-            value.setCurrencyCode(material.get().currencyCode());
-            value.setSubstituteFlag("1".equals(text(row, 10, formatter)) ? 1 : 0);
-            value.setRemark(text(row, 11, formatter));
+            value.setSupplierName(supplierName);
+            value.setUnitCost(unitCost == null ? BigDecimal.ZERO : unitCost);
+            value.setLineCost(lineCost == null ? value.getQuantity().multiply(value.getUnitCost()) : lineCost);
+            value.setLossRate(text(row, 12, formatter).isBlank() ? BigDecimal.ZERO : new BigDecimal(text(row, 12, formatter)));
+            value.setCurrencyCode(material.map(BomMaterialLookup.Material::currencyCode).filter(code -> !code.isBlank()).orElse("CNY"));
+            value.setMaterialSource(material.isPresent() ? "inventory" : "manual");
+            value.setUnmatchedFlag(material.isPresent() ? 0 : 1);
+            value.setLookupMessage(material.isPresent() ? null : "物料编码未匹配到物料库，可先人工录入候选 BOM，正式发布前请确认物料资料。");
+            value.setSubstituteFlag("1".equals(text(row, 13, formatter)) ? 1 : 0);
+            value.setRemark(text(row, 14, formatter));
             if (value.getQuantity().compareTo(BigDecimal.ZERO) <= 0) throw new IllegalArgumentException("用量必须大于 0");
+            if (value.getUnitCost().compareTo(BigDecimal.ZERO) < 0) throw new IllegalArgumentException("单价不能为负数");
+            if (value.getLineCost().compareTo(BigDecimal.ZERO) < 0) throw new IllegalArgumentException("单个成本不能为负数");
             if (value.getLossRate().compareTo(BigDecimal.ZERO) < 0 || value.getLossRate().compareTo(BigDecimal.ONE) > 0) {
                 throw new IllegalArgumentException("损耗率必须在 0 到 1 之间");
             }
@@ -275,6 +292,13 @@ public class BomImportServiceImpl implements BomImportService {
         item.setUnit(row.getUnit());
         item.setLossRate(row.getLossRate());
         item.setUnitCost(row.getUnitCost());
+        item.setLineCost(row.getLineCost());
+        item.setSupplierCode(row.getSupplierCode());
+        item.setSupplierName(row.getSupplierName());
+        item.setCurrencyCode(row.getCurrencyCode());
+        item.setMaterialSource(row.getMaterialSource());
+        item.setUnmatchedFlag(row.getUnmatchedFlag());
+        item.setLookupMessage(row.getLookupMessage());
         item.setSubstituteFlag(row.getSubstituteFlag());
         item.setRemark(row.getRemark());
         return item;
@@ -313,6 +337,10 @@ public class BomImportServiceImpl implements BomImportService {
 
     private String text(Row row, int cell, DataFormatter formatter) {
         return formatter.formatCellValue(row.getCell(cell)).trim();
+    }
+
+    private BigDecimal decimalOrNull(String value) {
+        return value == null || value.isBlank() ? null : new BigDecimal(value.trim());
     }
 
     private void fillCreate(ProductBomImportBatch batch) {

@@ -50,6 +50,19 @@ const isFrozen = computed(() =>
   || selectedBom.value?.status === 'frozen'
   || isReadOnly.value
 )
+const bomRiskSummary = computed(() => {
+  const items = workbench.value?.routes.flatMap(route => route.items) || []
+  return {
+    manualRows: items.filter(item => item.materialSource === 'manual' || item.unmatchedFlag === 1).length,
+    supplierMissing: items.filter(item => !item.supplierName).length,
+    costMissing: items.filter(item => item.unitCost == null || item.lineCost == null).length
+  }
+})
+const hasBomRisks = computed(() =>
+  bomRiskSummary.value.manualRows > 0
+  || bomRiskSummary.value.supplierMissing > 0
+  || bomRiskSummary.value.costMissing > 0
+)
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : 'BOM 数据加载失败'
@@ -187,6 +200,15 @@ watch(() => props.projectId, () => load(), { immediate: true })
         </div>
       </div>
 
+      <el-alert v-if="hasBomRisks" class="bom-risk-alert" type="warning" show-icon :closable="false">
+        <template #title>
+          <span>候选 BOM 仍有待确认项：</span>
+          <el-tag size="small" type="warning">人工物料 {{ bomRiskSummary.manualRows }}</el-tag>
+          <el-tag size="small" type="danger">供应商缺失 {{ bomRiskSummary.supplierMissing }}</el-tag>
+          <el-tag size="small" type="danger">成本缺失 {{ bomRiskSummary.costMissing }}</el-tag>
+        </template>
+      </el-alert>
+
       <el-table :data="candidateBoms" class="candidate-table" size="small" @row-click="selectBom">
         <el-table-column prop="versionNo" label="版本" width="90" />
         <el-table-column prop="bomName" label="BOM 名称" min-width="150" />
@@ -274,6 +296,8 @@ watch(() => props.projectId, () => load(), { immediate: true })
 .formal-toolbar { flex-wrap: wrap; margin-bottom: 12px; }
 .formal-toolbar :deep(.el-select) { width: 260px; }
 .command-row--push { margin-left: auto; }
+.bom-risk-alert { margin-bottom: 12px; }
+.bom-risk-alert :deep(.el-alert__title) { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .candidate-table { margin-bottom: 14px; }
 .create-dialog__hint { margin: 0 0 12px; color: var(--plm-color-text-secondary); font-size: 13px; }
 .route-list { border-top: 1px solid var(--el-border-color-lighter); }

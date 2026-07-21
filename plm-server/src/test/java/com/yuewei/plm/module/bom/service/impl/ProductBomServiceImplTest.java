@@ -20,6 +20,7 @@ import com.yuewei.plm.module.bom.repository.ProductBomItemRepository;
 import com.yuewei.plm.module.bom.repository.ProductBomRepository;
 import com.yuewei.plm.module.bom.repository.ProductBomRouteFormalSelectionRepository;
 import com.yuewei.plm.module.bom.repository.ProductBomRouteRepository;
+import com.yuewei.plm.module.bom.vo.ProductBomItemVO;
 import com.yuewei.plm.module.operationlog.service.OperationLogService;
 import com.yuewei.plm.module.process.entity.ProcessEntity;
 import com.yuewei.plm.module.process.repository.ProcessRepository;
@@ -97,7 +98,74 @@ class ProductBomServiceImplTest {
         assertThat(itemCaptor.getValue().getProductId()).isEqualTo(10L);
         assertThat(itemCaptor.getValue().getVersionNo()).isEqualTo("A");
         assertThat(itemCaptor.getValue().getUnit()).isEqualTo("kg");
+        assertThat(itemCaptor.getValue().getSupplierCodeSnapshot()).isEqualTo("SUP-A");
+        assertThat(itemCaptor.getValue().getSupplierNameSnapshot()).isEqualTo("东莞塑胶 A");
+        assertThat(itemCaptor.getValue().getUnitCostSnapshot()).isEqualByComparingTo("3.50");
+        assertThat(itemCaptor.getValue().getLineCostSnapshot()).isEqualByComparingTo("0.2800");
+        assertThat(itemCaptor.getValue().getMaterialSource()).isEqualTo("inventory");
+        assertThat(itemCaptor.getValue().getUnmatchedFlag()).isZero();
         verify(operationLogService, Mockito.atLeastOnce()).logSuccess(any());
+    }
+
+    @Test
+    void addItemAllowsManualUnmatchedMaterialAndReturnsSnapshotFields() {
+        ProductRepository productRepository = mock(ProductRepository.class);
+        ProductBomRepository bomRepository = mock(ProductBomRepository.class);
+        ProductBomItemRepository itemRepository = mock(ProductBomItemRepository.class);
+        ProductBomRouteRepository routeRepository = mock(ProductBomRouteRepository.class);
+        ProductBomRouteFormalSelectionRepository formalSelectionRepository = mock(ProductBomRouteFormalSelectionRepository.class);
+        ProductBomServiceImpl service = new ProductBomServiceImpl(
+            productRepository, bomRepository, itemRepository, routeRepository, formalSelectionRepository,
+            mock(ProcessRepository.class), mock(OperationLogService.class)
+        );
+        ProductBom bom = bom(100L, 10L, "draft");
+        bom.setVersionNo("V1");
+        when(bomRepository.selectById(100L)).thenReturn(bom);
+        when(productRepository.selectById(10L)).thenReturn(product(10L));
+        when(itemRepository.selectCount(Mockito.<Wrapper<ProductBomItem>>any())).thenReturn(0L);
+        when(routeRepository.selectList(Mockito.<Wrapper<ProductBomRoute>>any())).thenReturn(List.of());
+        when(formalSelectionRepository.selectList(Mockito.<Wrapper<ProductBomRouteFormalSelection>>any())).thenReturn(List.of());
+        when(itemRepository.insert(any(ProductBomItem.class))).thenAnswer(invocation -> {
+            ProductBomItem inserted = invocation.getArgument(0);
+            inserted.setProductBomItemId(201L);
+            return 1;
+        });
+        when(itemRepository.selectList(Mockito.<Wrapper<ProductBomItem>>any())).thenAnswer(invocation -> {
+            ProductBomItem row = new ProductBomItem();
+            row.setProductBomItemId(201L);
+            row.setProductBomId(100L);
+            row.setItemCode("INV-UNKNOWN-001");
+            row.setItemName("人工 TPU");
+            row.setLineNo(11);
+            row.setQuantity(new BigDecimal("2"));
+            row.setUnit("kg");
+            row.setSupplierNameSnapshot("人工供应商");
+            row.setUnitCostSnapshot(new BigDecimal("4.20"));
+            row.setLineCostSnapshot(new BigDecimal("8.4000"));
+            row.setMaterialSource("manual");
+            row.setUnmatchedFlag(1);
+            row.setStatus("draft");
+            return List.of(row);
+        });
+
+        ProductBomItemDTO dto = itemDTO(11);
+        dto.setItemCode("INV-UNKNOWN-001");
+        dto.setItemName("人工 TPU");
+        dto.setQuantity(new BigDecimal("2"));
+        dto.setSupplierName("人工供应商");
+        dto.setUnitCost(new BigDecimal("4.20"));
+        dto.setMaterialSource("manual");
+        dto.setUnmatchedFlag(1);
+
+        var result = service.addItem(100L, dto, null);
+
+        assertThat(result.getItems()).hasSize(1);
+        ProductBomItemVO item = result.getItems().get(0);
+        assertThat(item.getSupplierName()).isEqualTo("人工供应商");
+        assertThat(item.getUnitCost()).isEqualByComparingTo("4.20");
+        assertThat(item.getLineCost()).isEqualByComparingTo("8.4000");
+        assertThat(item.getMaterialSource()).isEqualTo("manual");
+        assertThat(item.getUnmatchedFlag()).isEqualTo(1);
     }
 
     @Test
@@ -254,10 +322,15 @@ class ProductBomServiceImplTest {
     private ProductBomItemDTO itemDTO(Integer lineNo) {
         ProductBomItemDTO dto = new ProductBomItemDTO();
         dto.setLineNo(lineNo);
+        dto.setInventoryId(1L);
+        dto.setItemCode("MAT-001");
         dto.setItemName("TPU 原料");
         dto.setQuantity(new BigDecimal("0.08"));
         dto.setUnit("kg");
         dto.setLossRate(new BigDecimal("0.02"));
+        dto.setSupplierCode("SUP-A");
+        dto.setSupplierName("东莞塑胶 A");
+        dto.setUnitCost(new BigDecimal("3.50"));
         dto.setSubstituteFlag(0);
         return dto;
     }

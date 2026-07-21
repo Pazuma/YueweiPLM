@@ -28,7 +28,19 @@ public class ProductBomItemDTO {
     private String unit;
 
     private BigDecimal lossRate;
+
+    @DecimalMin(value = "0", message = "单价不能为负数")
     private BigDecimal unitCost;
+
+    @DecimalMin(value = "0", message = "单个成本不能为负数")
+    private BigDecimal lineCost;
+
+    private String supplierCode;
+    private String supplierName;
+    private String currencyCode;
+    private String materialSource;
+    private Integer unmatchedFlag;
+    private String lookupMessage;
     private Integer substituteFlag;
     private String remark;
 }
