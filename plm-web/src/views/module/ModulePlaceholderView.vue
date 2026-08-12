@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
+import FixedTableViewport from '@/components/FixedTableViewport/index.vue'
 import PageContainer from '@/components/PageContainer/index.vue'
 import { normalizeLegacyProductTarget } from '@/utils/projectRoute'
 
@@ -96,7 +97,7 @@ const baseRecords: RecordItem[] = [
     code: 'PRD-SC30-IP18-BLK-A',
     name: 'iPhone18 黑色型号扩展',
     object: 'Product / Process',
-    status: '评审中',
+    status: '进行中',
     owner: '刘浩',
     nextAction: '确认 EBOM、包装 BOM 和替代料',
     targetPath: '/products/102'
@@ -151,7 +152,7 @@ const configs: Record<ModuleKey, ModuleConfig> = {
     ],
     records: [
       { code: 'BOM-SC30-A', name: '超星 3.0 基础 EBOM', object: 'Product + Inventory', status: '待补齐', owner: '工程 / 采购', nextAction: '确认磁吸组件替代料', targetPath: '/products/101' },
-      { code: 'BOM-SC30-IP18-A', name: 'iPhone18 黑色 MBOM', object: 'Product + Process', status: '评审中', owner: '刘浩', nextAction: '确认黑色 TPU 单价', targetPath: '/products/102' },
+      { code: 'BOM-SC30-IP18-A', name: 'iPhone18 黑色 MBOM', object: 'Product + Process', status: '待补齐', owner: '刘浩', nextAction: '确认黑色 TPU 单价', targetPath: '/products/102' },
       { code: 'BOM-LJ30-B', name: '亮甲 3.0 包装 BOM', object: 'Product + Inventory', status: '已冻结', owner: '赵越', nextAction: '查看发布版本', targetPath: '/products/103' }
     ],
     stages: newProductStages,
@@ -173,7 +174,7 @@ const configs: Record<ModuleKey, ModuleConfig> = {
     ],
     records: [
       { code: 'FILE-SC30-A', name: '超星 3.0 图纸与测试资料', object: 'Product / Quality', status: '待补齐', owner: '工程 / 品质', nextAction: '补齐 SIP 与酒精测试报告', targetPath: '/products/101' },
-      { code: 'FILE-SC30-IP18', name: 'iPhone18 黑色包装与 BOM 附件', object: 'Product / Process', status: '评审中', owner: '刘浩', nextAction: '锁定包装标签与客户确认件', targetPath: '/products/102' },
+      { code: 'FILE-SC30-IP18', name: 'iPhone18 黑色包装与 BOM 附件', object: 'Product / Process', status: '待补齐', owner: '刘浩', nextAction: '锁定包装标签与客户确认件', targetPath: '/products/102' },
       { code: 'FILE-LJ30-B', name: '亮甲 3.0 发布归档包', object: 'Product', status: '已冻结', owner: '赵越', nextAction: '查看历史版本追溯', targetPath: '/products/103' }
     ],
     stages: [
@@ -317,7 +318,7 @@ function tagType(text: string) {
           <h3 class="section-title">业务承载范围</h3>
           <p class="page-panel-desc">{{ current.objectScope }}</p>
         </div>
-        <el-tag effect="light">仅前端假数据</el-tag>
+        <el-tag type="info" effect="light">接口未接入</el-tag>
       </div>
     </section>
 
@@ -341,7 +342,8 @@ function tagType(text: string) {
     <section class="split-grid">
       <article class="page-panel">
         <h3 class="section-title">业务列表</h3>
-        <el-table :data="current.records" border stripe @row-click="(row: RecordItem) => openTarget(row.targetPath)">
+        <FixedTableViewport v-slot="{ tableHeight }" :refresh-key="current.records">
+        <el-table :data="current.records" :height="tableHeight" border stripe @row-click="(row: RecordItem) => openTarget(row.targetPath)">
           <el-table-column prop="code" label="编码" min-width="180" />
           <el-table-column prop="name" label="名称" min-width="220" />
           <el-table-column prop="object" label="承载对象" min-width="150" />
@@ -353,6 +355,7 @@ function tagType(text: string) {
           <el-table-column prop="owner" label="责任人" width="130" />
           <el-table-column prop="nextAction" label="下一步动作" min-width="220" />
         </el-table>
+        </FixedTableViewport>
       </article>
 
       <article class="page-panel">

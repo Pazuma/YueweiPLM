@@ -10,9 +10,11 @@ import java.util.List;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.validation.FieldError;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -24,12 +26,19 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(BusinessException.class)
-    @ResponseStatus(HttpStatus.BAD_REQUEST)
-    public ResponseVO<Object> handleBusiness(BusinessException ex, HttpServletRequest request) {
+    public ResponseEntity<ResponseVO<Object>> handleBusiness(BusinessException ex, HttpServletRequest request) {
+        ResponseVO<Object> body;
         if (ex.getData() != null) {
-            return ResponseVO.error(ex.getCode(), ex.getMessage(), ex.getData(), RequestIdUtil.getRequestId(request), OffsetDateTime.now());
+            body = ResponseVO.error(ex.getCode(), ex.getMessage(), ex.getData(), RequestIdUtil.getRequestId(request), OffsetDateTime.now());
+        } else {
+            body = ResponseVO.error(ex.getCode(), ex.getMessage(), RequestIdUtil.getRequestId(request), OffsetDateTime.now());
         }
-        return ResponseVO.error(ex.getCode(), ex.getMessage(), RequestIdUtil.getRequestId(request), OffsetDateTime.now());
+        HttpStatus status = switch (ex.getCode()) {
+            case ErrorCodeConstants.UNAUTHORIZED -> HttpStatus.UNAUTHORIZED;
+            case ErrorCodeConstants.FORBIDDEN -> HttpStatus.FORBIDDEN;
+            default -> HttpStatus.BAD_REQUEST;
+        };
+        return ResponseEntity.status(status).body(body);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -56,6 +65,17 @@ public class GlobalExceptionHandler {
         return ResponseVO.error(
             ErrorCodeConstants.VALIDATION_ERROR,
             ex.getMessage(),
+            RequestIdUtil.getRequestId(request),
+            OffsetDateTime.now()
+        );
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ResponseVO<Void> handleMessageNotReadable(HttpMessageNotReadableException ex, HttpServletRequest request) {
+        return ResponseVO.error(
+            ErrorCodeConstants.VALIDATION_ERROR,
+            "请求体 JSON 格式或字段不符合接口契约",
             RequestIdUtil.getRequestId(request),
             OffsetDateTime.now()
         );

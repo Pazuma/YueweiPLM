@@ -26,6 +26,13 @@ public class Attachment extends BaseEntity {
     private String checksum;
     private String storageType;
     private String storageKey;
+    private String previewType;
+    private String previewStatus;
+    private String previewStorageKey;
+    private String previewErrorMessage;
+    private String sourceSystem;
+    private String sourceFileId;
+    private String sourceUrl;
     private String versionNo;
     private String status;
     private String remark;

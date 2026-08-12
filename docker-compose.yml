@@ -1,0 +1,104 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: plm-postgres
+    environment:
+      POSTGRES_DB: plm
+      POSTGRES_USER: plm
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-plm123}
+      TZ: Asia/Shanghai
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - plm_pgdata:/var/lib/postgresql/data
+      - ./plm-database/postgres/V1.0__init_schema.sql:/docker-entrypoint-initdb.d/01-init-schema.sql:ro
+      - ./plm-database/postgres/V1.1__init_seed_data.sql:/docker-entrypoint-initdb.d/02-init-seed-data.sql:ro
+      - ./plm-database/postgres/V1.2__erp_item_bom_alignment.sql:/docker-entrypoint-initdb.d/03-erp-item-bom-alignment.sql:ro
+      - ./plm-database/postgres/V1.3__workflow_locking_alignment.sql:/docker-entrypoint-initdb.d/04-workflow-locking-alignment.sql:ro
+      - ./plm-database/postgres/V1.3__workflow_locking_seed_data.sql:/docker-entrypoint-initdb.d/05-workflow-locking-seed-data.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U plm -d plm"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - plm-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: plm-redis
+    command: redis-server --appendonly yes
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - plm_redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - plm-net
+
+  server:
+    build:
+      context: ./plm-server
+      dockerfile: Dockerfile
+      args:
+        BUILD_IMAGE: ${SERVER_BUILD_IMAGE:-maven:3.9-eclipse-temurin-17}
+        RUNTIME_IMAGE: ${SERVER_RUNTIME_IMAGE:-maven:3.9-eclipse-temurin-17}
+    container_name: plm-server
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SERVER_PORT: "8080"
+      DB_URL: jdbc:postgresql://postgres:5432/plm
+      DB_USERNAME: plm
+      DB_PASSWORD: ${DB_PASSWORD:-plm123}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      DINGTALK_MODEL_VARIANT_PROCESS_CODE: "PROC-BD65F530-F66F-46B9-8F72-0567DD68F60C"
+      DINGTALK_APP_KEY: "${DINGTALK_APP_KEY:-dingypvxbj4bt7urxhgm}"
+      DINGTALK_APP_SECRET: "${DINGTALK_APP_SECRET:-KIRsGc1ZtwkB9chJ-Gnb1Yh-XeZ2qaF98DrbTlmBjXf3SxobX_LyeKpK3iPwKXCA}"
+      DINGTALK_CALLBACK_TOKEN: "${DINGTALK_CALLBACK_TOKEN:-}"
+      DINGTALK_AUTO_APPROVER_USER_ID: "${DINGTALK_AUTO_APPROVER_USER_ID:-02356802443226388318}"
+      DINGTALK_PRODUCT_LINE_CC_USER_IDS: "${DINGTALK_PRODUCT_LINE_CC_USER_IDS:-02356802443226388318}"
+      APP_SECURITY_ENABLED: "${APP_SECURITY_ENABLED:-true}"
+      APP_SECURITY_DEV_TOKEN: "${APP_SECURITY_DEV_TOKEN:-dev-token}"
+      APP_STORAGE_LOCAL_ROOT: data/uploads
+      DINGTALK_OUTBOUND_ENDPOINT: "${DINGTALK_OUTBOUND_ENDPOINT:-http://5b6909c5.r31.cpolar.top/api/v1/integrations/dingtalk/outbound}"
+    ports:
+      - "${SERVER_PORT:-8080}:8080"
+    volumes:
+      - plm_uploads:/app/data/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - plm-net
+
+  web:
+    build:
+      context: ./plm-web
+      dockerfile: Dockerfile
+    container_name: plm-web
+    ports:
+      - "${WEB_PORT:-80}:80"
+    depends_on:
+      - server
+    restart: unless-stopped
+    networks:
+      - plm-net
+
+networks:
+  plm-net:
+    driver: bridge
+
+volumes:
+  plm_pgdata:
+  plm_redisdata:
+  plm_uploads:

@@ -12,7 +12,6 @@ export type CommonStatus =
   | 'active'
   | 'inactive'
   | 'developing'
-  | 'reviewing'
   | 'released'
   | 'archived'
   | 'confirmed'
@@ -210,6 +209,37 @@ export interface ApprovalTemplate {
   description: string
   updatedAt: string
   nodes: ApprovalTemplateNode[]
+}
+
+export interface WorkflowTemplateNode {
+  workflowNodeId?: number
+  workflowTemplateId?: number
+  stepNo: number
+  nodeCode: string
+  nodeName: string
+  stageCode?: string | null
+  stageName?: string | null
+  phaseName?: string | null
+  requiredAttachment: boolean
+  requiredFileCategory?: string | null
+  uploadPrompt?: string | null
+  confirmPrompt?: string | null
+  emptyFileMessage?: string | null
+  gateFlag: boolean
+  enabledFlag: boolean
+  remark?: string | null
+}
+
+export interface WorkflowTemplate {
+  workflowTemplateId?: number
+  flowType: 'product_line' | 'model_variant'
+  templateName: string
+  versionNo: string
+  status: ApprovalTemplateStatus
+  activeFlag?: boolean
+  description?: string | null
+  updatedAt?: string | null
+  nodes: WorkflowTemplateNode[]
 }
 
 export interface UserOption {

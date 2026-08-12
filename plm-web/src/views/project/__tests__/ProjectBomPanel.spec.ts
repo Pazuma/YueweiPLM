@@ -1,6 +1,6 @@
 import { mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import ElementPlus from 'element-plus'
+import ElementPlus, { ElMessageBox } from 'element-plus'
 
 const api = vi.hoisted(() => ({
   getProjectBoms: vi.fn(),
@@ -9,8 +9,8 @@ const api = vi.hoisted(() => ({
   saveBomRoutes: vi.fn(),
   recalculateBomCosts: vi.fn(),
   submitBomReview: vi.fn(),
-  freezeBom: vi.fn(),
-  publishBom: vi.fn(),
+  confirmCurrentBomVersion: vi.fn(),
+  cancelCurrentBomConfirmation: vi.fn(),
   copyBomVersion: vi.fn(),
   confirmTestBom: vi.fn()
 }))
@@ -40,6 +40,8 @@ describe('ProjectBomPanel', () => {
       status: 'draft',
       processId: 9
     })
+    api.confirmCurrentBomVersion.mockResolvedValue({})
+    api.cancelCurrentBomConfirmation.mockResolvedValue({})
     api.getProjectBoms.mockResolvedValue([{
       productBomId: 31,
       productId: 7,
@@ -107,8 +109,9 @@ describe('ProjectBomPanel', () => {
     expect(wrapper.text()).toContain('供应商缺失 1')
     expect(wrapper.text()).toContain('成本缺失 1')
     expect(wrapper.text()).toContain('提交审核')
-    expect(wrapper.text()).toContain('冻结')
-    expect(wrapper.text()).toContain('发布')
+    expect(wrapper.text()).not.toContain('冻结')
+    expect(wrapper.text()).not.toContain('发布当前 BOM 版本')
+    expect(wrapper.text()).toContain('取消确认')
     expect(wrapper.find('[data-test="bom-create"]').exists()).toBe(true)
   })
 
@@ -124,5 +127,65 @@ describe('ProjectBomPanel', () => {
 
     expect(document.body.textContent).toContain('染色工艺路线')
     expect(wrapper.find('[data-test="bom-create-submit"]').exists()).toBe(true)
+  })
+
+  it('confirms the selected BOM version directly from the workbench', async () => {
+    api.getProjectBoms.mockResolvedValue([{
+      productBomId: 31,
+      productId: 7,
+      bomCode: 'BOM-31',
+      bomName: '候选 BOM',
+      bomType: 'mbom',
+      bomScope: 'candidate',
+      versionNo: 'V1',
+      status: 'draft',
+      processId: 9,
+      routeName: '染色工艺路线',
+      candidateStatus: 'draft',
+      currentFormal: false,
+      materialCount: 2,
+      totalCost: 12.5,
+      items: []
+    }])
+    const wrapper = mount(ProjectBomPanel, {
+      props: { projectId: 7 },
+      global: { plugins: [ElementPlus], stubs: { transition: false } }
+    })
+    await vi.waitFor(() => expect(api.getBomWorkbench).toHaveBeenCalledWith(31))
+
+    expect(wrapper.text()).toContain('确认当前 BOM 版本')
+    await wrapper.get('[data-test="bom-confirm-current"]').trigger('click')
+
+    await vi.waitFor(() => expect(api.confirmCurrentBomVersion).toHaveBeenCalledWith(31))
+  })
+
+  it('cancels confirmation for the current formal BOM version', async () => {
+    vi.spyOn(ElMessageBox, 'confirm').mockResolvedValue({ action: 'confirm' } as never)
+    api.getProjectBoms.mockResolvedValue([{
+      productBomId: 31,
+      productId: 7,
+      bomCode: 'BOM-31',
+      bomName: '候选 BOM',
+      bomType: 'mbom',
+      bomScope: 'formal',
+      versionNo: 'V1',
+      status: 'released',
+      processId: 9,
+      routeName: '染色工艺路线',
+      candidateStatus: 'released',
+      currentFormal: true,
+      materialCount: 2,
+      totalCost: 12.5,
+      items: []
+    }])
+    const wrapper = mount(ProjectBomPanel, {
+      props: { projectId: 7 },
+      global: { plugins: [ElementPlus], stubs: { transition: false } }
+    })
+    await vi.waitFor(() => expect(api.getBomWorkbench).toHaveBeenCalledWith(31))
+
+    await wrapper.get('[data-test="bom-cancel-confirmation"]').trigger('click')
+
+    await vi.waitFor(() => expect(api.cancelCurrentBomConfirmation).toHaveBeenCalledWith(31))
   })
 })

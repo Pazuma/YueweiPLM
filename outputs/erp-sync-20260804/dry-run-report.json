@@ -1,0 +1,489 @@
+{
+  "executed": false,
+  "import_tag": "erp-sync-20260804",
+  "bom_file": "D:\\Users\\46733\\Downloads\\BOM管理-2026-08-04.xlsx",
+  "route_file": "D:\\Users\\46733\\Downloads\\Rutas de proceso-2026-08-04.xlsx",
+  "started_at": "2026-08-04T10:43:12",
+  "bom": {
+    "source_rows": 24,
+    "inserted": 16,
+    "skipped_existing": 8,
+    "missing_products": [],
+    "inserted_codes": [
+      {
+        "bom_code": "BOM-NBA4030000001-002",
+        "product_code": "NBA4030",
+        "dry_run": true
+      },
+      {
+        "bom_code": "BOM-NBA4030000002-002",
+        "product_code": "NBA4030",
+        "dry_run": true
+      },
+      {
+        "bom_code": "BOM-NBA4030000007-002",
+        "product_code": "NBA4030",
+        "dry_run": true
+      },
+      {
+        "bom_code": "BOM-NBA4030000012-002",
+        "product_code": "NBA4030",
+        "dry_run": true
+      },
+      {
+        "bom_code": "BOM-NBA4030000031-002",
+        "product_code": "NBA4030",
+        "dry_run": true
+      },
+      {
+        "bom_code": "BOM-NBA4030000066-002",
+        "product_code": "NBA4030",
+        "dry_run": true
+      },
+      {
+        "bom_code": "BOM-NDN4030000031-002",
+        "product_code": "NDN4030",
+        "dry_run": true
+      },
+      {
+        "bom_code": "BOM-NFA4020000007-002",
+        "product_code": "NFA4020",
+        "dry_run": true
+      },
+      {
+        "bom_code": "BOM-NFA4020000008-002",
+        "product_code": "NFA4020",
+        "dry_run": true
+      },
+      {
+        "bom_code": "BOM-NFA4020000013-002",
+        "product_code": "NFA4020",
+        "dry_run": true
+      },
+      {
+        "bom_code": "BOM-NFB4020000002-002",
+        "product_code": "NFB4020",
+        "dry_run": true
+      },
+      {
+        "bom_code": "BOM-NFB4020000007-002",
+        "product_code": "NFB4020",
+        "dry_run": true
+      },
+      {
+        "bom_code": "BOM-NFB4020000008-002",
+        "product_code": "NFB4020",
+        "dry_run": true
+      },
+      {
+        "bom_code": "BOM-NFB4020000013-002",
+        "product_code": "NFB4020",
+        "dry_run": true
+      },
+      {
+        "bom_code": "BOM-NWV4030000002-002",
+        "product_code": "NWV4030",
+        "dry_run": true
+      },
+      {
+        "bom_code": "BOM-NWV4030000012-002",
+        "product_code": "NWV4030",
+        "dry_run": true
+      }
+    ],
+    "skipped_codes": [
+      {
+        "bom_code": "BOM-NBD4030000002-001",
+        "product_code": "NBD4030",
+        "existing": [
+          22,
+          "seed_reference",
+          "draft"
+        ]
+      },
+      {
+        "bom_code": "BOM-NFA4020000002-001",
+        "product_code": "NFA4020",
+        "existing": [
+          24,
+          "seed_reference",
+          "draft"
+        ]
+      },
+      {
+        "bom_code": "BOM-NHA4030000002-001",
+        "product_code": "NHA4030",
+        "existing": [
+          32,
+          "seed_reference",
+          "draft"
+        ]
+      },
+      {
+        "bom_code": "BOM-NHA4030000007-001",
+        "product_code": "NHA4030",
+        "existing": [
+          33,
+          "seed_reference",
+          "draft"
+        ]
+      },
+      {
+        "bom_code": "BOM-NHA4030000008-001",
+        "product_code": "NHA4030",
+        "existing": [
+          34,
+          "seed_reference",
+          "draft"
+        ]
+      },
+      {
+        "bom_code": "BOM-NHA4030000013-001",
+        "product_code": "NHA4030",
+        "existing": [
+          35,
+          "seed_reference",
+          "draft"
+        ]
+      },
+      {
+        "bom_code": "BOM-NWV4030000048-001",
+        "product_code": "NWV4030",
+        "existing": [
+          38,
+          "seed_reference",
+          "draft"
+        ]
+      },
+      {
+        "bom_code": "BOM-NWV4030000086-001",
+        "product_code": "NWV4030",
+        "existing": [
+          39,
+          "seed_reference",
+          "draft"
+        ]
+      }
+    ]
+  },
+  "routes": {
+    "source_operation_rows": 51,
+    "source_route_count": 10,
+    "route_headers_inserted": 0,
+    "route_headers_existing": 10,
+    "route_headers_updated": 0,
+    "operations_inserted": 51,
+    "operations_skipped_existing": 0,
+    "missing_products": [],
+    "inserted_operations": [
+      {
+        "process_code": "ROUTE-RAINBOW-INJECTION-CLEAR-V1-OP-001",
+        "route_code": "ROUTE-RAINBOW-INJECTION-CLEAR-V1",
+        "sequence_no": 1,
+        "dry_run": true
+      },
+      {
+        "process_code": "ROUTE-RAINBOW-INJECTION-CLEAR-V1-OP-002",
+        "route_code": "ROUTE-RAINBOW-INJECTION-CLEAR-V1",
+        "sequence_no": 2,
+        "dry_run": true
+      },
+      {
+        "process_code": "ROUTE-RAINBOW-INJECTION-CLEAR-V1-OP-003",
+        "route_code": "ROUTE-RAINBOW-INJECTION-CLEAR-V1",
+        "sequence_no": 3,
+        "dry_run": true
+      },
+      {
+        "process_code": "ROUTE-RAINBOW-INJECTION-CLEAR-V1-OP-004",
+        "route_code": "ROUTE-RAINBOW-INJECTION-CLEAR-V1",
+        "sequence_no": 4,
+        "dry_run": true
+      },
+      {
+        "process_code": "ROUTE-RAINBOW-DYE-NO-UV-V1-OP-001",
+        "route_code": "ROUTE-RAINBOW-DYE-NO-UV-V1",
+        "sequence_no": 1,
+        "dry_run": true
+      },
+      {
+        "process_code": "ROUTE-RAINBOW-DYE-NO-UV-V1-OP-002",
+        "route_code": "ROUTE-RAINBOW-DYE-NO-UV-V1",
+        "sequence_no": 2,
+        "dry_run": true
+      },
+      {
+        "process_code": "ROUTE-RAINBOW-DYE-NO-UV-V1-OP-003",
+        "route_code": "ROUTE-RAINBOW-DYE-NO-UV-V1",
+        "sequence_no": 3,
+        "dry_run": true
+      },
+      {
+        "process_code": "ROUTE-RAINBOW-DYE-NO-UV-V1-OP-004",
+        "route_code": "ROUTE-RAINBOW-DYE-NO-UV-V1",
+        "sequence_no": 4,
+        "dry_run": true
+      },
+      {
+        "process_code": "ROUTE-RAINBOW-DYE-NO-UV-V1-OP-005",
+        "route_code": "ROUTE-RAINBOW-DYE-NO-UV-V1",
+        "sequence_no": 5,
+        "dry_run": true
+      },
+      {
+        "process_code": "ROUTE-RAINBOW-DYE-UV-V1-OP-001",
+        "route_code": "ROUTE-RAINBOW-DYE-UV-V1",
+        "sequence_no": 1,
+        "dry_run": true
+      },
+      {
+        "process_code": "ROUTE-RAINBOW-DYE-UV-V1-OP-002",
+        "route_code": "ROUTE-RAINBOW-DYE-UV-V1",
+        "sequence_no": 2,
+        "dry_run": true
+      },
+      {
+        "process_code": "ROUTE-RAINBOW-DYE-UV-V1-OP-003",
+        "route_code": "ROUTE-RAINBOW-DYE-UV-V1",
+        "sequence_no": 3,
+        "dry_run": true
+      },
+      {
+        "process_code": "ROUTE-RAINBOW-DYE-UV-V1-OP-004",
+        "route_code": "ROUTE-RAINBOW-DYE-UV-V1",
+        "sequence_no": 4,
+        "dry_run": true
+      },
+      {
+        "process_code": "ROUTE-RAINBOW-DYE-UV-V1-OP-005",
+        "route_code": "ROUTE-RAINBOW-DYE-UV-V1",
+        "sequence_no": 5,
+        "dry_run": true
+      },
+      {
+        "process_code": "ROUTE-RAINBOW-DYE-UV-V1-OP-006",
+        "route_code": "ROUTE-RAINBOW-DYE-UV-V1",
+        "sequence_no": 6,
+        "dry_run": true
+      },
+      {
+        "process_code": "ROUTE-RAINBOW-INJECTION-CLEAR-UV-V1-OP-001",
+        "route_code": "ROUTE-RAINBOW-INJECTION-CLEAR-UV-V1",
+        "sequence_no": 1,
+        "dry_run": true
+      },
+      {
+        "process_code": "ROUTE-RAINBOW-INJECTION-CLEAR-UV-V1-OP-002",
+        "route_code": "ROUTE-RAINBOW-INJECTION-CLEAR-UV-V1",
+        "sequence_no": 2,
+        "dry_run": true
+      },
+      {
+        "process_code": "ROUTE-RAINBOW-INJECTION-CLEAR-UV-V1-OP-003",
+        "route_code": "ROUTE-RAINBOW-INJECTION-CLEAR-UV-V1",
+        "sequence_no": 3,
+        "dry_run": true
+      },
+      {
+        "process_code": "ROUTE-RAINBOW-INJECTION-CLEAR-UV-V1-OP-004",
+        "route_code": "ROUTE-RAINBOW-INJECTION-CLEAR-UV-V1",
+        "sequence_no": 4,
+        "dry_run": true
+      },
+      {
+        "process_code": "ROUTE-RAINBOW-INJECTION-CLEAR-UV-V1-OP-005",
+        "route_code": "ROUTE-RAINBOW-INJECTION-CLEAR-UV-V1",
+        "sequence_no": 5,
+        "dry_run": true
+      },
+      {
+        "process_code": "ROUTE-BLINDAJE-V1-OP-001",
+        "route_code": "ROUTE-BLINDAJE-V1",
+        "sequence_no": 1,
+        "dry_run": true
+      },
+      {
+        "process_code": "ROUTE-BLINDAJE-V1-OP-002",
+        "route_code": "ROUTE-BLINDAJE-V1",
+        "sequence_no": 2,
+        "dry_run": true
+      },
+      {
+        "process_code": "ROUTE-BLINDAJE-V1-OP-003",
+        "route_code": "ROUTE-BLINDAJE-V1",
+        "sequence_no": 3,
+        "dry_run": true
+      },
+      {
+        "process_code": "ROUTE-BLINDAJE-V1-OP-004",
+        "route_code": "ROUTE-BLINDAJE-V1",
+        "sequence_no": 4,
+        "dry_run": true
+      },
+      {
+        "process_code": "ROUTE-BLINDAJE-V1-OP-005",
+        "route_code": "ROUTE-BLINDAJE-V1",
+        "sequence_no": 5,
+        "dry_run": true
+      },
+      {
+        "process_code": "ROUTE-BLINDAJE-V1-OP-006",
+        "route_code": "ROUTE-BLINDAJE-V1",
+        "sequence_no": 6,
+        "dry_run": true
+      },
+      {
+        "process_code": "ROUTE-ALTERNA-V1-OP-001",
+        "route_code": "ROUTE-ALTERNA-V1",
+        "sequence_no": 1,
+        "dry_run": true
+      },
+      {
+        "process_code": "ROUTE-ALTERNA-V1-OP-002",
+        "route_code": "ROUTE-ALTERNA-V1",
+        "sequence_no": 2,
+        "dry_run": true
+      },
+      {
+        "process_code": "ROUTE-ALTERNA-V1-OP-003",
+        "route_code": "ROUTE-ALTERNA-V1",
+        "sequence_no": 3,
+        "dry_run": true
+      },
+      {
+        "process_code": "ROUTE-ALTERNA-V1-OP-004",
+        "route_code": "ROUTE-ALTERNA-V1",
+        "sequence_no": 4,
+        "dry_run": true
+      },
+      {
+        "process_code": "ROUTE-ALTERNA-V1-OP-005",
+        "route_code": "ROUTE-ALTERNA-V1",
+        "sequence_no": 5,
+        "dry_run": true
+      },
+      {
+        "process_code": "ROUTE-FANTASY-V1-OP-001",
+        "route_code": "ROUTE-FANTASY-V1",
+        "sequence_no": 1,
+        "dry_run": true
+      },
+      {
+        "process_code": "ROUTE-FANTASY-V1-OP-002",
+        "route_code": "ROUTE-FANTASY-V1",
+        "sequence_no": 2,
+        "dry_run": true
+      },
+      {
+        "process_code": "ROUTE-FANTASY-V1-OP-004",
+        "route_code": "ROUTE-FANTASY-V1",
+        "sequence_no": 4,
+        "dry_run": true
+      },
+      {
+        "process_code": "ROUTE-FANTASY-V1-OP-005",
+        "route_code": "ROUTE-FANTASY-V1",
+        "sequence_no": 5,
+        "dry_run": true
+      },
+      {
+        "process_code": "ROUTE-FANTASY-V1-OP-006",
+        "route_code": "ROUTE-FANTASY-V1",
+        "sequence_no": 6,
+        "dry_run": true
+      },
+      {
+        "process_code": "ROUTE-TITANIO-V1-OP-001",
+        "route_code": "ROUTE-TITANIO-V1",
+        "sequence_no": 1,
+        "dry_run": true
+      },
+      {
+        "process_code": "ROUTE-TITANIO-V1-OP-002",
+        "route_code": "ROUTE-TITANIO-V1",
+        "sequence_no": 2,
+        "dry_run": true
+      },
+      {
+        "process_code": "ROUTE-TITANIO-V1-OP-004",
+        "route_code": "ROUTE-TITANIO-V1",
+        "sequence_no": 4,
+        "dry_run": true
+      },
+      {
+        "process_code": "ROUTE-TITANIO-V1-OP-005",
+        "route_code": "ROUTE-TITANIO-V1",
+        "sequence_no": 5,
+        "dry_run": true
+      },
+      {
+        "process_code": "ROUTE-TITANIO-V1-OP-006",
+        "route_code": "ROUTE-TITANIO-V1",
+        "sequence_no": 6,
+        "dry_run": true
+      },
+      {
+        "process_code": "ROUTE-SUPER-CAPITAN-V1-OP-001",
+        "route_code": "ROUTE-SUPER-CAPITAN-V1",
+        "sequence_no": 1,
+        "dry_run": true
+      },
+      {
+        "process_code": "ROUTE-SUPER-CAPITAN-V1-OP-002",
+        "route_code": "ROUTE-SUPER-CAPITAN-V1",
+        "sequence_no": 2,
+        "dry_run": true
+      },
+      {
+        "process_code": "ROUTE-SUPER-CAPITAN-V1-OP-003",
+        "route_code": "ROUTE-SUPER-CAPITAN-V1",
+        "sequence_no": 3,
+        "dry_run": true
+      },
+      {
+        "process_code": "ROUTE-SUPER-CAPITAN-V1-OP-004",
+        "route_code": "ROUTE-SUPER-CAPITAN-V1",
+        "sequence_no": 4,
+        "dry_run": true
+      },
+      {
+        "process_code": "ROUTE-SUPER-CAPITAN-V1-OP-005",
+        "route_code": "ROUTE-SUPER-CAPITAN-V1",
+        "sequence_no": 5,
+        "dry_run": true
+      },
+      {
+        "process_code": "ROUTE-SUPER-CAPITAN-V1-OP-006",
+        "route_code": "ROUTE-SUPER-CAPITAN-V1",
+        "sequence_no": 6,
+        "dry_run": true
+      },
+      {
+        "process_code": "ROUTE-SUPER-CAPITAN-V1-OP-007",
+        "route_code": "ROUTE-SUPER-CAPITAN-V1",
+        "sequence_no": 7,
+        "dry_run": true
+      },
+      {
+        "process_code": "ROUTE-WAVESHELL-V1-OP-001",
+        "route_code": "ROUTE-WAVESHELL-V1",
+        "sequence_no": 1,
+        "dry_run": true
+      },
+      {
+        "process_code": "ROUTE-WAVESHELL-V1-OP-002",
+        "route_code": "ROUTE-WAVESHELL-V1",
+        "sequence_no": 2,
+        "dry_run": true
+      },
+      {
+        "process_code": "ROUTE-WAVESHELL-V1-OP-003",
+        "route_code": "ROUTE-WAVESHELL-V1",
+        "sequence_no": 3,
+        "dry_run": true
+      }
+    ],
+    "skipped_operations": []
+  },
+  "finished_at": "2026-08-04T10:43:14"
+}

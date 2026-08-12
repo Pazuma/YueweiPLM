@@ -44,14 +44,14 @@ const productTimeline = [
     title: '工艺与样品验证',
     time: '2026-06-04T10:00:00+08:00',
     owner: '工程 / 品质',
-    status: 'reviewing' as CommonStatus,
+    status: 'developing' as CommonStatus,
     description: '推进打样、工艺确认和红样测试，验证结构、外观、工序和关键性能。'
   },
   {
     title: 'BOM 资料确认',
     time: '2026-06-06T16:00:00+08:00',
     owner: '工程 / 采购',
-    status: 'reviewing' as CommonStatus,
+    status: 'developing' as CommonStatus,
     description: '确认 EBOM、MBOM、包装 BOM、替代料、主供应来源和目标成本。'
   },
   {
@@ -189,7 +189,7 @@ const newProductLineTimeline = [
     phase: '工艺定型阶段',
     time: '2026-06-05T10:00:00+08:00',
     owner: '工程 / 品质',
-    status: 'reviewing' as CommonStatus,
+    status: 'developing' as CommonStatus,
     description: '正在验证工艺路线、红样测试、磁吸力与表面耐磨结果。'
   },
   {
@@ -272,7 +272,7 @@ const newModelVariantTimeline = [
     phase: '差异调整阶段',
     time: '2026-06-06T16:00:00+08:00',
     owner: '工程 / 采购',
-    status: 'reviewing' as CommonStatus,
+    status: 'developing' as CommonStatus,
     variantTag: 'difference' as const,
     description: '正在确认黑色 TPU 替代料、渠道包装 BOM 与差异组件成本。'
   },
@@ -495,7 +495,7 @@ export const dashboardData: DashboardSnapshot = {
       stage: 'BOM 资料确认',
       owner: '工程 / 采购',
       dueDate: '2026-06-12',
-      status: 'reviewing',
+      status: 'developing',
       summary: 'iPhone18 黑色版本正在核对 EBOM、包装 BOM、替代料与主供应来源。',
       targetPath: '/bom'
     },
@@ -551,7 +551,7 @@ export const dashboardData: DashboardSnapshot = {
       title: 'iPhone18 黑色型号扩展',
       owner: '刘浩',
       dueDate: '2026-06-12',
-      status: 'reviewing',
+      status: 'developing',
       summary: '当前处于 BOM 会签阶段，替代料成本与包装 BOM 待锁定。',
       targetPath: '/products/102'
     },
@@ -642,7 +642,7 @@ export const productList: ProductSummary[] = [
     material: 'TPU + PC',
     ownerUserName: '刘浩',
     versionNo: 'A',
-    status: 'reviewing',
+    status: 'developing',
     currentStage: 'BOM 资料确认',
     customerName: '墨西哥客户 A',
     frozenFlag: false,
@@ -1032,7 +1032,7 @@ export const bomCenterData: BomCenterSnapshot = {
       bomType: 'EBOM',
       bomVersion: 'A.3',
       owner: '张敏',
-      status: 'reviewing',
+      status: 'developing',
       estimatedCost: 34.3,
       costDelta: 1.2,
       cumulativeCost: 42.8,
@@ -1050,7 +1050,7 @@ export const bomCenterData: BomCenterSnapshot = {
       bomType: 'MBOM',
       bomVersion: 'A.2',
       owner: '刘浩',
-      status: 'reviewing',
+      status: 'developing',
       estimatedCost: 31.4,
       costDelta: -0.6,
       cumulativeCost: 38.1,

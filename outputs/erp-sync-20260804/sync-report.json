@@ -1,0 +1,489 @@
+{
+  "executed": true,
+  "import_tag": "erp-sync-20260804",
+  "bom_file": "D:\\Users\\46733\\Downloads\\BOM管理-2026-08-04.xlsx",
+  "route_file": "D:\\Users\\46733\\Downloads\\Rutas de proceso-2026-08-04.xlsx",
+  "started_at": "2026-08-04T10:45:06",
+  "bom": {
+    "source_rows": 24,
+    "inserted": 16,
+    "skipped_existing": 8,
+    "missing_products": [],
+    "inserted_codes": [
+      {
+        "bom_code": "BOM-NBA4030000001-002",
+        "product_code": "NBA4030",
+        "product_bom_id": 40
+      },
+      {
+        "bom_code": "BOM-NBA4030000002-002",
+        "product_code": "NBA4030",
+        "product_bom_id": 41
+      },
+      {
+        "bom_code": "BOM-NBA4030000007-002",
+        "product_code": "NBA4030",
+        "product_bom_id": 42
+      },
+      {
+        "bom_code": "BOM-NBA4030000012-002",
+        "product_code": "NBA4030",
+        "product_bom_id": 43
+      },
+      {
+        "bom_code": "BOM-NBA4030000031-002",
+        "product_code": "NBA4030",
+        "product_bom_id": 44
+      },
+      {
+        "bom_code": "BOM-NBA4030000066-002",
+        "product_code": "NBA4030",
+        "product_bom_id": 45
+      },
+      {
+        "bom_code": "BOM-NDN4030000031-002",
+        "product_code": "NDN4030",
+        "product_bom_id": 46
+      },
+      {
+        "bom_code": "BOM-NFA4020000007-002",
+        "product_code": "NFA4020",
+        "product_bom_id": 47
+      },
+      {
+        "bom_code": "BOM-NFA4020000008-002",
+        "product_code": "NFA4020",
+        "product_bom_id": 48
+      },
+      {
+        "bom_code": "BOM-NFA4020000013-002",
+        "product_code": "NFA4020",
+        "product_bom_id": 49
+      },
+      {
+        "bom_code": "BOM-NFB4020000002-002",
+        "product_code": "NFB4020",
+        "product_bom_id": 50
+      },
+      {
+        "bom_code": "BOM-NFB4020000007-002",
+        "product_code": "NFB4020",
+        "product_bom_id": 51
+      },
+      {
+        "bom_code": "BOM-NFB4020000008-002",
+        "product_code": "NFB4020",
+        "product_bom_id": 52
+      },
+      {
+        "bom_code": "BOM-NFB4020000013-002",
+        "product_code": "NFB4020",
+        "product_bom_id": 53
+      },
+      {
+        "bom_code": "BOM-NWV4030000002-002",
+        "product_code": "NWV4030",
+        "product_bom_id": 54
+      },
+      {
+        "bom_code": "BOM-NWV4030000012-002",
+        "product_code": "NWV4030",
+        "product_bom_id": 55
+      }
+    ],
+    "skipped_codes": [
+      {
+        "bom_code": "BOM-NBD4030000002-001",
+        "product_code": "NBD4030",
+        "existing": [
+          22,
+          "seed_reference",
+          "draft"
+        ]
+      },
+      {
+        "bom_code": "BOM-NFA4020000002-001",
+        "product_code": "NFA4020",
+        "existing": [
+          24,
+          "seed_reference",
+          "draft"
+        ]
+      },
+      {
+        "bom_code": "BOM-NHA4030000002-001",
+        "product_code": "NHA4030",
+        "existing": [
+          32,
+          "seed_reference",
+          "draft"
+        ]
+      },
+      {
+        "bom_code": "BOM-NHA4030000007-001",
+        "product_code": "NHA4030",
+        "existing": [
+          33,
+          "seed_reference",
+          "draft"
+        ]
+      },
+      {
+        "bom_code": "BOM-NHA4030000008-001",
+        "product_code": "NHA4030",
+        "existing": [
+          34,
+          "seed_reference",
+          "draft"
+        ]
+      },
+      {
+        "bom_code": "BOM-NHA4030000013-001",
+        "product_code": "NHA4030",
+        "existing": [
+          35,
+          "seed_reference",
+          "draft"
+        ]
+      },
+      {
+        "bom_code": "BOM-NWV4030000048-001",
+        "product_code": "NWV4030",
+        "existing": [
+          38,
+          "seed_reference",
+          "draft"
+        ]
+      },
+      {
+        "bom_code": "BOM-NWV4030000086-001",
+        "product_code": "NWV4030",
+        "existing": [
+          39,
+          "seed_reference",
+          "draft"
+        ]
+      }
+    ]
+  },
+  "routes": {
+    "source_operation_rows": 51,
+    "source_route_count": 10,
+    "route_headers_inserted": 0,
+    "route_headers_existing": 10,
+    "route_headers_updated": 10,
+    "operations_inserted": 51,
+    "operations_skipped_existing": 0,
+    "missing_products": [],
+    "inserted_operations": [
+      {
+        "process_code": "ROUTE-RAINBOW-INJECTION-CLEAR-V1-OP-001",
+        "process_id": 231,
+        "route_code": "ROUTE-RAINBOW-INJECTION-CLEAR-V1",
+        "sequence_no": 1
+      },
+      {
+        "process_code": "ROUTE-RAINBOW-INJECTION-CLEAR-V1-OP-002",
+        "process_id": 232,
+        "route_code": "ROUTE-RAINBOW-INJECTION-CLEAR-V1",
+        "sequence_no": 2
+      },
+      {
+        "process_code": "ROUTE-RAINBOW-INJECTION-CLEAR-V1-OP-003",
+        "process_id": 233,
+        "route_code": "ROUTE-RAINBOW-INJECTION-CLEAR-V1",
+        "sequence_no": 3
+      },
+      {
+        "process_code": "ROUTE-RAINBOW-INJECTION-CLEAR-V1-OP-004",
+        "process_id": 234,
+        "route_code": "ROUTE-RAINBOW-INJECTION-CLEAR-V1",
+        "sequence_no": 4
+      },
+      {
+        "process_code": "ROUTE-RAINBOW-DYE-NO-UV-V1-OP-001",
+        "process_id": 235,
+        "route_code": "ROUTE-RAINBOW-DYE-NO-UV-V1",
+        "sequence_no": 1
+      },
+      {
+        "process_code": "ROUTE-RAINBOW-DYE-NO-UV-V1-OP-002",
+        "process_id": 236,
+        "route_code": "ROUTE-RAINBOW-DYE-NO-UV-V1",
+        "sequence_no": 2
+      },
+      {
+        "process_code": "ROUTE-RAINBOW-DYE-NO-UV-V1-OP-003",
+        "process_id": 237,
+        "route_code": "ROUTE-RAINBOW-DYE-NO-UV-V1",
+        "sequence_no": 3
+      },
+      {
+        "process_code": "ROUTE-RAINBOW-DYE-NO-UV-V1-OP-004",
+        "process_id": 238,
+        "route_code": "ROUTE-RAINBOW-DYE-NO-UV-V1",
+        "sequence_no": 4
+      },
+      {
+        "process_code": "ROUTE-RAINBOW-DYE-NO-UV-V1-OP-005",
+        "process_id": 239,
+        "route_code": "ROUTE-RAINBOW-DYE-NO-UV-V1",
+        "sequence_no": 5
+      },
+      {
+        "process_code": "ROUTE-RAINBOW-DYE-UV-V1-OP-001",
+        "process_id": 240,
+        "route_code": "ROUTE-RAINBOW-DYE-UV-V1",
+        "sequence_no": 1
+      },
+      {
+        "process_code": "ROUTE-RAINBOW-DYE-UV-V1-OP-002",
+        "process_id": 241,
+        "route_code": "ROUTE-RAINBOW-DYE-UV-V1",
+        "sequence_no": 2
+      },
+      {
+        "process_code": "ROUTE-RAINBOW-DYE-UV-V1-OP-003",
+        "process_id": 242,
+        "route_code": "ROUTE-RAINBOW-DYE-UV-V1",
+        "sequence_no": 3
+      },
+      {
+        "process_code": "ROUTE-RAINBOW-DYE-UV-V1-OP-004",
+        "process_id": 243,
+        "route_code": "ROUTE-RAINBOW-DYE-UV-V1",
+        "sequence_no": 4
+      },
+      {
+        "process_code": "ROUTE-RAINBOW-DYE-UV-V1-OP-005",
+        "process_id": 244,
+        "route_code": "ROUTE-RAINBOW-DYE-UV-V1",
+        "sequence_no": 5
+      },
+      {
+        "process_code": "ROUTE-RAINBOW-DYE-UV-V1-OP-006",
+        "process_id": 245,
+        "route_code": "ROUTE-RAINBOW-DYE-UV-V1",
+        "sequence_no": 6
+      },
+      {
+        "process_code": "ROUTE-RAINBOW-INJECTION-CLEAR-UV-V1-OP-001",
+        "process_id": 246,
+        "route_code": "ROUTE-RAINBOW-INJECTION-CLEAR-UV-V1",
+        "sequence_no": 1
+      },
+      {
+        "process_code": "ROUTE-RAINBOW-INJECTION-CLEAR-UV-V1-OP-002",
+        "process_id": 247,
+        "route_code": "ROUTE-RAINBOW-INJECTION-CLEAR-UV-V1",
+        "sequence_no": 2
+      },
+      {
+        "process_code": "ROUTE-RAINBOW-INJECTION-CLEAR-UV-V1-OP-003",
+        "process_id": 248,
+        "route_code": "ROUTE-RAINBOW-INJECTION-CLEAR-UV-V1",
+        "sequence_no": 3
+      },
+      {
+        "process_code": "ROUTE-RAINBOW-INJECTION-CLEAR-UV-V1-OP-004",
+        "process_id": 249,
+        "route_code": "ROUTE-RAINBOW-INJECTION-CLEAR-UV-V1",
+        "sequence_no": 4
+      },
+      {
+        "process_code": "ROUTE-RAINBOW-INJECTION-CLEAR-UV-V1-OP-005",
+        "process_id": 250,
+        "route_code": "ROUTE-RAINBOW-INJECTION-CLEAR-UV-V1",
+        "sequence_no": 5
+      },
+      {
+        "process_code": "ROUTE-BLINDAJE-V1-OP-001",
+        "process_id": 251,
+        "route_code": "ROUTE-BLINDAJE-V1",
+        "sequence_no": 1
+      },
+      {
+        "process_code": "ROUTE-BLINDAJE-V1-OP-002",
+        "process_id": 252,
+        "route_code": "ROUTE-BLINDAJE-V1",
+        "sequence_no": 2
+      },
+      {
+        "process_code": "ROUTE-BLINDAJE-V1-OP-003",
+        "process_id": 253,
+        "route_code": "ROUTE-BLINDAJE-V1",
+        "sequence_no": 3
+      },
+      {
+        "process_code": "ROUTE-BLINDAJE-V1-OP-004",
+        "process_id": 254,
+        "route_code": "ROUTE-BLINDAJE-V1",
+        "sequence_no": 4
+      },
+      {
+        "process_code": "ROUTE-BLINDAJE-V1-OP-005",
+        "process_id": 255,
+        "route_code": "ROUTE-BLINDAJE-V1",
+        "sequence_no": 5
+      },
+      {
+        "process_code": "ROUTE-BLINDAJE-V1-OP-006",
+        "process_id": 256,
+        "route_code": "ROUTE-BLINDAJE-V1",
+        "sequence_no": 6
+      },
+      {
+        "process_code": "ROUTE-ALTERNA-V1-OP-001",
+        "process_id": 257,
+        "route_code": "ROUTE-ALTERNA-V1",
+        "sequence_no": 1
+      },
+      {
+        "process_code": "ROUTE-ALTERNA-V1-OP-002",
+        "process_id": 258,
+        "route_code": "ROUTE-ALTERNA-V1",
+        "sequence_no": 2
+      },
+      {
+        "process_code": "ROUTE-ALTERNA-V1-OP-003",
+        "process_id": 259,
+        "route_code": "ROUTE-ALTERNA-V1",
+        "sequence_no": 3
+      },
+      {
+        "process_code": "ROUTE-ALTERNA-V1-OP-004",
+        "process_id": 260,
+        "route_code": "ROUTE-ALTERNA-V1",
+        "sequence_no": 4
+      },
+      {
+        "process_code": "ROUTE-ALTERNA-V1-OP-005",
+        "process_id": 261,
+        "route_code": "ROUTE-ALTERNA-V1",
+        "sequence_no": 5
+      },
+      {
+        "process_code": "ROUTE-FANTASY-V1-OP-001",
+        "process_id": 262,
+        "route_code": "ROUTE-FANTASY-V1",
+        "sequence_no": 1
+      },
+      {
+        "process_code": "ROUTE-FANTASY-V1-OP-002",
+        "process_id": 263,
+        "route_code": "ROUTE-FANTASY-V1",
+        "sequence_no": 2
+      },
+      {
+        "process_code": "ROUTE-FANTASY-V1-OP-004",
+        "process_id": 264,
+        "route_code": "ROUTE-FANTASY-V1",
+        "sequence_no": 4
+      },
+      {
+        "process_code": "ROUTE-FANTASY-V1-OP-005",
+        "process_id": 265,
+        "route_code": "ROUTE-FANTASY-V1",
+        "sequence_no": 5
+      },
+      {
+        "process_code": "ROUTE-FANTASY-V1-OP-006",
+        "process_id": 266,
+        "route_code": "ROUTE-FANTASY-V1",
+        "sequence_no": 6
+      },
+      {
+        "process_code": "ROUTE-TITANIO-V1-OP-001",
+        "process_id": 267,
+        "route_code": "ROUTE-TITANIO-V1",
+        "sequence_no": 1
+      },
+      {
+        "process_code": "ROUTE-TITANIO-V1-OP-002",
+        "process_id": 268,
+        "route_code": "ROUTE-TITANIO-V1",
+        "sequence_no": 2
+      },
+      {
+        "process_code": "ROUTE-TITANIO-V1-OP-004",
+        "process_id": 269,
+        "route_code": "ROUTE-TITANIO-V1",
+        "sequence_no": 4
+      },
+      {
+        "process_code": "ROUTE-TITANIO-V1-OP-005",
+        "process_id": 270,
+        "route_code": "ROUTE-TITANIO-V1",
+        "sequence_no": 5
+      },
+      {
+        "process_code": "ROUTE-TITANIO-V1-OP-006",
+        "process_id": 271,
+        "route_code": "ROUTE-TITANIO-V1",
+        "sequence_no": 6
+      },
+      {
+        "process_code": "ROUTE-SUPER-CAPITAN-V1-OP-001",
+        "process_id": 272,
+        "route_code": "ROUTE-SUPER-CAPITAN-V1",
+        "sequence_no": 1
+      },
+      {
+        "process_code": "ROUTE-SUPER-CAPITAN-V1-OP-002",
+        "process_id": 273,
+        "route_code": "ROUTE-SUPER-CAPITAN-V1",
+        "sequence_no": 2
+      },
+      {
+        "process_code": "ROUTE-SUPER-CAPITAN-V1-OP-003",
+        "process_id": 274,
+        "route_code": "ROUTE-SUPER-CAPITAN-V1",
+        "sequence_no": 3
+      },
+      {
+        "process_code": "ROUTE-SUPER-CAPITAN-V1-OP-004",
+        "process_id": 275,
+        "route_code": "ROUTE-SUPER-CAPITAN-V1",
+        "sequence_no": 4
+      },
+      {
+        "process_code": "ROUTE-SUPER-CAPITAN-V1-OP-005",
+        "process_id": 276,
+        "route_code": "ROUTE-SUPER-CAPITAN-V1",
+        "sequence_no": 5
+      },
+      {
+        "process_code": "ROUTE-SUPER-CAPITAN-V1-OP-006",
+        "process_id": 277,
+        "route_code": "ROUTE-SUPER-CAPITAN-V1",
+        "sequence_no": 6
+      },
+      {
+        "process_code": "ROUTE-SUPER-CAPITAN-V1-OP-007",
+        "process_id": 278,
+        "route_code": "ROUTE-SUPER-CAPITAN-V1",
+        "sequence_no": 7
+      },
+      {
+        "process_code": "ROUTE-WAVESHELL-V1-OP-001",
+        "process_id": 279,
+        "route_code": "ROUTE-WAVESHELL-V1",
+        "sequence_no": 1
+      },
+      {
+        "process_code": "ROUTE-WAVESHELL-V1-OP-002",
+        "process_id": 280,
+        "route_code": "ROUTE-WAVESHELL-V1",
+        "sequence_no": 2
+      },
+      {
+        "process_code": "ROUTE-WAVESHELL-V1-OP-003",
+        "process_id": 281,
+        "route_code": "ROUTE-WAVESHELL-V1",
+        "sequence_no": 3
+      }
+    ],
+    "skipped_operations": []
+  },
+  "finished_at": "2026-08-04T10:45:09"
+}

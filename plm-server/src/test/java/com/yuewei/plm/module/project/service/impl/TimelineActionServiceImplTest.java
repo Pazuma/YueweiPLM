@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -21,9 +22,12 @@ import com.yuewei.plm.module.operationlog.constant.OperationActionConstants;
 import com.yuewei.plm.module.bom.service.ProductionConfirmationService;
 import com.yuewei.plm.module.operationlog.service.OperationLogCreateCommand;
 import com.yuewei.plm.module.operationlog.service.OperationLogService;
+import com.yuewei.plm.module.integration.dingtalk.service.DingTalkProjectCompletionReturnService;
 import com.yuewei.plm.module.project.constant.TimelineNodeConstants;
 import com.yuewei.plm.module.project.dto.TimelineActionDTO;
 import com.yuewei.plm.module.project.service.TimelineDefinitionProvider;
+import com.yuewei.plm.module.project.variant.entity.RequirementForm;
+import com.yuewei.plm.module.project.variant.repository.RequirementFormRepository;
 import com.yuewei.plm.repository.ProductRepository;
 import com.yuewei.plm.repository.entity.Product;
 import jakarta.servlet.http.HttpServletRequest;
@@ -31,6 +35,8 @@ import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
+import org.springframework.test.util.ReflectionTestUtils;
 
 class TimelineActionServiceImplTest {
 
@@ -38,6 +44,7 @@ class TimelineActionServiceImplTest {
     private AttachmentRepository attachmentRepository;
     private OperationLogService operationLogService;
     private ProductionConfirmationService productionConfirmationService;
+    private RequirementFormRepository requirementFormRepository;
     private TimelineActionServiceImpl service;
     private HttpServletRequest request;
 
@@ -47,14 +54,21 @@ class TimelineActionServiceImplTest {
         attachmentRepository = mock(AttachmentRepository.class);
         operationLogService = mock(OperationLogService.class);
         productionConfirmationService = mock(ProductionConfirmationService.class);
+        requirementFormRepository = mock(RequirementFormRepository.class);
+        RequirementForm confirmedForm = new RequirementForm();
+        confirmedForm.setStatus("confirmed");
+        confirmedForm.setDeletedFlag(0);
+        when(requirementFormRepository.selectList(Mockito.<Wrapper<RequirementForm>>any())).thenReturn(List.of(confirmedForm));
         service = new TimelineActionServiceImpl(
             productRepository,
             attachmentRepository,
             new TimelineDefinitionProvider(),
             operationLogService,
-            productionConfirmationService
+            productionConfirmationService,
+            requirementFormRepository
         );
         request = mock(HttpServletRequest.class);
+        when(attachmentRepository.selectCount(anyWrapper())).thenReturn(1L);
         CurrentUserContext.set(new CurrentUser(1L, "engineer01", "Engineer One", true));
     }
 
@@ -89,6 +103,113 @@ class TimelineActionServiceImplTest {
         service.confirm(110L, "PRODUCT_LINE_PRODUCTION_DECISION_STEP", new TimelineActionDTO(), request);
 
         verify(productionConfirmationService).requireColorsConfirmed(110L);
+    }
+
+    @Test
+    void confirmProductLineFinalStepReleasesProjectAndTriggersDingTalkCc() {
+        Product product = product(115L, 22);
+        DingTalkProjectCompletionReturnService completionReturnService = mock(DingTalkProjectCompletionReturnService.class);
+        ReflectionTestUtils.setField(service, "dingTalkProjectCompletionReturnService", completionReturnService);
+        when(productRepository.selectById(115L)).thenReturn(product);
+        when(operationLogService.logSuccess(any(OperationLogCreateCommand.class))).thenReturn(515L);
+
+        var result = service.confirm(
+            115L,
+            "PRODUCT_LINE_PRODUCTION_DECISION_STEP",
+            TimelineActionDTO.builder().remark("product line completed").build(),
+            request
+        );
+
+        assertThat(result.getCurrentStepNo()).isEqualTo(22);
+        assertThat(result.getCurrentConfirmed()).isTrue();
+        assertThat(result.getProductStatus()).isEqualTo(ProductStatusConstants.RELEASED);
+        assertThat(product.getReleasedAt()).isNotNull();
+        assertThat(product.getReleasedBy()).isEqualTo("Engineer One");
+        verify(completionReturnService).handleProjectCompleted(
+            product,
+            TimelineNodeConstants.PRODUCT_LINE_NODES.get(21),
+            "Engineer One"
+        );
+    }
+
+    @Test
+    void confirmMoldTransferWithoutTrackingMovesLikeNormalStep() {
+        Product product = product(112L, 18);
+        when(productRepository.selectById(112L)).thenReturn(product);
+        when(operationLogService.logSuccess(any(OperationLogCreateCommand.class))).thenReturn(512L);
+
+        var result = service.confirm(
+            112L,
+            "PRODUCT_LINE_MOLD_TRANSFER",
+            TimelineActionDTO.builder().remark("normal progress").build(),
+            request
+        );
+
+        assertThat(result.getCurrentStepNo()).isEqualTo(19);
+        assertThat(result.getCurrentNodeKey()).isEqualTo("PRODUCT_LINE_MX_ACCEPTANCE");
+        assertThat(result.getCurrentConfirmed()).isFalse();
+        verify(productRepository).updateById(product);
+    }
+
+    @Test
+    void confirmModelVariantMoldTransferCompletesPlmProject() {
+        Product product = product(113L, 18);
+        product.setProductType(TimelineNodeConstants.PRODUCT_TYPE_MODEL_VARIANT);
+        DingTalkProjectCompletionReturnService completionReturnService = mock(DingTalkProjectCompletionReturnService.class);
+        ReflectionTestUtils.setField(service, "dingTalkProjectCompletionReturnService", completionReturnService);
+        when(productRepository.selectById(113L)).thenReturn(product);
+        when(operationLogService.logSuccess(any(OperationLogCreateCommand.class))).thenReturn(513L);
+
+        var result = service.confirm(
+            113L,
+            "MODEL_VARIANT_MOLD_TRANSFER",
+            TimelineActionDTO.builder().remark("handover to DingTalk").build(),
+            request
+        );
+
+        assertThat(result.getCurrentStepNo()).isEqualTo(18);
+        assertThat(result.getCurrentNodeKey()).isEqualTo("MODEL_VARIANT_MOLD_TRANSFER");
+        assertThat(result.getCurrentConfirmed()).isTrue();
+        assertThat(result.getProductStatus()).isEqualTo(ProductStatusConstants.RELEASED);
+        assertThat(product.getStatus()).isEqualTo(ProductStatusConstants.RELEASED);
+        assertThat(product.getReleasedAt()).isNotNull();
+        assertThat(product.getReleasedBy()).isEqualTo("Engineer One");
+        verify(productRepository).updateById(product);
+        verify(productionConfirmationService).requireColorsConfirmed(113L);
+        verify(productionConfirmationService).syncModelVariantConfirmedColorsAndSkus(product);
+        verify(completionReturnService).handleProjectCompleted(
+            product,
+            TimelineNodeConstants.MODEL_VARIANT_NODES.get(17),
+            "Engineer One"
+        );
+    }
+
+    @Test
+    void confirmModelVariantMoldTransferStillCompletesWhenDingTalkReturnFails() {
+        Product product = product(116L, 18);
+        product.setProductType(TimelineNodeConstants.PRODUCT_TYPE_MODEL_VARIANT);
+        DingTalkProjectCompletionReturnService completionReturnService = mock(DingTalkProjectCompletionReturnService.class);
+        ReflectionTestUtils.setField(service, "dingTalkProjectCompletionReturnService", completionReturnService);
+        when(productRepository.selectById(116L)).thenReturn(product);
+        when(operationLogService.logSuccess(any(OperationLogCreateCommand.class))).thenReturn(516L);
+        doThrow(new IllegalStateException("external_status must not be null"))
+            .when(completionReturnService)
+            .handleProjectCompleted(any(Product.class), any(TimelineNodeConstants.TimelineNodeDefinition.class), any(String.class));
+
+        var result = service.confirm(
+            116L,
+            "MODEL_VARIANT_MOLD_TRANSFER",
+            TimelineActionDTO.builder().remark("handover to DingTalk").build(),
+            request
+        );
+
+        assertThat(result.getCurrentStepNo()).isEqualTo(18);
+        assertThat(result.getCurrentConfirmed()).isTrue();
+        assertThat(result.getProductStatus()).isEqualTo(ProductStatusConstants.RELEASED);
+        assertThat(product.getStatus()).isEqualTo(ProductStatusConstants.RELEASED);
+        verify(productRepository).updateById(product);
+        verify(productionConfirmationService).requireColorsConfirmed(116L);
+        verify(productionConfirmationService).syncModelVariantConfirmedColorsAndSkus(product);
     }
 
     @AfterEach
@@ -131,24 +252,65 @@ class TimelineActionServiceImplTest {
     }
 
     @Test
-    void confirmLastStepOfStageWithoutRequiredDocumentThrows() {
+    void confirmLastStepOfStageWithoutRequiredDocumentMovesAndReturnsWarning() {
         Product product = product(101L, 2);
         when(productRepository.selectById(101L)).thenReturn(product);
         when(attachmentRepository.selectList(anyWrapper())).thenReturn(List.of());
 
-        assertThatThrownBy(() -> service.confirm(
+        var result = service.confirm(
             101L,
             "PRODUCT_LINE_INIT_APPROVE",
             TimelineActionDTO.builder().remark("go design").build(),
             request
+        );
+
+        assertThat(result.getWarnings()).contains("当前阶段资料未齐全：PRODUCT_LINE_INIT_CREATE");
+        verify(productRepository).updateById(product);
+        verify(operationLogService).logSuccess(argThat(command ->
+            command.getDetailJson().contains("\"documentWarnings\"")
+                && command.getDetailJson().contains("PRODUCT_LINE_INIT_CREATE")
+        ));
+    }
+
+    @Test
+    void modelVariantTimelineActionsAreBlockedBeforeRequirementFormConfirmation() {
+        Product product = product(117L, 1);
+        product.setProductType(TimelineNodeConstants.PRODUCT_TYPE_MODEL_VARIANT);
+        RequirementForm draft = new RequirementForm();
+        draft.setProjectId(117L);
+        draft.setStatus("draft");
+        draft.setDeletedFlag(0);
+        when(productRepository.selectById(117L)).thenReturn(product);
+        when(requirementFormRepository.selectList(Mockito.<Wrapper<RequirementForm>>any())).thenReturn(List.of(draft));
+
+        assertThatThrownBy(() -> service.confirm(
+            117L,
+            "MODEL_VARIANT_INIT_CREATE",
+            TimelineActionDTO.builder().remark("绕过完善表").build(),
+            request
         ))
             .isInstanceOf(BusinessException.class)
-            .hasMessageContaining("stage documents")
-            .extracting("code")
-            .isEqualTo(ErrorCodeConstants.STATUS_TRANSITION_ILLEGAL);
+            .hasMessageContaining("请先完成新型号项目信息完善表");
 
         verify(productRepository, never()).updateById(any(Product.class));
         verify(operationLogService, never()).logSuccess(any(OperationLogCreateCommand.class));
+    }
+
+    @Test
+    void confirmCurrentRequiredStepWithoutAttachmentMovesAndReturnsWarning() {
+        Product product = product(111L, 3);
+        when(productRepository.selectById(111L)).thenReturn(product);
+        when(attachmentRepository.selectCount(anyWrapper())).thenReturn(0L);
+
+        var result = service.confirm(
+            111L,
+            "PRODUCT_LINE_DESIGN_DRAWING",
+            TimelineActionDTO.builder().remark("drawing checked").build(),
+            request
+        );
+
+        assertThat(result.getWarnings()).contains("当前步骤资料未上传：画图查看");
+        verify(productRepository).updateById(product);
     }
 
     @Test

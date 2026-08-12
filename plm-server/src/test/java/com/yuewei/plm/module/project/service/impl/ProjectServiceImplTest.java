@@ -55,9 +55,13 @@ class ProjectServiceImplTest {
         assertThat(summary.getProductTypeName()).isEqualTo("新产品线");
         assertThat(summary.getStatusName()).isEqualTo("开发中");
         assertThat(summary.getOwnerUserName()).isEqualTo("工程部用户一");
-        assertThat(summary.getCurrentStepNo()).isEqualTo(2);
-        assertThat(summary.getCurrentNodeName()).isEqualTo("设计确认");
+        assertThat(summary.getCurrentStepNo()).isEqualTo(3);
+        assertThat(summary.getCurrentNodeName()).isEqualTo("画图查看");
         assertThat(summary.getDocumentCount()).isZero();
+        assertThat(summary.getLockStatus()).isEqualTo("abandoned");
+        assertThat(summary.getAbandonedAt()).isEqualTo(LocalDateTime.of(2026, 7, 8, 9, 30));
+        assertThat(summary.getAbandonedBy()).isEqualTo("engineer01");
+        assertThat(summary.getAbandonReason()).isEqualTo("市场原因放弃");
     }
 
     @Test
@@ -72,6 +76,7 @@ class ProjectServiceImplTest {
             new TimelineDefinitionProvider()
         );
         Product product = product(21L);
+        product.setOwnerUserId(null);
         when(productRepository.selectById(21L)).thenReturn(product);
         when(sysUserRepository.selectBatchIds(any(Collection.class))).thenReturn(List.of());
         TimelineDetailVO timeline = TimelineDetailVO.builder()
@@ -87,7 +92,30 @@ class ProjectServiceImplTest {
 
         assertThat(detail.getProjectId()).isEqualTo(21L);
         assertThat(detail.getProductId()).isEqualTo(21L);
+        assertThat(detail.getOwnerUserName()).isNull();
         assertThat(detail.getTimeline()).isSameAs(timeline);
+    }
+
+    @Test
+    void summaryPreservesExpandedTimelineStepNumber() {
+        ProductRepository productRepository = mock(ProductRepository.class);
+        SysUserRepository sysUserRepository = mock(SysUserRepository.class);
+        TimelineService timelineService = mock(TimelineService.class);
+        ProjectServiceImpl service = new ProjectServiceImpl(
+            productRepository,
+            sysUserRepository,
+            timelineService,
+            new TimelineDefinitionProvider()
+        );
+        Product product = product(22L);
+        product.setCurrentStepNo(22);
+        when(productRepository.selectById(22L)).thenReturn(product);
+        when(sysUserRepository.selectBatchIds(any(Collection.class))).thenReturn(List.of());
+
+        var summary = service.getSummary(22L);
+
+        assertThat(summary.getCurrentStepNo()).isEqualTo(22);
+        assertThat(summary.getCurrentNodeName()).isEqualTo("运模");
     }
 
     @Test
@@ -120,7 +148,11 @@ class ProjectServiceImplTest {
         product.setOwnerUserId(7L);
         product.setVersionNo("A");
         product.setStatus("developing");
-        product.setCurrentStepNo(2);
+        product.setCurrentStepNo(3);
+        product.setLockStatus("abandoned");
+        product.setAbandonedAt(LocalDateTime.of(2026, 7, 8, 9, 30));
+        product.setAbandonedBy("engineer01");
+        product.setAbandonReason("市场原因放弃");
         product.setCreatedAt(LocalDateTime.of(2026, 7, 7, 10, 0));
         product.setUpdatedAt(LocalDateTime.of(2026, 7, 7, 11, 0));
         product.setDeletedFlag(0);

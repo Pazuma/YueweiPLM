@@ -5,7 +5,7 @@ import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.yuewei.plm.repository.entity.BaseEntity;
-import com.yuewei.plm.module.process.repository.typehandler.PostgresJsonbStringTypeHandler;
+import com.yuewei.plm.common.mybatis.typehandler.PostgresJsonbStringTypeHandler;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import lombok.Data;
@@ -19,10 +19,21 @@ public class ProcessEntity extends BaseEntity {
     @TableId(value = "process_id", type = IdType.AUTO)
     private Long processId;
     private Long parentProcessId;
+    private Long operationMasterProcessId;
     private Long productId;
     private String processCode;
     private String processName;
     private String processType;
+    private String operationCraftCode;
+    private String materialStatusCode;
+    private Boolean finishedProductFlag;
+    private String businessOperationCode;
+    private Boolean businessOperationCodeManualFlag;
+    private String productSpecificCode;
+    private String phoneModelCode;
+    private String colorCode;
+    private String generatedFinishedProductCode;
+    private String codeGenerationContext;
     private String versionNo;
     private Integer sequenceNo;
     @TableField(typeHandler = PostgresJsonbStringTypeHandler.class)

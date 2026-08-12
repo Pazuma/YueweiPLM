@@ -134,7 +134,7 @@ CREATE TABLE plm_product (
   deleted_flag bool_flag NOT NULL DEFAULT 0,
   CONSTRAINT uk_plm_product_code UNIQUE (product_code),
   CONSTRAINT ck_plm_product_type CHECK (product_type IN ('product_line', 'model_variant')),
-  CONSTRAINT ck_plm_product_status CHECK (status IN ('draft', 'developing', 'reviewing', 'released', 'archived')),
+  CONSTRAINT ck_plm_product_status CHECK (status IN ('draft', 'developing', 'released', 'archived')),
   CONSTRAINT ck_plm_product_variant_parent CHECK (
     product_type <> 'model_variant' OR parent_product_id IS NOT NULL
   )
@@ -468,7 +468,7 @@ CREATE TABLE plm_product_bom (
   CONSTRAINT ck_plm_product_bom_material_cost_mode CHECK (
     material_cost_mode IS NULL OR material_cost_mode IN ('valuation_rate', 'last_purchase_rate', 'price_list')
   ),
-  CONSTRAINT ck_plm_product_bom_status CHECK (status IN ('draft', 'reviewing', 'released', 'archived'))
+  CONSTRAINT ck_plm_product_bom_status CHECK (status IN ('draft', 'frozen', 'released', 'archived'))
 );
 
 ALTER TABLE plm_inventory

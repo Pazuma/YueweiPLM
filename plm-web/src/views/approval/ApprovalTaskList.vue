@@ -1,41 +1,54 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, toRaw } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { Bottom, Check, CopyDocument, Delete, Plus, Top } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 
-import { getApprovalTasks, getApprovalTemplateOptions, getApprovalTemplates } from '@/api/modules/approval'
+import {
+  activateWorkflowTemplate,
+  copyWorkflowTemplate,
+  createWorkflowTemplate,
+  getApprovalTasks,
+  getApprovalTemplateOptions,
+  getWorkflowTemplates,
+  updateWorkflowTemplate,
+  type ApprovalTemplateOptions,
+  type WorkflowTemplateSavePayload
+} from '@/api/modules/approval'
+import FixedTableViewport from '@/components/FixedTableViewport/index.vue'
 import PageContainer from '@/components/PageContainer/index.vue'
 import SearchBar from '@/components/SearchBar/index.vue'
 import StatusTag from '@/components/StatusTag/index.vue'
 import { useTable } from '@/composables/useTable'
-import type { ApprovalTask, ApprovalTemplate, ApprovalTemplateNode, SearchField } from '@/types/common'
+import type { ApprovalTask, SearchField, WorkflowTemplate, WorkflowTemplateNode } from '@/types/common'
 
-type ApprovalView = 'tasks' | 'templates'
-
-interface TemplateOptionState {
-  objectTypes: Array<{ label: string; value: string }>
-  flowTypes: string[]
-  statuses: Array<{ label: string; value: string }>
-  roleOptions: Array<{ label: string; value: string }>
-  userOptions: Array<{ label: string; value: number; roleName: string }>
-}
+type ApprovalView = 'tasks' | 'workflow'
 
 const route = useRoute()
 const router = useRouter()
 
 const taskRows = ref<ApprovalTask[]>([])
-const templateRows = ref<ApprovalTemplate[]>([])
+const workflowRows = ref<WorkflowTemplate[]>([])
 const loading = ref(false)
-const activeView = ref<ApprovalView>('tasks')
+const saving = ref(false)
+const activeView = ref<ApprovalView>('workflow')
 const drawerVisible = ref(false)
 const editingTemplateId = ref<number | null>(null)
 
-const templateOptions = reactive<TemplateOptionState>({
-  objectTypes: [],
+const options = reactive<ApprovalTemplateOptions>({
   flowTypes: [],
   statuses: [],
-  roleOptions: [],
-  userOptions: []
+  fileCategories: []
+})
+
+const workflowForm = reactive<WorkflowTemplate>({
+  flowType: 'product_line',
+  templateName: '',
+  versionNo: 'V1',
+  status: 'draft',
+  activeFlag: false,
+  description: '',
+  nodes: []
 })
 
 const searchFields: SearchField[] = [
@@ -58,162 +71,195 @@ const table = useTable(taskRows, ['objectName', 'nodeName', 'initiator', 'approv
   return !status || row.status === status
 })
 
-const templateForm = reactive<ApprovalTemplate>({
-  templateId: 0,
-  templateName: '',
-  objectType: 'product',
-  flowType: '',
-  status: 'draft',
-  description: '',
-  updatedAt: '',
-  nodes: []
-})
-
-const taskSummary = computed(() => ({
-  pending: taskRows.value.filter((item) => item.status === 'pending').length,
-  approved: taskRows.value.filter((item) => item.status === 'approved').length,
-  rejected: taskRows.value.filter((item) => item.status === 'rejected').length
+const workflowSummary = computed(() => ({
+  total: workflowRows.value.length,
+  active: workflowRows.value.filter((item) => item.activeFlag).length,
+  draft: workflowRows.value.filter((item) => item.status === 'draft').length
 }))
 
-const templateSummary = computed(() => ({
-  total: templateRows.value.length,
-  active: templateRows.value.filter((item) => item.status === 'active').length,
-  draft: templateRows.value.filter((item) => item.status === 'draft').length
-}))
-
-const filteredUserOptions = (roleName: string) =>
-  templateOptions.userOptions.filter((item) => !roleName || item.roleName === roleName)
-
-function cloneTemplate(template: ApprovalTemplate) {
-  return structuredClone(template)
+function flowTypeName(flowType: WorkflowTemplate['flowType']) {
+  return options.flowTypes.find((item) => item.value === flowType)?.label || flowType
 }
 
-function createEmptyNode(stepNo: number): ApprovalTemplateNode {
+function fileCategoryName(value?: string | null) {
+  return options.fileCategories.find((item) => item.value === value)?.label || value || '未配置'
+}
+
+function cloneWorkflow(template: WorkflowTemplate): WorkflowTemplate {
+  return JSON.parse(JSON.stringify(toRaw(template))) as WorkflowTemplate
+}
+
+function createEmptyNode(stepNo: number): WorkflowTemplateNode {
   return {
-    nodeId: Date.now() + stepNo,
     stepNo,
+    nodeCode: '',
     nodeName: '',
-    approverRole: '',
-    approverUserName: '',
-    isGate: false,
-    note: ''
+    stageCode: '',
+    stageName: '',
+    phaseName: '',
+    requiredAttachment: false,
+    requiredFileCategory: '',
+    uploadPrompt: '',
+    confirmPrompt: '',
+    emptyFileMessage: '',
+    gateFlag: false,
+    enabledFlag: true,
+    remark: ''
   }
 }
 
-function createEmptyTemplate() {
-  templateForm.templateId = 0
-  templateForm.templateName = ''
-  templateForm.objectType = 'product'
-  templateForm.flowType = templateOptions.flowTypes[0] || ''
-  templateForm.status = 'draft'
-  templateForm.description = ''
-  templateForm.updatedAt = ''
-  templateForm.nodes = [createEmptyNode(1)]
+function resetForm(flowType: WorkflowTemplate['flowType'] = 'product_line') {
+  workflowForm.workflowTemplateId = undefined
+  workflowForm.flowType = flowType
+  workflowForm.templateName = ''
+  workflowForm.versionNo = 'V1'
+  workflowForm.status = 'draft'
+  workflowForm.activeFlag = false
+  workflowForm.description = ''
+  workflowForm.nodes = [createEmptyNode(1)]
 }
 
 function openTask(task: ApprovalTask) {
   router.push(task.targetPath || '/approval-tasks')
 }
 
-function openCreateTemplate() {
+function openCreateWorkflow(flowType?: WorkflowTemplate['flowType']) {
   editingTemplateId.value = null
-  createEmptyTemplate()
+  resetForm(flowType || options.flowTypes[0]?.value || 'product_line')
   drawerVisible.value = true
 }
 
-function openEditTemplate(template: ApprovalTemplate) {
-  editingTemplateId.value = template.templateId
-  Object.assign(templateForm, cloneTemplate(template))
+function openEditWorkflow(template: WorkflowTemplate) {
+  editingTemplateId.value = template.workflowTemplateId || null
+  Object.assign(workflowForm, cloneWorkflow(template))
+  workflowForm.nodes = workflowForm.nodes.length ? workflowForm.nodes : [createEmptyNode(1)]
   drawerVisible.value = true
 }
 
 function addNode() {
-  templateForm.nodes.push(createEmptyNode(templateForm.nodes.length + 1))
+  workflowForm.nodes.push(createEmptyNode(workflowForm.nodes.length + 1))
 }
 
 function removeNode(index: number) {
-  if (templateForm.nodes.length === 1) {
-    ElMessage.warning('审批模板至少保留一个节点。')
+  if (workflowForm.nodes.length === 1) {
+    ElMessage.warning('流程至少保留一个节点。')
     return
   }
-  templateForm.nodes.splice(index, 1)
+  workflowForm.nodes.splice(index, 1)
   resequenceNodes()
 }
 
 function moveNode(index: number, direction: -1 | 1) {
   const target = index + direction
-  if (target < 0 || target >= templateForm.nodes.length) return
-  const current = templateForm.nodes[index]
-  templateForm.nodes[index] = templateForm.nodes[target]
-  templateForm.nodes[target] = current
+  if (target < 0 || target >= workflowForm.nodes.length) return
+  const current = workflowForm.nodes[index]
+  workflowForm.nodes[index] = workflowForm.nodes[target]
+  workflowForm.nodes[target] = current
   resequenceNodes()
 }
 
 function resequenceNodes() {
-  templateForm.nodes.forEach((node, index) => {
+  workflowForm.nodes.forEach((node, index) => {
     node.stepNo = index + 1
   })
 }
 
-function handleRoleChange(node: ApprovalTemplateNode) {
-  const firstMatch = filteredUserOptions(node.approverRole)[0]
-  node.approverUserName = firstMatch ? firstMatch.label.split(' / ')[0] : ''
+function normalizeNode(node: WorkflowTemplateNode, index: number): WorkflowTemplateNode {
+  return {
+    workflowNodeId: node.workflowNodeId,
+    stepNo: index + 1,
+    nodeCode: node.nodeCode.trim().toUpperCase(),
+    nodeName: node.nodeName.trim(),
+    stageCode: node.stageCode?.trim() || null,
+    stageName: node.stageName?.trim() || null,
+    phaseName: node.phaseName?.trim() || null,
+    requiredFileCategory: node.requiredAttachment ? node.requiredFileCategory || null : null,
+    uploadPrompt: node.uploadPrompt?.trim() || null,
+    confirmPrompt: node.confirmPrompt?.trim() || null,
+    emptyFileMessage: node.emptyFileMessage?.trim() || null,
+    requiredAttachment: node.requiredAttachment,
+    gateFlag: node.gateFlag,
+    enabledFlag: node.enabledFlag,
+    remark: node.remark?.trim() || null
+  }
 }
 
-function handleUserChange(node: ApprovalTemplateNode, userId: number) {
-  const user = templateOptions.userOptions.find((item) => item.value === userId)
-  node.approverUserName = user ? user.label.split(' / ')[0] : ''
+function validateWorkflow() {
+  if (!workflowForm.templateName.trim()) {
+    ElMessage.warning('请填写流程模板名称。')
+    return false
+  }
+  if (!workflowForm.versionNo.trim()) {
+    ElMessage.warning('请填写版本号。')
+    return false
+  }
+  const invalidNode = workflowForm.nodes.find((node) => !node.nodeCode.trim() || !node.nodeName.trim())
+  if (invalidNode) {
+    ElMessage.warning('请补全所有节点的编码和名称。')
+    return false
+  }
+  const missingCategory = workflowForm.nodes.find((node) => node.requiredAttachment && !node.requiredFileCategory)
+  if (missingCategory) {
+    ElMessage.warning(`节点“${missingCategory.nodeName || missingCategory.nodeCode}”已设为必传资料，请配置资料类别。`)
+    return false
+  }
+  return true
 }
 
-function saveTemplate() {
-  if (!templateForm.templateName.trim()) {
-    ElMessage.warning('请先填写审批模板名称。')
-    return
+async function saveWorkflow() {
+  if (!validateWorkflow()) return
+  saving.value = true
+  try {
+    const payload: WorkflowTemplateSavePayload = {
+      flowType: workflowForm.flowType,
+      templateName: workflowForm.templateName.trim(),
+      versionNo: workflowForm.versionNo.trim(),
+      status: workflowForm.status,
+      description: workflowForm.description?.trim() || null,
+      nodes: workflowForm.nodes.map(normalizeNode)
+    }
+    if (editingTemplateId.value) {
+      await updateWorkflowTemplate(editingTemplateId.value, payload)
+      ElMessage.success('流程模板已更新。')
+    } else {
+      await createWorkflowTemplate(payload)
+      ElMessage.success('流程模板已新增。')
+    }
+    drawerVisible.value = false
+    await loadData()
+  } finally {
+    saving.value = false
   }
+}
 
-  const incompleteNode = templateForm.nodes.find(
-    (node) => !node.nodeName.trim() || !node.approverRole.trim() || !node.approverUserName.trim()
-  )
+async function activateTemplate(template: WorkflowTemplate) {
+  if (!template.workflowTemplateId) return
+  await activateWorkflowTemplate(template.workflowTemplateId)
+  ElMessage.success('流程模板已启用。')
+  await loadData()
+}
 
-  if (incompleteNode) {
-    ElMessage.warning('请完成所有审批节点的名称、角色和审批人配置。')
-    return
-  }
-
-  const payload = cloneTemplate({
-    ...templateForm,
-    templateId: editingTemplateId.value || Date.now(),
-    updatedAt: '2026-06-10'
-  })
-
-  const index = templateRows.value.findIndex((item) => item.templateId === payload.templateId)
-  if (index >= 0) {
-    templateRows.value.splice(index, 1, payload)
-    ElMessage.success('审批模板已更新。')
-  } else {
-    templateRows.value.unshift(payload)
-    ElMessage.success('审批模板已新增。')
-  }
-
-  drawerVisible.value = false
+async function copyTemplate(template: WorkflowTemplate) {
+  if (!template.workflowTemplateId) return
+  await copyWorkflowTemplate(template.workflowTemplateId, template.flowType)
+  ElMessage.success('已复制为草稿模板。')
+  await loadData()
 }
 
 async function loadData() {
   loading.value = true
   try {
-    const [tasks, templates, options] = await Promise.all([
+    const [tasks, templates, templateOptions] = await Promise.all([
       getApprovalTasks(),
-      getApprovalTemplates(),
+      getWorkflowTemplates(),
       getApprovalTemplateOptions()
     ])
     taskRows.value = tasks
-    templateRows.value = templates
-    templateOptions.objectTypes = options.objectTypes
-    templateOptions.flowTypes = options.flowTypes
-    templateOptions.statuses = options.statuses
-    templateOptions.roleOptions = options.roleOptions
-    templateOptions.userOptions = options.userOptions
-    createEmptyTemplate()
+    workflowRows.value = templates
+    options.flowTypes = templateOptions.flowTypes
+    options.statuses = templateOptions.statuses
+    options.fileCategories = templateOptions.fileCategories
+    if (!workflowForm.nodes.length) resetForm(options.flowTypes[0]?.value || 'product_line')
   } finally {
     loading.value = false
   }
@@ -229,19 +275,70 @@ onMounted(async () => {
 </script>
 
 <template>
-  <PageContainer title="审批中心" description="统一处理审批任务，并配置审批模板、关键门禁节点和节点审批人。">
+  <PageContainer title="审批中心" description="维护新产品线和新型号线的流程节点、必传资料与节点提示。">
     <template #actions>
       <el-segmented
         v-model="activeView"
         :options="[
-          { label: '审批任务', value: 'tasks' },
-          { label: '审批模板', value: 'templates' }
+          { label: '流程编辑', value: 'workflow' },
+          { label: '审批任务', value: 'tasks' }
         ]"
       />
-      <el-button v-if="activeView === 'templates'" type="primary" @click="openCreateTemplate">新增审批模板</el-button>
+      <el-button v-if="activeView === 'workflow'" type="primary" :icon="Plus" @click="openCreateWorkflow()">
+        新增流程
+      </el-button>
     </template>
 
-    <template v-if="activeView === 'tasks'">
+    <template v-if="activeView === 'workflow'">
+      <section class="workflow-toolbar">
+        <div class="metric">
+          <strong>{{ workflowSummary.total }}</strong>
+          <span>流程模板</span>
+        </div>
+        <div class="metric">
+          <strong>{{ workflowSummary.active }}</strong>
+          <span>已启用</span>
+        </div>
+        <div class="metric">
+          <strong>{{ workflowSummary.draft }}</strong>
+          <span>草稿</span>
+        </div>
+      </section>
+
+      <section class="page-panel" v-loading="loading">
+        <FixedTableViewport v-slot="{ tableHeight }" compact :refresh-key="workflowRows">
+        <el-table :data="workflowRows" :height="tableHeight" border stripe>
+          <el-table-column prop="templateName" label="流程模板" min-width="220" />
+          <el-table-column label="流程线" width="140">
+            <template #default="{ row }">{{ flowTypeName(row.flowType) }}</template>
+          </el-table-column>
+          <el-table-column prop="versionNo" label="版本" width="110" />
+          <el-table-column label="状态" width="110">
+            <template #default="{ row }">
+              <el-tag :type="row.activeFlag ? 'success' : row.status === 'draft' ? 'warning' : 'info'" effect="light">
+                {{ row.activeFlag ? '启用' : row.status === 'draft' ? '草稿' : '停用' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="节点" width="90">
+            <template #default="{ row }">{{ row.nodes?.length || 0 }}</template>
+          </el-table-column>
+          <el-table-column prop="description" label="说明" min-width="220" show-overflow-tooltip />
+          <el-table-column label="操作" width="260" fixed="right">
+            <template #default="{ row }">
+              <el-button link type="primary" @click.stop="openEditWorkflow(row)">编辑</el-button>
+              <el-button link :icon="CopyDocument" @click="copyTemplate(row)">复制</el-button>
+              <el-button v-if="!row.activeFlag" link type="success" :icon="Check" @click="activateTemplate(row)">
+                启用
+              </el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+        </FixedTableViewport>
+      </section>
+    </template>
+
+    <template v-else>
       <SearchBar
         :fields="searchFields"
         :model-value="table.query"
@@ -250,7 +347,8 @@ onMounted(async () => {
       />
 
       <section class="page-panel" v-loading="loading">
-        <el-table :data="table.pagedRows.value" border stripe @row-click="openTask">
+        <FixedTableViewport v-slot="{ tableHeight }" compact :refresh-key="table.pagedRows.value">
+        <el-table :data="table.pagedRows.value" :height="tableHeight" border stripe @row-click="openTask">
           <el-table-column prop="objectName" label="业务对象" min-width="260" />
           <el-table-column prop="nodeName" label="审批节点" min-width="180" />
           <el-table-column prop="initiator" label="发起人" width="120" />
@@ -267,6 +365,7 @@ onMounted(async () => {
             </template>
           </el-table-column>
         </el-table>
+        </FixedTableViewport>
 
         <div class="toolbar-row pager-row">
           <span class="subtle-text">共 {{ table.filteredRows.value.length }} 条</span>
@@ -280,137 +379,64 @@ onMounted(async () => {
       </section>
     </template>
 
-    <template v-else>
-      <section class="split-grid template-layout" v-loading="loading">
-        <article class="page-panel">
-          <div class="toolbar-row">
-            <div>
-              <h3 class="section-title">审批模板列表</h3>
-              <p class="page-panel-desc">模板负责定义“走哪些节点、谁来审批、哪些是关键门禁”。</p>
-            </div>
-          </div>
-
-          <div class="page-stack">
-            <button
-              v-for="template in templateRows"
-              :key="template.templateId"
-              class="template-card"
-              type="button"
-              @click="openEditTemplate(template)"
-            >
-              <div class="toolbar-row">
-                <div class="cell-stack">
-                  <strong>{{ template.templateName }}</strong>
-                  <span class="subtle-text">{{ template.flowType }} / {{ template.objectType }}</span>
-                </div>
-                <el-tag :type="template.status === 'active' ? 'success' : template.status === 'draft' ? 'warning' : 'info'" effect="light">
-                  {{ template.status === 'active' ? '启用' : template.status === 'draft' ? '草稿' : '停用' }}
-                </el-tag>
-              </div>
-              <p class="page-panel-desc">{{ template.description }}</p>
-              <div class="detail-row">
-                <span>节点 {{ template.nodes.length }} 个</span>
-                <span>{{ template.updatedAt }}</span>
-              </div>
-            </button>
-          </div>
-        </article>
-
-        <article class="page-panel rules-panel">
-          <div class="toolbar-row">
-            <div>
-              <h3 class="section-title">配置规则提醒</h3>
-              <p class="page-panel-desc">当前只做前端模板配置，但规则语义要和审批规范保持一致。</p>
-            </div>
-          </div>
-          <div class="page-stack">
-            <div class="rule-card">
-              <strong>发起人与确认人分离</strong>
-              <p class="page-panel-desc">关键门禁节点不建议由同一人同时发起和审批，避免流程失真。</p>
-            </div>
-            <div class="rule-card">
-              <strong>关键门禁节点必须指定明确审批人</strong>
-              <p class="page-panel-desc">立项、开模、版本冻结、正式发布这类节点必须落到角色和具体人员。</p>
-            </div>
-            <div class="rule-card">
-              <strong>先配角色，再配人员</strong>
-              <p class="page-panel-desc">先明确岗位职责，再匹配具体人，便于后续衔接权限体系和审批流引擎。</p>
-            </div>
-          </div>
-        </article>
-      </section>
-    </template>
-
-    <el-drawer v-model="drawerVisible" title="审批模板配置" size="760px">
-      <div class="page-stack">
+    <el-drawer v-model="drawerVisible" title="流程模板配置" size="86%">
+      <div class="drawer-stack">
         <section class="template-form-grid">
-          <el-input v-model="templateForm.templateName" placeholder="模板名称，例如：新型号线差异发布审批" />
-          <el-select v-model="templateForm.objectType" placeholder="适用对象">
-            <el-option v-for="item in templateOptions.objectTypes" :key="item.value" :label="item.label" :value="item.value" />
+          <el-input v-model="workflowForm.templateName" placeholder="模板名称，例如：新产品线标准流程" />
+          <el-select v-model="workflowForm.flowType" placeholder="流程线" :disabled="Boolean(editingTemplateId)">
+            <el-option v-for="item in options.flowTypes" :key="item.value" :label="item.label" :value="item.value" />
           </el-select>
-          <el-select v-model="templateForm.flowType" placeholder="适用流程">
-            <el-option v-for="item in templateOptions.flowTypes" :key="item" :label="item" :value="item" />
-          </el-select>
-          <el-select v-model="templateForm.status" placeholder="模板状态">
-            <el-option v-for="item in templateOptions.statuses" :key="item.value" :label="item.label" :value="item.value" />
+          <el-input v-model="workflowForm.versionNo" placeholder="版本号，例如：V2" />
+          <el-select v-model="workflowForm.status" placeholder="状态" :disabled="Boolean(workflowForm.activeFlag)">
+            <el-option v-for="item in options.statuses" :key="item.value" :label="item.label" :value="item.value" />
           </el-select>
         </section>
 
-        <el-input
-          v-model="templateForm.description"
-          type="textarea"
-          :rows="3"
-          placeholder="描述这个模板用于哪个业务场景、控制哪些关键门禁。"
-        />
+        <el-input v-model="workflowForm.description" type="textarea" :rows="2" placeholder="流程说明" />
 
         <div class="toolbar-row">
-          <div>
-            <h3 class="section-title">审批节点配置</h3>
-            <p class="page-panel-desc">每个节点都可以指定审批角色、审批人和是否为关键门禁。</p>
-          </div>
-          <el-button type="primary" plain @click="addNode">新增节点</el-button>
+          <h3 class="section-title">节点配置</h3>
+          <el-button type="primary" plain :icon="Plus" @click="addNode">新增节点</el-button>
         </div>
 
-        <div class="page-stack">
-          <article v-for="(node, index) in templateForm.nodes" :key="node.nodeId" class="node-card">
-            <div class="toolbar-row">
-              <strong>第 {{ node.stepNo }} 节点</strong>
-              <div class="node-actions">
-                <el-button text @click="moveNode(index, -1)">上移</el-button>
-                <el-button text @click="moveNode(index, 1)">下移</el-button>
-                <el-button text type="danger" @click="removeNode(index)">删除</el-button>
+        <section class="node-list">
+          <article v-for="(node, index) in workflowForm.nodes" :key="node.workflowNodeId || index" class="node-row">
+            <div class="node-order">
+              <strong>{{ node.stepNo }}</strong>
+              <div>
+                <el-button text :icon="Top" :disabled="index === 0" @click="moveNode(index, -1)" />
+                <el-button text :icon="Bottom" :disabled="index === workflowForm.nodes.length - 1" @click="moveNode(index, 1)" />
+                <el-button text type="danger" :icon="Delete" @click="removeNode(index)" />
               </div>
             </div>
 
-            <div class="node-grid">
-              <el-input v-model="node.nodeName" placeholder="节点名称，例如：版本冻结" />
-              <el-select v-model="node.approverRole" placeholder="审批角色" @change="handleRoleChange(node)">
-                <el-option v-for="item in templateOptions.roleOptions" :key="item.value" :label="item.label" :value="item.value" />
+            <div class="node-fields">
+              <el-input v-model="node.nodeCode" placeholder="节点编码，例如 PRODUCT_LINE_INIT_CREATE" />
+              <el-input v-model="node.nodeName" placeholder="节点名称" />
+              <el-input v-model="node.stageCode" placeholder="阶段编码" />
+              <el-input v-model="node.stageName" placeholder="阶段名称" />
+              <el-input v-model="node.phaseName" placeholder="阶段展示名" />
+              <el-select v-model="node.requiredFileCategory" placeholder="必传资料类别" :disabled="!node.requiredAttachment">
+                <el-option v-for="item in options.fileCategories" :key="item.value" :label="item.label" :value="item.value" />
               </el-select>
-              <el-select
-                :model-value="templateOptions.userOptions.find((item) => item.label.startsWith(node.approverUserName))?.value"
-                placeholder="审批人"
-                @update:model-value="handleUserChange(node, Number($event))"
-              >
-                <el-option
-                  v-for="item in filteredUserOptions(node.approverRole)"
-                  :key="item.value"
-                  :label="item.label"
-                  :value="item.value"
-                />
-              </el-select>
+              <el-input v-model="node.uploadPrompt" placeholder="上传资料提示" />
+              <el-input v-model="node.confirmPrompt" placeholder="确认节点提示" />
+              <el-input v-model="node.emptyFileMessage" placeholder="缺少资料提示" />
+              <el-input v-model="node.remark" placeholder="备注" />
             </div>
 
-            <div class="node-grid node-grid--secondary">
-              <el-switch v-model="node.isGate" active-text="关键门禁" inactive-text="普通节点" />
-              <el-input v-model="node.note" placeholder="节点说明，例如：确认 BOM / 工艺 / 图纸齐套后方可冻结。" />
+            <div class="node-switches">
+              <el-checkbox v-model="node.requiredAttachment">必传资料</el-checkbox>
+              <el-checkbox v-model="node.gateFlag">门禁节点</el-checkbox>
+              <el-checkbox v-model="node.enabledFlag">启用</el-checkbox>
+              <span v-if="node.requiredAttachment" class="subtle-text">{{ fileCategoryName(node.requiredFileCategory) }}</span>
             </div>
           </article>
-        </div>
+        </section>
 
         <div class="drawer-actions">
           <el-button @click="drawerVisible = false">取消</el-button>
-          <el-button type="primary" @click="saveTemplate">保存模板</el-button>
+          <el-button type="primary" :loading="saving" @click="saveWorkflow">保存流程</el-button>
         </div>
       </div>
     </el-drawer>
@@ -418,88 +444,98 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.summary-button,
-.template-card {
-  width: 100%;
-  text-align: left;
-  cursor: pointer;
-  transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+.workflow-toolbar {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 160px));
+  gap: 12px;
+  margin-bottom: 14px;
 }
 
-.summary-button:hover,
-.template-card:hover {
-  border-color: var(--plm-color-primary);
-  box-shadow: var(--plm-shadow-md);
-  transform: translateY(-1px);
+.metric {
+  padding: 12px 14px;
+  border: 1px solid var(--plm-color-border-light);
+  border-radius: var(--plm-radius-base);
+  background: #fff;
+}
+
+.metric strong {
+  display: block;
+  font-size: 22px;
+  line-height: 1.2;
+}
+
+.metric span {
+  color: var(--plm-color-text-secondary);
+  font-size: var(--plm-font-size-sm);
 }
 
 .pager-row {
   margin-top: 16px;
 }
 
-.template-layout {
-  grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
-}
-
-.template-card,
-.rule-card,
-.node-card {
-  padding: 14px;
-  border: 1px solid var(--plm-color-border-light);
-  border-radius: var(--plm-radius-base);
-  background: #fff;
-}
-
-.rules-panel {
-  align-self: start;
+.drawer-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 
 .template-form-grid,
-.node-grid {
+.node-fields {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
 
-.node-grid--secondary {
-  grid-template-columns: 180px minmax(0, 1fr);
-  margin-top: 12px;
+.node-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
-.node-actions,
+.node-row {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr) 220px;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--plm-color-border-light);
+  border-radius: var(--plm-radius-base);
+  background: #fff;
+}
+
+.node-order,
+.node-switches,
 .drawer-actions {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
+.node-order,
+.node-switches {
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.node-order strong {
+  font-size: 20px;
+}
+
 .drawer-actions {
   justify-content: flex-end;
-  margin-top: 8px;
-}
-
-.cell-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.detail-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-top: 10px;
-  color: var(--plm-color-text-secondary);
-  font-size: var(--plm-font-size-sm);
+  padding-top: 6px;
 }
 
 @media (max-width: 1200px) {
-  .template-layout,
+  .workflow-toolbar,
   .template-form-grid,
-  .node-grid,
-  .node-grid--secondary {
+  .node-fields,
+  .node-row {
     grid-template-columns: 1fr;
+  }
+
+  .node-switches {
+    flex-direction: row;
+    flex-wrap: wrap;
   }
 }
 </style>

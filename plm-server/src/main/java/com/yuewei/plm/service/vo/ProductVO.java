@@ -2,6 +2,8 @@ package com.yuewei.plm.service.vo;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
+import com.yuewei.plm.module.product.mold.vo.ProductMoldCodeVO;
 import lombok.Builder;
 import lombok.Data;
 
@@ -12,6 +14,15 @@ public class ProductVO {
     private Long parentProductId;
     private Long customerId;
     private String productCode;
+    private String productCodePrefix;
+    private String moldCodePrefix;
+    private String moldCodes;
+    private List<ProductMoldCodeVO> moldCodeDetails;
+    private String productSpecificCode;
+    private String phoneModelCode;
+    private String colorCode;
+    private String finishedProductCode;
+    private String importShortCode;
     private String productName;
     private String productType;
     private String seriesName;
@@ -25,6 +36,20 @@ public class ProductVO {
     private Long ownerUserId;
     private String versionNo;
     private String status;
+    private LocalDate expectedDeliveryDate;
+    private LocalDateTime moldTransferAt;
+    private LocalDateTime expectedArrivalAt;
+    private LocalDateTime actualArrivalAt;
+    private String networkType;
+    private String holeType;
+    private String mobileFunction;
+    private String tipo;
+    private String priority;
+    private String manufacturingLocation;
+    private String moldMarking;
+    private String referenceUrl;
+    private String requirementType;
+    private String customerRequirement;
     private Integer currentStepNo;
     private LocalDate effectiveDate;
     private LocalDateTime releasedAt;

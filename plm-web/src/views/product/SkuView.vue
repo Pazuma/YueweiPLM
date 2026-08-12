@@ -1,9 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
 
-import { getFoundationProducts, getProductPresentation } from '@/api/modules/foundation'
+import { getProductPresentation } from '@/api/modules/foundation'
+import { deleteAttachment, downloadAttachment, getProductAttachments, uploadProductAttachment, type AttachmentVO } from '@/api/modules/attachment'
+import { getProductList } from '@/api/modules/product'
 import FilePreview from '@/components/FilePreview/index.vue'
+import FixedTableViewport from '@/components/FixedTableViewport/index.vue'
 import PageContainer from '@/components/PageContainer/index.vue'
 import ProjectFlowPanel from '@/components/ProjectFlowPanel/index.vue'
 import StatusTag from '@/components/StatusTag/index.vue'
@@ -16,14 +20,27 @@ import type {
   ProductionDocumentPreviewFile,
   SkuProcessRouteRow
 } from '@/types/foundation'
+import type { ProductSummary } from '@/types/product'
 import { formatAmount, formatDate } from '@/utils/format'
 import { toInProgressProjectRoute } from '@/utils/projectRoute'
 
 interface SkuDisplayRow extends FoundationProductRef {
+  productSpecificCode?: string | null
+  phoneModelCode?: string | null
+  colorCode?: string | null
+  finishedProductCode?: string | null
+  displaySkuCode: string
+  displayProductLineCode: string
   sampleImageUrl?: string
   sampleImageName?: string
   stockUom?: string
   projectSource?: string
+}
+
+type ProductListItem = ProductSummary & {
+  createdAt?: string | null
+  updatedAt?: string | null
+  createdBy?: string | null
 }
 
 type SkuPageStage = 'product-home' | 'sku-list'
@@ -38,6 +55,12 @@ const keyword = ref('')
 const selectedSkuIds = ref<number[]>([])
 const previewImageVisible = ref(false)
 const previewImageUrl = ref('')
+const sampleImageMap = ref<Record<number, AttachmentVO[]>>({})
+const sampleImageUrls = ref<Record<number, string>>({})
+const sampleUploadFile = ref<File | null>(null)
+const sampleUploadRemark = ref('')
+const sampleUploadLoading = ref(false)
+const sampleDeleteLoading = ref<number | null>(null)
 const createSkuVisible = ref(false)
 const deleteLoading = ref(false)
 
@@ -61,7 +84,26 @@ const skuDetailSections = [
   { key: 'production_docs' as const, label: '生产资料' }
 ]
 
-const productCards = computed(() => rows.value.filter((item) => item.productType === 'product_line'))
+const productCards = computed(() =>
+  rows.value.reduce<SkuDisplayRow[]>((acc, item) => {
+    if (item.productType === 'product_line') {
+      if (!acc.some((row) => row.productId === item.productId)) acc.push(item)
+      return acc
+    }
+    if (item.parentProductId && !acc.some((row) => row.productId === item.parentProductId)) {
+      acc.push({
+        ...item,
+        productId: item.parentProductId,
+        parentProductId: null,
+        productCode: item.seriesName || item.productCode,
+        displayProductLineCode: item.displayProductLineCode,
+        productName: item.seriesName || item.productName,
+        productType: 'product_line'
+      })
+    }
+    return acc
+  }, [])
+)
 
 const activeProduct = computed(() => productCards.value.find((item) => item.productId === activeProductId.value) || null)
 
@@ -70,7 +112,7 @@ const currentSkuRows = computed(() => {
   if (!activeProductId.value) return []
 
   return rows.value.filter((item) => {
-    if (item.productType !== 'model_variant') return false
+    if (item.productType === 'product_line') return false
 
     const belongsToProduct =
       item.parentProductId === activeProductId.value ||
@@ -79,6 +121,7 @@ const currentSkuRows = computed(() => {
     const keywordMatched =
       !search ||
       item.productCode.toLowerCase().includes(search) ||
+      item.displaySkuCode.toLowerCase().includes(search) ||
       item.productName.toLowerCase().includes(search) ||
       item.model.toLowerCase().includes(search) ||
       item.color.toLowerCase().includes(search)
@@ -122,7 +165,7 @@ function openProductionDocPreview(doc: ProductDocumentSummary) {
 function getSkuCount(product: FoundationProductRef) {
   return rows.value.filter(
     (item) =>
-      item.productType === 'model_variant' &&
+      item.productType !== 'product_line' &&
       (item.parentProductId === product.productId || item.seriesName === product.seriesName)
   ).length
 }
@@ -165,9 +208,91 @@ function handleSkuSelectionChange(selectedRows: SkuDisplayRow[]) {
   selectedSkuIds.value = selectedRows.map((row) => row.productId)
 }
 
+function getSkuSampleImages(row: SkuDisplayRow | null | undefined) {
+  if (!row) return []
+  return sampleImageMap.value[row.productId] || []
+}
+
+function getSkuSampleImageUrl(row: SkuDisplayRow | null | undefined) {
+  if (!row) return ''
+  return sampleImageUrls.value[row.productId] || row.sampleImageUrl || ''
+}
+
+function getSampleImageCount(row: SkuDisplayRow | null | undefined) {
+  return getSkuSampleImages(row).length
+}
+
 function openPreview(url?: string) {
   previewImageUrl.value = url || ''
   previewImageVisible.value = true
+}
+
+async function openAttachmentPreview(attachment: AttachmentVO) {
+  const url = sampleImageUrls.value[attachment.ownerObjectId]
+  if (url && getSkuSampleImages(detailSku.value)[0]?.attachmentId === attachment.attachmentId) {
+    openPreview(url)
+    return
+  }
+  const blob = await downloadAttachment(attachment.attachmentId)
+  const objectUrl = URL.createObjectURL(blob)
+  openPreview(objectUrl)
+}
+
+async function refreshSkuSampleImages(productId: number) {
+  const images = await getProductAttachments(productId, 'sample_image')
+  sampleImageMap.value = { ...sampleImageMap.value, [productId]: images }
+  if (!images.length) {
+    sampleImageUrls.value = { ...sampleImageUrls.value, [productId]: '' }
+    return
+  }
+  const blob = await downloadAttachment(images[0].attachmentId)
+  sampleImageUrls.value = { ...sampleImageUrls.value, [productId]: URL.createObjectURL(blob) }
+}
+
+async function refreshVisibleSampleImages() {
+  const imageRows = rows.value.filter((item) => item.productType !== 'product_line')
+  await Promise.all(imageRows.slice(0, 40).map((item) => refreshSkuSampleImages(item.productId).catch(() => undefined)))
+}
+
+function handleSampleUploadFileChange(event: Event) {
+  sampleUploadFile.value = (event.target as HTMLInputElement).files?.[0] || null
+}
+
+async function submitSampleImageUpload() {
+  if (!detailSku.value) return
+  if (!sampleUploadFile.value) {
+    ElMessage.warning('请选择要上传的示例照片')
+    return
+  }
+  sampleUploadLoading.value = true
+  try {
+    await uploadProductAttachment(detailSku.value.productId, sampleUploadFile.value, {
+      fileCategory: 'sample_image',
+      remark: sampleUploadRemark.value.trim() || 'SKU示例照片'
+    })
+    sampleUploadFile.value = null
+    sampleUploadRemark.value = ''
+    await refreshSkuSampleImages(detailSku.value.productId)
+    ElMessage.success('示例照片已上传')
+  } finally {
+    sampleUploadLoading.value = false
+  }
+}
+
+async function removeSampleImage(attachment: AttachmentVO) {
+  await ElMessageBox.confirm(`确认删除“${attachment.originalFileName || attachment.fileName}”吗？`, '删除示例照片', {
+    confirmButtonText: '删除',
+    cancelButtonText: '取消',
+    type: 'warning'
+  })
+  sampleDeleteLoading.value = attachment.attachmentId
+  try {
+    await deleteAttachment(attachment.attachmentId)
+    await refreshSkuSampleImages(attachment.ownerObjectId)
+    ElMessage.success('示例照片已删除')
+  } finally {
+    sampleDeleteLoading.value = null
+  }
 }
 
 function deleteSelectedSkus() {
@@ -190,15 +315,76 @@ async function openSkuDetail(row: SkuDisplayRow) {
     const presentation = await getProductPresentation(row.productId)
     detailPresentation.value = presentation
     detailBomVersion.value = presentation.defaultBomVersion || presentation.bomCompareRows[0]?.versionNo || ''
+  } catch {
+    detailPresentation.value = null
+    detailBomVersion.value = ''
   } finally {
     detailLoading.value = false
+  }
+}
+
+function resolveDisplaySkuCode(product: ProductListItem) {
+  return product.finishedProductCode || product.productCode || ''
+}
+
+function resolveDisplayProductLineCode(product: ProductListItem) {
+  const productCode = product.productCode || ''
+  if (product.productType !== 'product_line' || !productCode.startsWith('PRD-')) {
+    return productCode
+  }
+  const productSpecificCode = product.productSpecificCode?.trim().toUpperCase()
+  return productSpecificCode ? `N${productSpecificCode}4030` : productCode
+}
+
+function toSkuDisplayRow(product: ProductListItem): SkuDisplayRow {
+  return {
+    productId: product.productId,
+    parentProductId: product.parentProductId ?? null,
+    productCode: product.productCode || '',
+    productSpecificCode: product.productSpecificCode || null,
+    phoneModelCode: product.phoneModelCode || null,
+    colorCode: product.colorCode || null,
+    finishedProductCode: product.finishedProductCode || null,
+    displaySkuCode: resolveDisplaySkuCode(product),
+    displayProductLineCode: resolveDisplayProductLineCode(product),
+    productName: product.productName || '',
+    productType: product.productType || 'model_variant',
+    seriesName: product.seriesName || '--',
+    model: product.model || '--',
+    color: product.color || '--',
+    customerName: product.customerName || '',
+    versionNo: product.versionNo || 'A',
+    status: product.status || 'draft',
+    currentStage: product.currentStage || product.status || '--',
+    estimatedCost: product.estimatedCost || 0,
+    actualCost: product.actualCost || 0,
+    lastActiveAt: product.updatedAt || product.createdAt || '',
+    createdAt: product.createdAt || '',
+    stockUom: 'pcs',
+    projectSource: product.createdBy || product.customerName || '历史存档'
   }
 }
 
 async function loadData() {
   loading.value = true
   try {
-    rows.value = await getFoundationProducts()
+    const results = await Promise.allSettled([
+      getProductList({ page: 1, size: 200, productType: 'product_line' }),
+      getProductList({ page: 1, size: 200, productType: 'model_variant' }),
+      getProductList({ page: 1, size: 200, productType: 'sku' }),
+      getProductList({ page: 1, size: 200, status: 'released' }),
+      getProductList({ page: 1, size: 200, status: 'archived' })
+    ])
+    const mergedProducts = new Map<number, ProductListItem>()
+    results.forEach((result) => {
+      if (result.status === 'fulfilled') {
+        result.value.forEach((item) => mergedProducts.set(item.productId, item))
+      }
+    })
+    rows.value = Array.from(mergedProducts.values()).map(toSkuDisplayRow)
+    await refreshVisibleSampleImages()
+  } catch {
+    rows.value = []
   } finally {
     loading.value = false
   }
@@ -236,7 +422,7 @@ onMounted(loadData)
             <strong>{{ product.productName }}</strong>
             <StatusTag :status="product.status" object-type="product" />
           </div>
-          <p class="subtle-text">{{ product.productCode }}</p>
+          <p class="subtle-text">{{ product.displayProductLineCode }}</p>
           <p class="sku-product-card__series">{{ product.seriesName }}</p>
           <div class="sku-product-card__meta">
             <span>{{ getSkuCount(product) }} 个 SKU</span>
@@ -273,19 +459,24 @@ onMounted(loadData)
         </div>
       </div>
 
-      <el-table :data="currentSkuRows" border stripe @selection-change="handleSkuSelectionChange">
+      <FixedTableViewport v-slot="{ tableHeight }" :refresh-key="currentSkuRows">
+      <el-table :data="currentSkuRows" :height="tableHeight" border stripe @selection-change="handleSkuSelectionChange">
         <el-table-column type="selection" width="48" />
         <el-table-column label="示例图" min-width="150">
           <template #default="{ row }">
             <div class="sku-image-cell">
               <div class="sku-image-cell__thumb">
-                <span>{{ row.model }}</span>
+                <el-image v-if="getSkuSampleImageUrl(row)" :src="getSkuSampleImageUrl(row)" fit="cover" />
+                <span v-else>{{ row.model }}</span>
               </div>
-              <el-button link type="primary" @click="openPreview(row.sampleImageUrl)">查看示例图</el-button>
+              <div class="sku-image-cell__actions">
+                <el-button link type="primary" :disabled="!getSkuSampleImageUrl(row)" @click="openPreview(getSkuSampleImageUrl(row))">查看示例图</el-button>
+                <span class="subtle-text">{{ getSampleImageCount(row) }} 张</span>
+              </div>
             </div>
           </template>
         </el-table-column>
-        <el-table-column prop="productCode" label="SKU 编码" min-width="180" />
+        <el-table-column prop="displaySkuCode" label="SKU 编码" min-width="180" />
         <el-table-column prop="productName" label="SKU 名称" min-width="220" />
         <el-table-column prop="model" label="型号" width="140" />
         <el-table-column label="单位" width="80">
@@ -310,6 +501,7 @@ onMounted(loadData)
           </template>
         </el-table-column>
       </el-table>
+      </FixedTableViewport>
     </section>
 
     <el-dialog v-model="detailVisible" title="SKU 详情" width="1080px" destroy-on-close>
@@ -332,18 +524,52 @@ onMounted(loadData)
         <section v-show="activeDetailSection === 'basic'" class="sku-detail-section">
           <h4 class="section-title">基础信息</h4>
           <div class="sku-detail-grid">
-            <div class="info-card"><span class="subtle-text">SKU 编码</span><strong>{{ detailSku?.productCode }}</strong></div>
+            <div class="info-card"><span class="subtle-text">SKU 编码</span><strong>{{ detailSku?.displaySkuCode }}</strong></div>
             <div class="info-card"><span class="subtle-text">SKU 名称</span><strong>{{ detailSku?.productName }}</strong></div>
+            <div class="info-card"><span class="subtle-text">Product 编码</span><strong>{{ detailSku?.productCode }}</strong></div>
             <div class="info-card"><span class="subtle-text">产品线</span><strong>{{ detailSku?.seriesName }}</strong></div>
             <div class="info-card"><span class="subtle-text">型号</span><strong>{{ detailSku?.model }}</strong></div>
+            <div class="info-card"><span class="subtle-text">手机型号编码</span><strong>{{ detailSku?.phoneModelCode || '--' }}</strong></div>
             <div class="info-card"><span class="subtle-text">单位</span><strong>{{ detailSku ? getSkuUnit(detailSku) : '--' }}</strong></div>
             <div class="info-card"><span class="subtle-text">项目来源</span><strong>{{ detailSku ? getProjectSource(detailSku) : '--' }}</strong></div>
             <div class="info-card"><span class="subtle-text">颜色</span><strong>{{ detailSku?.color }}</strong></div>
+            <div class="info-card"><span class="subtle-text">颜色编码</span><strong>{{ detailSku?.colorCode || '--' }}</strong></div>
             <div class="info-card"><span class="subtle-text">版本</span><strong>{{ detailSku?.versionNo }}</strong></div>
             <div class="info-card">
               <span class="subtle-text">状态</span>
               <StatusTag v-if="detailSku" :status="detailSku.status" object-type="product" />
             </div>
+          </div>
+
+          <div class="sku-sample-panel">
+            <div class="sku-detail-section__head">
+              <div>
+                <h5>示例照片</h5>
+                <p class="page-panel-desc">照片以 Product 附件保存，文件分类为 sample_image。</p>
+              </div>
+              <el-tag effect="light">{{ getSampleImageCount(detailSku) }} 张</el-tag>
+            </div>
+
+            <div class="sku-sample-upload">
+              <input data-test="sku-sample-upload-file" type="file" accept="image/jpeg,image/png,image/webp" @change="handleSampleUploadFileChange" />
+              <el-input v-model="sampleUploadRemark" clearable maxlength="255" placeholder="照片备注" />
+              <el-button type="primary" :loading="sampleUploadLoading" @click="submitSampleImageUpload">上传照片</el-button>
+            </div>
+
+            <div v-if="getSkuSampleImages(detailSku).length" class="sku-sample-gallery">
+              <article v-for="image in getSkuSampleImages(detailSku)" :key="image.attachmentId" class="sku-sample-gallery__item">
+                <button type="button" class="sku-sample-gallery__preview" @click="openAttachmentPreview(image)">
+                  <el-image v-if="sampleImageUrls[image.ownerObjectId] && getSkuSampleImages(detailSku)[0]?.attachmentId === image.attachmentId" :src="sampleImageUrls[image.ownerObjectId]" fit="cover" />
+                  <span v-else>{{ image.originalFileName || image.fileName }}</span>
+                </button>
+                <div class="sku-sample-gallery__meta">
+                  <strong>{{ image.originalFileName || image.fileName }}</strong>
+                  <span class="subtle-text">{{ image.remark || '无备注' }}</span>
+                </div>
+                <el-button link type="danger" :loading="sampleDeleteLoading === image.attachmentId" @click="removeSampleImage(image)">删除</el-button>
+              </article>
+            </div>
+            <el-empty v-else description="暂无示例照片" />
           </div>
         </section>
 
@@ -608,6 +834,93 @@ onMounted(loadData)
   font-size: 11px;
 }
 
+.sku-image-cell__thumb :deep(.el-image),
+.sku-image-cell__thumb :deep(img) {
+  width: 100%;
+  height: 100%;
+}
+
+.sku-image-cell__actions {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.sku-sample-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 4px;
+}
+
+.sku-sample-panel h5 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.sku-sample-upload {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(220px, 1.2fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.sku-sample-upload input[type="file"] {
+  min-height: 32px;
+}
+
+.sku-sample-gallery {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.sku-sample-gallery__item {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 8px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.sku-sample-gallery__preview {
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  overflow: hidden;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #64748b;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.sku-sample-gallery__preview :deep(.el-image),
+.sku-sample-gallery__preview :deep(img) {
+  width: 100%;
+  height: 100%;
+}
+
+.sku-sample-gallery__meta {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sku-sample-gallery__meta strong,
+.sku-sample-gallery__meta span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .sku-detail-dialog {
   display: flex;
   flex-direction: column;
@@ -728,3 +1041,11 @@ onMounted(loadData)
   }
 }
 </style>
+
+
+
+
+
+
+
+

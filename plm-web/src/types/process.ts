@@ -24,17 +24,22 @@ export interface ProcessTemplateOption {
 
 export interface ProcessRouteListItem {
   routeId: number
+  processId?: number
   routeCode: string
   routeName: string
   productId: number
   productCode: string
   productName: string
+  model?: string | null
   versionNo: string
   routeType: ProcessRouteType
   status: CommonStatus
   templateSource: ProcessTemplateSource
   owner: string
   operationCount: number
+  colorCount?: number
+  colors?: ProcessRouteColor[]
+  skuCount?: number
   totalCost: number
   currentGate: string
   riskLevel: ProcessRiskLevel
@@ -145,4 +150,58 @@ export interface ProcessCenterSnapshot {
   routes: ProcessRouteListItem[]
   routeDetails: Record<number, ProcessRouteDetail>
   templates: ProcessTemplateOption[]
+}
+
+export interface ProcessRouteColor {
+  codeItemId?: number | null
+  colorCode?: string | null
+  colorName: string
+}
+
+export interface ProcessRouteSku {
+  productId: number
+  skuCode: string
+  productName: string
+  phoneModel?: string | null
+  phoneModelCode?: string | null
+  color?: string | null
+  colorCode?: string | null
+  finishedProductCode?: string | null
+  status: CommonStatus
+  productBomRouteId?: number | null
+  routeCode?: string | null
+  routeName?: string | null
+}
+
+export interface LinkedBomRoute {
+  productBomRouteId: number
+  productBomId: number
+  routeCode: string
+  routeName: string
+  status: string
+}
+
+export interface ProcessRouteRelation {
+  processId: number
+  processCode: string
+  processName: string
+  productId: number
+  productCode: string
+  productName: string
+  versionNo: string
+  status: CommonStatus
+  colors: ProcessRouteColor[]
+  skus: ProcessRouteSku[]
+  operations: Array<{
+    processId: number
+    parentProcessId: number
+    processCode?: string | null
+    operationCode?: string | null
+    operationCraftCode?: string | null
+    sequenceNo: number
+    processName: string
+    qualityRequirement?: string | null
+    status: string
+  }>
+  linkedBomRoutes?: LinkedBomRoute[]
 }

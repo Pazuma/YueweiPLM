@@ -17,6 +17,7 @@ import com.yuewei.plm.module.bom.repository.ProductBomItemRepository;
 import com.yuewei.plm.module.bom.repository.ProductBomRepository;
 import com.yuewei.plm.module.bom.repository.ProductBomRouteColorRepository;
 import com.yuewei.plm.module.bom.repository.ProductBomRouteRepository;
+import com.yuewei.plm.module.process.repository.ProcessRepository;
 import com.yuewei.plm.repository.ProductRepository;
 import com.yuewei.plm.repository.entity.Product;
 import java.util.List;
@@ -34,8 +35,10 @@ class BomInheritanceServiceTest {
         ProductBomRouteColorRepository colorRepository = mock(ProductBomRouteColorRepository.class);
         ProductBomItemRepository itemRepository = mock(ProductBomItemRepository.class);
         ProductBomCostSnapshotRepository costRepository = mock(ProductBomCostSnapshotRepository.class);
+        ProcessRepository processRepository = mock(ProcessRepository.class);
         BomInheritanceService service = new BomInheritanceService(
-            productRepository, bomRepository, routeRepository, colorRepository, itemRepository, costRepository
+            productRepository, bomRepository, routeRepository, colorRepository, itemRepository, costRepository,
+            processRepository
         );
         ProductBom source = new ProductBom();
         source.setProductBomId(10L);

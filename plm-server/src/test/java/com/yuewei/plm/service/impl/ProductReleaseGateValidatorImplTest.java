@@ -52,7 +52,6 @@ class ProductReleaseGateValidatorImplTest {
         assertThat(result.getMissingItems())
             .extracting("code")
             .contains(
-                "PRODUCT_STATUS_NOT_REVIEWING",
                 "TIMELINE_NODE_NOT_ALLOWED",
                 "TIMELINE_NODE_NOT_CONFIRMED",
                 "BOM_NOT_FROZEN",
@@ -128,7 +127,7 @@ class ProductReleaseGateValidatorImplTest {
     }
 
     @Test
-    void checkPassesForModelVariantReleaseNode() {
+    void checkPassesForModelVariantFinalMoldTransferNode() {
         ProductBomRepository bomRepository = mock(ProductBomRepository.class);
         ProcessRepository processRepository = mock(ProcessRepository.class);
         AttachmentRepository attachmentRepository = mock(AttachmentRepository.class);
@@ -140,8 +139,8 @@ class ProductReleaseGateValidatorImplTest {
         );
         Product product = releasableProduct();
         product.setProductType("model_variant");
-        product.setCurrentStepNo(16);
-        product.setTimelineConfirmedNodeKey("MODEL_VARIANT_RELEASE");
+        product.setCurrentStepNo(18);
+        product.setTimelineConfirmedNodeKey("MODEL_VARIANT_MOLD_TRANSFER");
         when(bomRepository.selectCount(Mockito.<Wrapper<ProductBom>>any())).thenReturn(1L);
         when(processRepository.selectCount(Mockito.<Wrapper<ProcessEntity>>any())).thenReturn(1L);
         when(attachmentRepository.selectCount(Mockito.<Wrapper<Attachment>>any()))
@@ -150,12 +149,12 @@ class ProductReleaseGateValidatorImplTest {
         var result = validator.check(product);
 
         assertThat(result.getPassed()).isTrue();
-        assertThat(result.getCurrentNodeKey()).isEqualTo("MODEL_VARIANT_RELEASE");
+        assertThat(result.getCurrentNodeKey()).isEqualTo("MODEL_VARIANT_MOLD_TRANSFER");
         assertThat(result.getMissingItems()).isEmpty();
     }
 
     @Test
-    void checkRejectsModelVariantVersionFreezeNodeForFormalRelease() {
+    void checkRejectsModelVariantBeforeFinalNodeForFormalRelease() {
         ProductBomRepository bomRepository = mock(ProductBomRepository.class);
         ProcessRepository processRepository = mock(ProcessRepository.class);
         AttachmentRepository attachmentRepository = mock(AttachmentRepository.class);
@@ -167,8 +166,8 @@ class ProductReleaseGateValidatorImplTest {
         );
         Product product = releasableProduct();
         product.setProductType("model_variant");
-        product.setCurrentStepNo(15);
-        product.setTimelineConfirmedNodeKey("MODEL_VARIANT_VERSION_FREEZE");
+        product.setCurrentStepNo(17);
+        product.setTimelineConfirmedNodeKey("MODEL_VARIANT_SMALL_BATCH_TEST");
         when(bomRepository.selectCount(Mockito.<Wrapper<ProductBom>>any())).thenReturn(1L);
         when(processRepository.selectCount(Mockito.<Wrapper<ProcessEntity>>any())).thenReturn(1L);
         when(attachmentRepository.selectCount(Mockito.<Wrapper<Attachment>>any()))
@@ -186,7 +185,7 @@ class ProductReleaseGateValidatorImplTest {
         Product product = new Product();
         product.setProductId(10L);
         product.setProductType("product_line");
-        product.setStatus("reviewing");
+        product.setStatus("released");
         product.setCurrentStepNo(22);
         product.setTimelineCurrentConfirmed(true);
         product.setTimelineConfirmedNodeKey("PRODUCT_LINE_PRODUCTION_DECISION_STEP");

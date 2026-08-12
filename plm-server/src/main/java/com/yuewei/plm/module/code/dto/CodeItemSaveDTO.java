@@ -13,6 +13,7 @@ public class CodeItemSaveDTO {
     private String codeValue;
     @NotBlank
     private String codeName;
+    private String codeNameZh;
     @NotNull
     @Min(0)
     private Integer sortOrder;

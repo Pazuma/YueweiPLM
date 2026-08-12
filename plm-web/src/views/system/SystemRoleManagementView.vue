@@ -127,6 +127,10 @@ async function loadData() {
     roles.value = roleRows
     permissionGroups.value = permissionRows
     selectedRoleId.value = roleRows[0]?.roleId ?? null
+  } catch {
+    roles.value = []
+    permissionGroups.value = []
+    selectedRoleId.value = null
   } finally {
     loading.value = false
   }

@@ -10,6 +10,11 @@ import lombok.Data;
 
 @Data
 public class BomRouteSaveDTO {
+    private Long productBomRouteId;
+    private Long sourceProductBomRouteId;
+    private String sharedBomGroupCode;
+    private String routeVariantNo;
+    private String variantName;
     @NotNull
     private Long processId;
     @NotBlank

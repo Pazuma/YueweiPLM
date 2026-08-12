@@ -16,7 +16,13 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       host: '0.0.0.0',
-      port: Number(env.VITE_PORT || 5173)
+      port: Number(env.VITE_PORT || 5173),
+      proxy: {
+        '/api': {
+          target: env.VITE_API_TARGET || env.VITE_API_BASE_URL || 'http://localhost:8080',
+          changeOrigin: true
+        }
+      }
     },
     preview: {
       host: '0.0.0.0',

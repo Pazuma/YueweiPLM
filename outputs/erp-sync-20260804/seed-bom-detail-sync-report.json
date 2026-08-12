@@ -1,0 +1,184 @@
+{
+  "executed": true,
+  "import_tag": "seed-bom-detail",
+  "source_seed_file": "D:\\work\\资料\\PLM\\seeds\\deployment_master_data_seed.json",
+  "bom_file": "D:\\Users\\46733\\Downloads\\BOM管理-2026-08-04.xlsx",
+  "source_bom_count": 24,
+  "seed_bom_count": 24,
+  "seed_child_count": 313,
+  "matched_boms": 24,
+  "inserted_items": 313,
+  "placeholder_items_soft_deleted": 24,
+  "unmanaged_active_items": 0,
+  "missing_inventory": [],
+  "route_updates": [
+    {
+      "bom_code": "BOM-NBA4030000001-002",
+      "route_code": "ROUTE-RAINBOW-DYE-NO-UV-V1",
+      "route_name": "亮甲 2.0 染色-无UV打印",
+      "item_count": 10
+    },
+    {
+      "bom_code": "BOM-NBA4030000002-002",
+      "route_code": "ROUTE-RAINBOW-DYE-NO-UV-V1",
+      "route_name": "亮甲 2.0 染色-无UV打印",
+      "item_count": 10
+    },
+    {
+      "bom_code": "BOM-NBA4030000007-002",
+      "route_code": "ROUTE-RAINBOW-DYE-NO-UV-V1",
+      "route_name": "亮甲 2.0 染色-无UV打印",
+      "item_count": 13
+    },
+    {
+      "bom_code": "BOM-NBA4030000012-002",
+      "route_code": "ROUTE-RAINBOW-DYE-NO-UV-V1",
+      "route_name": "亮甲 2.0 染色-无UV打印",
+      "item_count": 10
+    },
+    {
+      "bom_code": "BOM-NBA4030000031-002",
+      "route_code": "ROUTE-RAINBOW-INJECTION-CLEAR-V1",
+      "route_name": "亮甲 2.0 透明款-无UV打印",
+      "item_count": 9
+    },
+    {
+      "bom_code": "BOM-NBA4030000066-002",
+      "route_code": "ROUTE-RAINBOW-DYE-NO-UV-V1",
+      "route_name": "亮甲 2.0 染色-无UV打印",
+      "item_count": 10
+    },
+    {
+      "bom_code": "BOM-NBD4030000002-001",
+      "route_code": "ROUTE-BLINDAJE-V1",
+      "route_name": "圣殿标准路线",
+      "item_count": 14
+    },
+    {
+      "bom_code": "BOM-NDN4030000031-002",
+      "route_code": "ROUTE-ALTERNA-V1",
+      "route_name": "幻甲标准路线",
+      "item_count": 6
+    },
+    {
+      "bom_code": "BOM-NFA4020000002-001",
+      "route_code": "ROUTE-FANTASY-V1",
+      "route_name": "骑士 1.0 标准路线",
+      "item_count": 17
+    },
+    {
+      "bom_code": "BOM-NFA4020000007-002",
+      "route_code": "ROUTE-FANTASY-V1",
+      "route_name": "骑士 1.0 标准路线",
+      "item_count": 18
+    },
+    {
+      "bom_code": "BOM-NFA4020000008-002",
+      "route_code": "ROUTE-FANTASY-V1",
+      "route_name": "骑士 1.0 标准路线",
+      "item_count": 18
+    },
+    {
+      "bom_code": "BOM-NFA4020000013-002",
+      "route_code": "ROUTE-FANTASY-V1",
+      "route_name": "骑士 1.0 标准路线",
+      "item_count": 17
+    },
+    {
+      "bom_code": "BOM-NFB4020000002-002",
+      "route_code": "ROUTE-TITANIO-V1",
+      "route_name": "骑士 2.0 标准路线",
+      "item_count": 18
+    },
+    {
+      "bom_code": "BOM-NFB4020000007-002",
+      "route_code": "ROUTE-TITANIO-V1",
+      "route_name": "骑士 2.0 标准路线",
+      "item_count": 19
+    },
+    {
+      "bom_code": "BOM-NFB4020000008-002",
+      "route_code": "ROUTE-TITANIO-V1",
+      "route_name": "骑士 2.0 标准路线",
+      "item_count": 19
+    },
+    {
+      "bom_code": "BOM-NFB4020000013-002",
+      "route_code": "ROUTE-TITANIO-V1",
+      "route_name": "骑士 2.0 标准路线",
+      "item_count": 18
+    },
+    {
+      "bom_code": "BOM-NHA4030000002-001",
+      "route_code": "ROUTE-SUPER-CAPITAN-V1",
+      "route_name": "超队标准路线",
+      "item_count": 16
+    },
+    {
+      "bom_code": "BOM-NHA4030000007-001",
+      "route_code": "ROUTE-SUPER-CAPITAN-V1",
+      "route_name": "超队标准路线",
+      "item_count": 17
+    },
+    {
+      "bom_code": "BOM-NHA4030000008-001",
+      "route_code": "ROUTE-SUPER-CAPITAN-V1",
+      "route_name": "超队标准路线",
+      "item_count": 17
+    },
+    {
+      "bom_code": "BOM-NHA4030000013-001",
+      "route_code": "ROUTE-SUPER-CAPITAN-V1",
+      "route_name": "超队标准路线",
+      "item_count": 16
+    },
+    {
+      "bom_code": "BOM-NWV4030000002-002",
+      "route_code": "ROUTE-WAVESHELL-V1",
+      "route_name": "薇武士标准路线",
+      "item_count": 6
+    },
+    {
+      "bom_code": "BOM-NWV4030000012-002",
+      "route_code": "ROUTE-WAVESHELL-V1",
+      "route_name": "薇武士标准路线",
+      "item_count": 5
+    },
+    {
+      "bom_code": "BOM-NWV4030000048-001",
+      "route_code": "ROUTE-WAVESHELL-V1",
+      "route_name": "薇武士标准路线",
+      "item_count": 5
+    },
+    {
+      "bom_code": "BOM-NWV4030000086-001",
+      "route_code": "ROUTE-WAVESHELL-V1",
+      "route_name": "薇武士标准路线",
+      "item_count": 5
+    }
+  ],
+  "component_count_mismatches": [
+    {
+      "bom_code": "BOM-NHA4030000002-001",
+      "source_component_count": 20,
+      "seed_child_count": 16
+    },
+    {
+      "bom_code": "BOM-NHA4030000007-001",
+      "source_component_count": 21,
+      "seed_child_count": 17
+    },
+    {
+      "bom_code": "BOM-NHA4030000008-001",
+      "source_component_count": 21,
+      "seed_child_count": 17
+    },
+    {
+      "bom_code": "BOM-NHA4030000013-001",
+      "source_component_count": 20,
+      "seed_child_count": 16
+    }
+  ],
+  "skipped": [],
+  "finished_at": "2026-08-04T11:50:40"
+}

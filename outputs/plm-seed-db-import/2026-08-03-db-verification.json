@@ -1,0 +1,414 @@
+{
+  "product_line_sku_counts": [
+    {
+      "product_code": "NBA4030",
+      "product_name": "亮甲Rainbow 2.0",
+      "sku_count": 628,
+      "sku_color_count": 9,
+      "sku_colors": "01,02,07,12,31,40,43,64,66"
+    },
+    {
+      "product_code": "NBD4030",
+      "product_name": "圣殿Case Blindaje",
+      "sku_count": 218,
+      "sku_color_count": 2,
+      "sku_colors": "02,43"
+    },
+    {
+      "product_code": "NDN4030",
+      "product_name": "Alterna幻甲",
+      "sku_count": 36,
+      "sku_color_count": 2,
+      "sku_colors": "31,40"
+    },
+    {
+      "product_code": "NFA4020",
+      "product_name": "幻影Fantasía Case",
+      "sku_count": 1609,
+      "sku_color_count": 6,
+      "sku_colors": "02,04,07,08,13,43"
+    },
+    {
+      "product_code": "NFB4020",
+      "product_name": "titanio 骑士2.0",
+      "sku_count": 90,
+      "sku_color_count": 5,
+      "sku_colors": "02,07,08,13,43"
+    },
+    {
+      "product_code": "NHA4030",
+      "product_name": "超队Súper Capitán",
+      "sku_count": 1068,
+      "sku_color_count": 4,
+      "sku_colors": "02,07,08,13"
+    },
+    {
+      "product_code": "NWV4030",
+      "product_name": "waves薇武士",
+      "sku_count": 181,
+      "sku_color_count": 7,
+      "sku_colors": "02,12,17,43,56,64,86"
+    }
+  ],
+  "confirmed_bom_colors": [
+    {
+      "product_code": "NBA4030",
+      "colors": "01 Morado, 02 Negro, 07 Rojo, 12 Rosa claro, 31 Transparente, 66 Azul Cielo",
+      "color_count": 6,
+      "linked_sku_count": 3
+    },
+    {
+      "product_code": "NBD4030",
+      "colors": "02 Negro",
+      "color_count": 1,
+      "linked_sku_count": 1
+    },
+    {
+      "product_code": "NDN4030",
+      "colors": "31 Transparente",
+      "color_count": 1,
+      "linked_sku_count": 1
+    },
+    {
+      "product_code": "NFA4020",
+      "colors": "02 Negro, 07 Rojo, 08 Azul Rey, 13 azul real",
+      "color_count": 4,
+      "linked_sku_count": 4
+    },
+    {
+      "product_code": "NFB4020",
+      "colors": "02 Negro, 07 Rojo, 08 Azul Rey, 13 azul real",
+      "color_count": 4,
+      "linked_sku_count": 1
+    },
+    {
+      "product_code": "NHA4030",
+      "colors": "02 Negro, 07 Rojo, 08 Azul Rey, 13 azul real",
+      "color_count": 4,
+      "linked_sku_count": 1
+    },
+    {
+      "product_code": "NWV4030",
+      "colors": "02 Negro, 12 Rosa claro, 48 Neon Pink, 86 Chicle Rosa",
+      "color_count": 4,
+      "linked_sku_count": 2
+    }
+  ],
+  "bom_color_decisions": [
+    {
+      "product_code": "NBA4030",
+      "color_code": "01",
+      "color_name": "Morado",
+      "bom_code": "BOM-NBA4030000001-001",
+      "version_no": "V1-01",
+      "route_code": "ROUTE-RAINBOW-DYE-NO-UV-V1",
+      "created_sku_product_id": 15379
+    },
+    {
+      "product_code": "NBA4030",
+      "color_code": "02",
+      "color_name": "Negro",
+      "bom_code": "BOM-NBA4030000002-001",
+      "version_no": "V1-02",
+      "route_code": "ROUTE-RAINBOW-DYE-NO-UV-V1",
+      "created_sku_product_id": null
+    },
+    {
+      "product_code": "NBA4030",
+      "color_code": "07",
+      "color_name": "Rojo",
+      "bom_code": "BOM-NBA4030000007-001",
+      "version_no": "V1-07",
+      "route_code": "ROUTE-RAINBOW-DYE-NO-UV-V1",
+      "created_sku_product_id": 15381
+    },
+    {
+      "product_code": "NBA4030",
+      "color_code": "12",
+      "color_name": "Rosa claro",
+      "bom_code": "BOM-NBA4030000012-001",
+      "version_no": "V1-12",
+      "route_code": "ROUTE-RAINBOW-DYE-NO-UV-V1",
+      "created_sku_product_id": null
+    },
+    {
+      "product_code": "NBA4030",
+      "color_code": "31",
+      "color_name": "Transparente",
+      "bom_code": "BOM-NBA4030000031-001",
+      "version_no": "V1-31",
+      "route_code": "ROUTE-RAINBOW-INJECTION-CLEAR-V1",
+      "created_sku_product_id": null
+    },
+    {
+      "product_code": "NBA4030",
+      "color_code": "66",
+      "color_name": "Azul Cielo",
+      "bom_code": "BOM-NBA4030000066-001",
+      "version_no": "V1-66",
+      "route_code": "ROUTE-RAINBOW-DYE-NO-UV-V1",
+      "created_sku_product_id": 15387
+    },
+    {
+      "product_code": "NBD4030",
+      "color_code": "02",
+      "color_name": "Negro",
+      "bom_code": "BOM-NBD4030000002-001",
+      "version_no": "V1-02",
+      "route_code": "ROUTE-BLINDAJE-V1",
+      "created_sku_product_id": 16004
+    },
+    {
+      "product_code": "NDN4030",
+      "color_code": "31",
+      "color_name": "Transparente",
+      "bom_code": "BOM-NDN4030000031-001",
+      "version_no": "V1-31",
+      "route_code": "ROUTE-ALTERNA-V1",
+      "created_sku_product_id": 16222
+    },
+    {
+      "product_code": "NFA4020",
+      "color_code": "02",
+      "color_name": "Negro",
+      "bom_code": "BOM-NFA4020000002-001",
+      "version_no": "V1-02",
+      "route_code": "ROUTE-FANTASY-V1",
+      "created_sku_product_id": 16258
+    },
+    {
+      "product_code": "NFA4020",
+      "color_code": "07",
+      "color_name": "Rojo",
+      "bom_code": "BOM-NFA4020000007-001",
+      "version_no": "V1-07",
+      "route_code": "ROUTE-FANTASY-V1",
+      "created_sku_product_id": 17273
+    },
+    {
+      "product_code": "NFA4020",
+      "color_code": "08",
+      "color_name": "Azul Rey",
+      "bom_code": "BOM-NFA4020000008-001",
+      "version_no": "V1-08",
+      "route_code": "ROUTE-FANTASY-V1",
+      "created_sku_product_id": 17274
+    },
+    {
+      "product_code": "NFA4020",
+      "color_code": "13",
+      "color_name": "azul real",
+      "bom_code": "BOM-NFA4020000013-001",
+      "version_no": "V1-13",
+      "route_code": "ROUTE-FANTASY-V1",
+      "created_sku_product_id": 17275
+    },
+    {
+      "product_code": "NFB4020",
+      "color_code": "02",
+      "color_name": "Negro",
+      "bom_code": "BOM-NFB4020000002-001",
+      "version_no": "V1-02",
+      "route_code": "ROUTE-TITANIO-V1",
+      "created_sku_product_id": 17867
+    },
+    {
+      "product_code": "NFB4020",
+      "color_code": "07",
+      "color_name": "Rojo",
+      "bom_code": "BOM-NFB4020000007-001",
+      "version_no": "V1-07",
+      "route_code": "ROUTE-TITANIO-V1",
+      "created_sku_product_id": null
+    },
+    {
+      "product_code": "NFB4020",
+      "color_code": "08",
+      "color_name": "Azul Rey",
+      "bom_code": "BOM-NFB4020000008-001",
+      "version_no": "V1-08",
+      "route_code": "ROUTE-TITANIO-V1",
+      "created_sku_product_id": null
+    },
+    {
+      "product_code": "NFB4020",
+      "color_code": "13",
+      "color_name": "azul real",
+      "bom_code": "BOM-NFB4020000013-001",
+      "version_no": "V1-13",
+      "route_code": "ROUTE-TITANIO-V1",
+      "created_sku_product_id": null
+    },
+    {
+      "product_code": "NHA4030",
+      "color_code": "02",
+      "color_name": "Negro",
+      "bom_code": "BOM-NHA4030000002-001",
+      "version_no": "V1-02",
+      "route_code": "ROUTE-SUPER-CAPITAN-V1",
+      "created_sku_product_id": 17957
+    },
+    {
+      "product_code": "NHA4030",
+      "color_code": "07",
+      "color_name": "Rojo",
+      "bom_code": "BOM-NHA4030000007-001",
+      "version_no": "V1-07",
+      "route_code": "ROUTE-SUPER-CAPITAN-V1",
+      "created_sku_product_id": null
+    },
+    {
+      "product_code": "NHA4030",
+      "color_code": "08",
+      "color_name": "Azul Rey",
+      "bom_code": "BOM-NHA4030000008-001",
+      "version_no": "V1-08",
+      "route_code": "ROUTE-SUPER-CAPITAN-V1",
+      "created_sku_product_id": null
+    },
+    {
+      "product_code": "NHA4030",
+      "color_code": "13",
+      "color_name": "azul real",
+      "bom_code": "BOM-NHA4030000013-001",
+      "version_no": "V1-13",
+      "route_code": "ROUTE-SUPER-CAPITAN-V1",
+      "created_sku_product_id": null
+    },
+    {
+      "product_code": "NWV4030",
+      "color_code": "02",
+      "color_name": "Negro",
+      "bom_code": "BOM-NWV4030000002-001",
+      "version_no": "V1-02",
+      "route_code": "ROUTE-WAVESHELL-V1",
+      "created_sku_product_id": 19025
+    },
+    {
+      "product_code": "NWV4030",
+      "color_code": "12",
+      "color_name": "Rosa claro",
+      "bom_code": "BOM-NWV4030000012-001",
+      "version_no": "V1-12",
+      "route_code": "ROUTE-WAVESHELL-V1",
+      "created_sku_product_id": null
+    },
+    {
+      "product_code": "NWV4030",
+      "color_code": "48",
+      "color_name": "Neon Pink",
+      "bom_code": "BOM-NWV4030000048-001",
+      "version_no": "V1-48",
+      "route_code": "ROUTE-WAVESHELL-V1",
+      "created_sku_product_id": null
+    },
+    {
+      "product_code": "NWV4030",
+      "color_code": "86",
+      "color_name": "Chicle Rosa",
+      "bom_code": "BOM-NWV4030000086-001",
+      "version_no": "V1-86",
+      "route_code": "ROUTE-WAVESHELL-V1",
+      "created_sku_product_id": 19031
+    }
+  ],
+  "seed_totals": [
+    {
+      "kind": "sku",
+      "count": 3830
+    },
+    {
+      "kind": "operation",
+      "count": 3
+    },
+    {
+      "kind": "route",
+      "count": 10
+    },
+    {
+      "kind": "bom",
+      "count": 24
+    },
+    {
+      "kind": "bom_route",
+      "count": 24
+    },
+    {
+      "kind": "bom_route_color",
+      "count": 24
+    },
+    {
+      "kind": "decision",
+      "count": 24
+    }
+  ],
+  "mismatched_decision_sku": [],
+  "null_decision_sku": [
+    {
+      "product_code": "NBA4030",
+      "color_code": "02",
+      "color_name": "Negro",
+      "bom_code": "BOM-NBA4030000002-001"
+    },
+    {
+      "product_code": "NBA4030",
+      "color_code": "12",
+      "color_name": "Rosa claro",
+      "bom_code": "BOM-NBA4030000012-001"
+    },
+    {
+      "product_code": "NBA4030",
+      "color_code": "31",
+      "color_name": "Transparente",
+      "bom_code": "BOM-NBA4030000031-001"
+    },
+    {
+      "product_code": "NFB4020",
+      "color_code": "07",
+      "color_name": "Rojo",
+      "bom_code": "BOM-NFB4020000007-001"
+    },
+    {
+      "product_code": "NFB4020",
+      "color_code": "08",
+      "color_name": "Azul Rey",
+      "bom_code": "BOM-NFB4020000008-001"
+    },
+    {
+      "product_code": "NFB4020",
+      "color_code": "13",
+      "color_name": "azul real",
+      "bom_code": "BOM-NFB4020000013-001"
+    },
+    {
+      "product_code": "NHA4030",
+      "color_code": "07",
+      "color_name": "Rojo",
+      "bom_code": "BOM-NHA4030000007-001"
+    },
+    {
+      "product_code": "NHA4030",
+      "color_code": "08",
+      "color_name": "Azul Rey",
+      "bom_code": "BOM-NHA4030000008-001"
+    },
+    {
+      "product_code": "NHA4030",
+      "color_code": "13",
+      "color_name": "azul real",
+      "bom_code": "BOM-NHA4030000013-001"
+    },
+    {
+      "product_code": "NWV4030",
+      "color_code": "12",
+      "color_name": "Rosa claro",
+      "bom_code": "BOM-NWV4030000012-001"
+    },
+    {
+      "product_code": "NWV4030",
+      "color_code": "48",
+      "color_name": "Neon Pink",
+      "bom_code": "BOM-NWV4030000048-001"
+    }
+  ]
+}

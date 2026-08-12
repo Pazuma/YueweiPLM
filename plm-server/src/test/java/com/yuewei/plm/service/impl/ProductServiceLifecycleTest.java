@@ -36,18 +36,21 @@ class ProductServiceLifecycleTest {
     }
 
     @Test
-    void publishFailsWithReleaseGateDataWhenMaterialsAreMissing() {
+    void publishRequiresRiskConfirmationWhenMaterialsAreMissing() {
         ProductRepository productRepository = mock(ProductRepository.class);
         ProductReleaseGateValidator releaseGateValidator = mock(ProductReleaseGateValidator.class);
         ProductServiceImpl service = service(productRepository, mock(OperationLogService.class), releaseGateValidator);
-        Product product = product("reviewing");
+        Product product = product("developing");
         ProductReleaseGateCheckVO gate = ProductReleaseGateCheckVO.builder()
             .projectId(10L)
             .productId(10L)
-            .passed(false)
+            .passed(true)
+            .blocking(false)
+            .confirmRequired(true)
             .missingItems(List.of(ProductReleaseGateMissingItemVO.builder()
                 .code("BOM_NOT_FROZEN")
                 .message("缺少已冻结或已发布 BOM")
+                .severity("warning")
                 .build()))
             .build();
         when(productRepository.selectById(10L)).thenReturn(product);
@@ -58,9 +61,43 @@ class ProductServiceLifecycleTest {
             .isInstanceOf(BusinessException.class)
             .satisfies(ex -> {
                 BusinessException businessException = (BusinessException) ex;
-                assertThat(businessException.getCode()).isEqualTo(ErrorCodeConstants.RELEASE_GATE_NOT_PASSED);
+                assertThat(businessException.getCode()).isEqualTo(ErrorCodeConstants.RELEASE_RISK_CONFIRM_REQUIRED);
                 assertThat(businessException.getData()).isSameAs(gate);
             });
+    }
+
+    @Test
+    void publishAllowsMissingMaterialsAfterRiskConfirmationAndLogsRiskDetails() {
+        ProductRepository productRepository = mock(ProductRepository.class);
+        ProductReleaseGateValidator releaseGateValidator = mock(ProductReleaseGateValidator.class);
+        OperationLogService operationLogService = mock(OperationLogService.class);
+        ProductServiceImpl service = service(productRepository, operationLogService, releaseGateValidator);
+        Product product = product("developing");
+        ProductReleaseGateCheckVO gate = ProductReleaseGateCheckVO.builder()
+            .projectId(10L)
+            .productId(10L)
+            .passed(true)
+            .blocking(false)
+            .confirmRequired(true)
+            .missingItems(List.of(ProductReleaseGateMissingItemVO.builder()
+                .code("TESTING_FILE_MISSING")
+                .message("缺少测试资料")
+                .severity("warning")
+                .build()))
+            .build();
+        when(productRepository.selectById(10L)).thenReturn(product);
+        when(releaseGateValidator.check(product)).thenReturn(gate);
+        CurrentUserContext.set(new CurrentUser(1L, "engineer01", "工程一", true));
+        ArgumentCaptor<OperationLogCreateCommand> logCaptor = ArgumentCaptor.forClass(OperationLogCreateCommand.class);
+
+        var result = service.publish(10L, action("确认风险发布", true), mock(HttpServletRequest.class));
+
+        assertThat(result.getStatus()).isEqualTo("released");
+        verify(operationLogService).logSuccess(logCaptor.capture());
+        assertThat(logCaptor.getValue().getDetailJson())
+            .contains("\"riskConfirmed\":true")
+            .contains("TESTING_FILE_MISSING")
+            .contains("缺少测试资料");
     }
 
     @Test
@@ -69,7 +106,7 @@ class ProductServiceLifecycleTest {
         ProductReleaseGateValidator releaseGateValidator = mock(ProductReleaseGateValidator.class);
         OperationLogService operationLogService = mock(OperationLogService.class);
         ProductServiceImpl service = service(productRepository, operationLogService, releaseGateValidator);
-        Product product = product("reviewing");
+        Product product = product("developing");
         when(productRepository.selectById(10L)).thenReturn(product);
         when(releaseGateValidator.check(product)).thenReturn(ProductReleaseGateCheckVO.builder()
             .projectId(10L)
@@ -142,7 +179,7 @@ class ProductServiceLifecycleTest {
         ProductReleaseGateValidator releaseGateValidator = mock(ProductReleaseGateValidator.class);
         OperationLogService operationLogService = mock(OperationLogService.class);
         ProductServiceImpl service = service(productRepository, operationLogService, releaseGateValidator);
-        Product product = product("reviewing");
+        Product product = product("developing");
         when(productRepository.selectById(10L)).thenReturn(product);
         when(releaseGateValidator.check(product)).thenReturn(ProductReleaseGateCheckVO.builder()
             .projectId(10L)
@@ -206,7 +243,10 @@ class ProductServiceLifecycleTest {
             operationLogService,
             new JacksonConfig().objectMapper(),
             releaseGateValidator,
-            mock(com.yuewei.plm.module.bom.service.BomInheritanceService.class)
+            mock(com.yuewei.plm.module.bom.service.BomInheritanceService.class),
+            mock(com.yuewei.plm.module.process.service.ProcessRouteInheritanceService.class),
+            mock(com.yuewei.plm.module.bom.repository.ProductProductionColorDecisionRepository.class),
+            mock(com.yuewei.plm.module.project.variant.repository.ProductVariantColorRepository.class)
         );
     }
 
@@ -223,8 +263,13 @@ class ProductServiceLifecycleTest {
     }
 
     private ProductLifecycleActionDTO action(String reason) {
+        return action(reason, false);
+    }
+
+    private ProductLifecycleActionDTO action(String reason, boolean riskConfirmed) {
         ProductLifecycleActionDTO dto = new ProductLifecycleActionDTO();
         dto.setReason(reason);
+        dto.setRiskConfirmed(riskConfirmed);
         return dto;
     }
 }

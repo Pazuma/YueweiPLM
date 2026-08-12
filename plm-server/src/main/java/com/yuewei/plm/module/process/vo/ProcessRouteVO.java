@@ -17,6 +17,12 @@ public class ProcessRouteVO {
     private String processType;
     private String versionNo;
     private String status;
+    private String routeTemplateCode;
+    private String routeTemplateVersion;
+    private String applicableModel;
+    private String applicableColor;
+    private String linkedBomVersionNo;
+    private Boolean finalSelected;
     private LocalDateTime frozenAt;
     private String frozenBy;
     private String remark;

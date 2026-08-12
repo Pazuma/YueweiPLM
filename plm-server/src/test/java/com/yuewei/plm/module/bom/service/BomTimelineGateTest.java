@@ -6,6 +6,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.yuewei.plm.common.exception.BusinessException;
+import com.yuewei.plm.module.project.service.TimelineDefinitionProvider;
 import com.yuewei.plm.repository.ProductRepository;
 import com.yuewei.plm.repository.entity.Product;
 import org.junit.jupiter.api.Test;
@@ -15,14 +16,23 @@ class BomTimelineGateTest {
     void acceptsConfirmedProductLineReleaseNode() {
         ProductRepository repository = mock(ProductRepository.class);
         when(repository.selectById(10L)).thenReturn(product("product_line", "PRODUCT_LINE_PRODUCTION_DECISION_STEP", true));
-        assertThatCode(() -> new BomTimelineGate(repository).requireFreezeOrPublishNode(10L)).doesNotThrowAnyException();
+        assertThatCode(() -> new BomTimelineGate(repository, new TimelineDefinitionProvider()).requireFreezeOrPublishNode(10L))
+            .doesNotThrowAnyException();
+    }
+
+    @Test
+    void acceptsConfirmedModelVariantFinalMoldTransferNode() {
+        ProductRepository repository = mock(ProductRepository.class);
+        when(repository.selectById(10L)).thenReturn(product("model_variant", "MODEL_VARIANT_MOLD_TRANSFER", true));
+        assertThatCode(() -> new BomTimelineGate(repository, new TimelineDefinitionProvider()).requireFreezeOrPublishNode(10L))
+            .doesNotThrowAnyException();
     }
 
     @Test
     void rejectsWrongNode() {
         ProductRepository repository = mock(ProductRepository.class);
         when(repository.selectById(10L)).thenReturn(product("model_variant", "MODEL_VARIANT_VERSION_FREEZE", true));
-        assertThatThrownBy(() -> new BomTimelineGate(repository).requireFreezeOrPublishNode(10L))
+        assertThatThrownBy(() -> new BomTimelineGate(repository, new TimelineDefinitionProvider()).requireFreezeOrPublishNode(10L))
             .isInstanceOf(BusinessException.class).hasMessageContaining("时间轴节点");
     }
 

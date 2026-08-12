@@ -12,18 +12,25 @@ import com.yuewei.plm.module.bom.entity.ProductBomCostSnapshot;
 import com.yuewei.plm.module.bom.entity.ProductBomItem;
 import com.yuewei.plm.module.bom.entity.ProductBomRoute;
 import com.yuewei.plm.module.bom.entity.ProductBomRouteColor;
+import com.yuewei.plm.module.bom.entity.ProductBomRouteFormalSelection;
 import com.yuewei.plm.module.bom.repository.ProductBomCostSnapshotRepository;
 import com.yuewei.plm.module.bom.repository.ProductBomItemRepository;
 import com.yuewei.plm.module.bom.repository.ProductBomRepository;
 import com.yuewei.plm.module.bom.repository.ProductBomRouteColorRepository;
+import com.yuewei.plm.module.bom.repository.ProductBomRouteFormalSelectionRepository;
 import com.yuewei.plm.module.bom.repository.ProductBomRouteRepository;
 import com.yuewei.plm.module.code.entity.CodeItem;
 import com.yuewei.plm.module.code.service.CodeItemService;
+import com.yuewei.plm.module.process.entity.ProcessEntity;
+import com.yuewei.plm.module.process.repository.ProcessRepository;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,15 +39,19 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class ProductBomWorkflowService {
     private static final String ACTIVE = "active";
+    private static final String PROCESS_TYPE_ROUTING = "routing";
+    private static final String DEFAULT_VARIANT = "BASE";
 
     private final ProductBomRepository bomRepository;
     private final ProductBomRouteRepository routeRepository;
     private final ProductBomRouteColorRepository colorRepository;
     private final ProductBomItemRepository itemRepository;
     private final ProductBomCostSnapshotRepository costRepository;
+    private final ProductBomRouteFormalSelectionRepository formalSelectionRepository;
     private final BomCostCalculator costCalculator;
     private final BomTimelineGate timelineGate;
     private final CodeItemService codeItemService;
+    private final ProcessRepository processRepository;
 
     @Transactional
     public ProductBom saveTestBom(Long productId, TestBomSaveDTO dto) {
@@ -111,16 +122,26 @@ public class ProductBomWorkflowService {
         validateRoutes(routes);
         archiveExistingRoutes(bomId);
         LocalDateTime now = LocalDateTime.now();
+        String operator = "system";
+        String batchNo = UUID.randomUUID().toString();
+        List<ProductBomRoute> createdRoutes = new java.util.ArrayList<>();
         for (BomRouteSaveDTO dto : routes) {
+            ProcessEntity processRoute = requireProductRoute(bom.getProductId(), dto.getProcessId());
             ProductBomRoute route = new ProductBomRoute();
             route.setProductBomId(bomId);
             route.setProductId(bom.getProductId());
-            route.setProcessId(dto.getProcessId());
-            route.setRouteCode(dto.getRouteCode().trim());
-            route.setRouteName(dto.getRouteName().trim());
+            route.setProcessId(processRoute.getProcessId());
+            route.setRouteCode(processRoute.getProcessCode());
+            route.setRouteName(processRoute.getProcessName());
+            route.setSharedBomGroupCode(blankToDefault(dto.getSharedBomGroupCode(), "BOM-" + bomId));
+            route.setRouteVariantNo(blankToDefault(dto.getRouteVariantNo(), DEFAULT_VARIANT));
+            route.setVariantName(blankToDefault(dto.getVariantName(), "基础用料"));
+            route.setVariantSourceType(dto.getSourceProductBomRouteId() == null ? "manual" : "copied");
+            route.setSourceProductBomRouteId(dto.getSourceProductBomRouteId());
             route.setStatus(ACTIVE);
             fillCreate(route, now);
             routeRepository.insert(route);
+            createdRoutes.add(route);
             for (BomRouteColorDTO selected : normalizedColors(dto)) {
                 CodeItem code = codeItemService.requireEnabledColor(selected.getCodeItemId(), selected.getCodeValue());
                 ProductBomRouteColor color = new ProductBomRouteColor();
@@ -138,16 +159,20 @@ public class ProductBomWorkflowService {
                 itemRepository.insert(item);
             }
         }
+        syncFormalSelections(bom, createdRoutes, now, operator, batchNo);
     }
 
     @Transactional
     public List<ProductBomCostSnapshot> recalculateCosts(Long bomId, List<BomRouteSaveDTO> costInputs) {
         ProductBom bom = requireEditable(bomId);
         List<ProductBomRoute> routes = activeRoutes(bomId);
+        List<BomRouteSaveDTO> inputs = costInputs == null ? List.of() : costInputs;
         return routes.stream().map(route -> {
             List<ProductBomItem> items = activeItems(route.getProductBomRouteId());
-            BomRouteSaveDTO input = costInputs.stream()
-                .filter(value -> value.getProcessId().equals(route.getProcessId()))
+            BomRouteSaveDTO input = inputs.stream()
+                .filter(value -> value.getProductBomRouteId() != null
+                    ? value.getProductBomRouteId().equals(route.getProductBomRouteId())
+                    : value.getProcessId() != null && value.getProcessId().equals(route.getProcessId()))
                 .findFirst()
                 .orElse(new BomRouteSaveDTO());
             BomCostCalculator.Result result = costCalculator.calculate(
@@ -163,23 +188,21 @@ public class ProductBomWorkflowService {
 
     @Transactional
     public ProductBom submitReview(Long bomId) {
-        ProductBom bom = requireEditable(bomId);
-        requireCompleteRoutes(bomId, false);
-        bom.setStatus("reviewing");
-        touch(bom);
-        bomRepository.updateById(bom);
-        return bom;
+        return publish(bomId);
     }
 
     @Transactional
     public ProductBom freeze(Long bomId) {
         ProductBom bom = requireBom(bomId);
         timelineGate.requireFreezeOrPublishNode(bom.getProductId());
-        if (!"reviewing".equals(bom.getStatus())) {
-            throw validation("只有审核中的正式 BOM 可以冻结");
+        if (!List.of("draft", "released", "frozen").contains(bom.getStatus())) {
+            throw validation("只有草稿、已冻结或已发布的正式 BOM 可以冻结");
         }
         requireCompleteRoutes(bomId, true);
         bom.setFrozenFlag(1);
+        if (!"released".equals(bom.getStatus())) {
+            bom.setStatus("frozen");
+        }
         bom.setFrozenAt(LocalDateTime.now());
         bom.setFrozenBy("system");
         touch(bom);
@@ -191,13 +214,11 @@ public class ProductBomWorkflowService {
     public ProductBom publish(Long bomId) {
         ProductBom bom = requireBom(bomId);
         timelineGate.requireFreezeOrPublishNode(bom.getProductId());
-        if (!Integer.valueOf(1).equals(bom.getFrozenFlag())) {
-            throw validation("正式 BOM 发布前必须先冻结");
-        }
-        if (!"reviewing".equals(bom.getStatus())) {
-            throw validation("只有审核中的正式 BOM 可以发布");
+        if (!List.of("draft", "frozen", "released").contains(bom.getStatus())) {
+            throw validation("只有草稿、已冻结或已发布的正式 BOM 可以发布");
         }
         requireCompleteRoutes(bomId, true);
+        bom.setFrozenFlag(0);
         bom.setStatus("released");
         bom.setReleasedAt(LocalDateTime.now());
         bom.setReleasedBy("system");
@@ -211,10 +232,25 @@ public class ProductBomWorkflowService {
             throw validation("正式 BOM 至少需要一条有效工艺路线");
         }
         Set<String> assignedColors = new HashSet<>();
+        Set<String> assignedVariants = new HashSet<>();
+        Map<String, Long> groupProcessIds = new HashMap<>();
         for (BomRouteSaveDTO route : routes) {
+            String groupCode = blankToDefault(route.getSharedBomGroupCode(), "DEFAULT");
+            Long groupProcessId = groupProcessIds.putIfAbsent(groupCode, route.getProcessId());
+            if (groupProcessId != null && !groupProcessId.equals(route.getProcessId())) {
+                throw validation("同一套 BOM 的颜色副本必须绑定同一条工艺路线");
+            }
+            String variantKey = groupCode
+                + ":" + blankToDefault(route.getRouteVariantNo(), DEFAULT_VARIANT);
+            if (!assignedVariants.add(variantKey)) {
+                throw validation("同一套 BOM 的副本编号不能重复");
+            }
             if ((route.getColorItems() == null || route.getColorItems().isEmpty())
                 && (route.getColors() == null || route.getColors().isEmpty())) {
                 throw validation("工艺路线至少需要一个适用颜色");
+            }
+            if (route.getItems() == null || route.getItems().isEmpty()) {
+                throw validation("颜色副本至少需要一条 BOM 明细");
             }
             for (BomRouteColorDTO color : normalizedColors(route)) {
                 String normalized = color.getCodeValue() == null ? "" : color.getCodeValue().trim();
@@ -229,6 +265,10 @@ public class ProductBomWorkflowService {
         }
     }
 
+    private String blankToDefault(String value, String defaultValue) {
+        return value == null || value.isBlank() ? defaultValue : value.trim();
+    }
+
     private List<BomRouteColorDTO> normalizedColors(BomRouteSaveDTO route) {
         if (route.getColorItems() != null && !route.getColorItems().isEmpty()) return route.getColorItems();
         return route.getColors().stream().map(name -> {
@@ -236,6 +276,20 @@ public class ProductBomWorkflowService {
             value.setCodeItemId(null); value.setCodeValue(name); value.setCodeName(name);
             return value;
         }).toList();
+    }
+
+    private ProcessEntity requireProductRoute(Long productId, Long processId) {
+        ProcessEntity route = processRepository.selectById(processId);
+        if (route == null || Integer.valueOf(1).equals(route.getDeletedFlag())) {
+            throw new BusinessException(ErrorCodeConstants.RESOURCE_NOT_FOUND, "工艺路线不存在");
+        }
+        if (!productId.equals(route.getProductId()) || !PROCESS_TYPE_ROUTING.equals(route.getProcessType())) {
+            throw validation("请选择当前产品下已有的有效工艺路线");
+        }
+        if ("archived".equals(route.getStatus())) {
+            throw validation("工艺路线已归档，不能关联 BOM");
+        }
+        return route;
     }
 
     private void requireCompleteRoutes(Long bomId, boolean requireCost) {
@@ -275,6 +329,7 @@ public class ProductBomWorkflowService {
         ProductBomItem item = new ProductBomItem();
         item.setProductBomId(bom.getProductBomId());
         item.setProductBomRouteId(route.getProductBomRouteId());
+        item.setSharedBomGroupCode(route.getSharedBomGroupCode());
         item.setProductId(bom.getProductId());
         item.setInventoryId(dto.getInventoryId());
         item.setItemCode(dto.getItemCode());
@@ -357,8 +412,8 @@ public class ProductBomWorkflowService {
 
     private ProductBom requireEditable(Long bomId) {
         ProductBom bom = requireBom(bomId);
-        if ("released".equals(bom.getStatus()) || Integer.valueOf(1).equals(bom.getFrozenFlag())) {
-            throw new BusinessException(ErrorCodeConstants.VERSION_FROZEN, "BOM 已冻结或发布，请复制新版本后修改");
+        if ("archived".equals(bom.getStatus())) {
+            throw new BusinessException(ErrorCodeConstants.VERSION_FROZEN, "已归档 BOM 不可修改");
         }
         return bom;
     }
@@ -372,28 +427,28 @@ public class ProductBomWorkflowService {
     }
 
     private List<ProductBomRoute> activeRoutes(Long bomId) {
-        return routeRepository.selectList(new LambdaQueryWrapper<ProductBomRoute>()
+        return safeList(routeRepository.selectList(new LambdaQueryWrapper<ProductBomRoute>()
             .eq(ProductBomRoute::getProductBomId, bomId).eq(ProductBomRoute::getStatus, ACTIVE)
-            .eq(ProductBomRoute::getDeletedFlag, 0));
+            .eq(ProductBomRoute::getDeletedFlag, 0)));
     }
 
     private List<ProductBomRouteColor> activeColors(Long routeId) {
-        return colorRepository.selectList(new LambdaQueryWrapper<ProductBomRouteColor>()
+        return safeList(colorRepository.selectList(new LambdaQueryWrapper<ProductBomRouteColor>()
             .eq(ProductBomRouteColor::getProductBomRouteId, routeId).eq(ProductBomRouteColor::getStatus, ACTIVE)
-            .eq(ProductBomRouteColor::getDeletedFlag, 0));
+            .eq(ProductBomRouteColor::getDeletedFlag, 0)));
     }
 
     private List<ProductBomItem> activeItems(Long routeId) {
-        return itemRepository.selectList(new LambdaQueryWrapper<ProductBomItem>()
-            .eq(ProductBomItem::getProductBomRouteId, routeId).eq(ProductBomItem::getDeletedFlag, 0));
+        return safeList(itemRepository.selectList(new LambdaQueryWrapper<ProductBomItem>()
+            .eq(ProductBomItem::getProductBomRouteId, routeId).eq(ProductBomItem::getDeletedFlag, 0)));
     }
 
     private List<ProductBomCostSnapshot> currentCosts(Long bomId, Long routeId) {
-        return costRepository.selectList(new LambdaQueryWrapper<ProductBomCostSnapshot>()
+        return safeList(costRepository.selectList(new LambdaQueryWrapper<ProductBomCostSnapshot>()
             .eq(ProductBomCostSnapshot::getProductBomId, bomId)
             .eq(ProductBomCostSnapshot::getProductBomRouteId, routeId)
             .eq(ProductBomCostSnapshot::getStatus, "current")
-            .eq(ProductBomCostSnapshot::getDeletedFlag, 0));
+            .eq(ProductBomCostSnapshot::getDeletedFlag, 0)));
     }
 
     private void archiveExistingRoutes(Long bomId) {
@@ -429,6 +484,50 @@ public class ProductBomWorkflowService {
         }
     }
 
+    private void syncFormalSelections(ProductBom bom, List<ProductBomRoute> routes, LocalDateTime now,
+                                      String operator, String batchNo) {
+        if (!isFormalBom(bom) || routes == null || routes.isEmpty()) {
+            return;
+        }
+        List<ProductBomRouteFormalSelection> existing = formalSelectionRepository.selectList(
+            new LambdaQueryWrapper<ProductBomRouteFormalSelection>()
+                .eq(ProductBomRouteFormalSelection::getProductId, bom.getProductId())
+                .eq(ProductBomRouteFormalSelection::getProductBomId, bom.getProductBomId())
+                .eq(ProductBomRouteFormalSelection::getStatus, ACTIVE)
+                .eq(ProductBomRouteFormalSelection::getDeletedFlag, 0));
+        if (existing != null) {
+            for (ProductBomRouteFormalSelection selection : existing) {
+                selection.setStatus("invalidated");
+                selection.setInvalidatedAt(now);
+                selection.setInvalidatedReason("重新保存工艺路线后同步正式选择");
+                selection.setUpdatedAt(now);
+                selection.setUpdatedBy(operator);
+                formalSelectionRepository.updateById(selection);
+            }
+        }
+        for (ProductBomRoute route : routes) {
+            ProductBomRouteFormalSelection selection = new ProductBomRouteFormalSelection();
+            selection.setProductId(bom.getProductId());
+            selection.setProductBomId(bom.getProductBomId());
+            selection.setProductBomRouteId(route.getProductBomRouteId());
+            selection.setProcessId(route.getProcessId());
+            selection.setBomVersionNo(bom.getVersionNo());
+            selection.setSelectionBatchNo(batchNo);
+            selection.setStatus(ACTIVE);
+            selection.setConfirmedAt(now);
+            selection.setConfirmedBy(operator);
+            selection.setRemark("sync formal selection after route save");
+            fillCreate(selection, now);
+            formalSelectionRepository.insert(selection);
+        }
+    }
+
+    private boolean isFormalBom(ProductBom bom) {
+        return "formal".equals(bom.getBomScope())
+            || "released".equals(bom.getStatus())
+            || "frozen".equals(bom.getStatus());
+    }
+
     private void archiveCurrentCost(Long bomId, Long routeId) {
         List<ProductBomCostSnapshot> existing = currentCosts(bomId, routeId);
         existing.forEach(snapshot -> {
@@ -453,5 +552,9 @@ public class ProductBomWorkflowService {
 
     private BusinessException validation(String message) {
         return new BusinessException(ErrorCodeConstants.VALIDATION_ERROR, message);
+    }
+
+    private <T> List<T> safeList(List<T> values) {
+        return values == null ? List.of() : values;
     }
 }

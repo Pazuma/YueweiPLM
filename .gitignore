@@ -17,3 +17,9 @@ __pycache__/
 
 # Claude Code
 .claude/
+
+# Local toolchains
+.jdks/
+
+# CoDEX temporary workspace
+.codex_tmp/

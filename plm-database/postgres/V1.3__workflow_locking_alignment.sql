@@ -67,17 +67,8 @@ ALTER TABLE plm_order_quote
   ADD COLUMN IF NOT EXISTS cost_sync_status varchar(32) NOT NULL DEFAULT 'aligned',
   ADD COLUMN IF NOT EXISTS manual_estimate_flag bool_flag NOT NULL DEFAULT 0;
 
--- 2. Product variant uniqueness for SKU-like combinations under one parent.
-CREATE UNIQUE INDEX IF NOT EXISTS uk_plm_product_variant_combination
-ON plm_product (
-  COALESCE(parent_product_id, 0),
-  COALESCE(model, ''),
-  COALESCE(color, ''),
-  COALESCE(package_type, ''),
-  COALESCE(customer_id, 0),
-  version_no
-)
-WHERE deleted_flag = 0 AND product_type = 'model_variant';
+-- 2. Model variant projects may repeat the same phone model under one parent.
+-- DingTalk approval instance id is the idempotency key for connector intake.
 
 -- 3. Tooling/fixture and workstation traceability.
 ALTER TABLE plm_inventory
@@ -183,7 +174,7 @@ ALTER TABLE plm_integration_log
 ALTER TABLE plm_product
   DROP CONSTRAINT IF EXISTS ck_plm_product_status;
 ALTER TABLE plm_product
-  ADD CONSTRAINT ck_plm_product_status CHECK (status IN ('draft', 'developing', 'reviewing', 'released', 'archived'));
+  ADD CONSTRAINT ck_plm_product_status CHECK (status IN ('draft', 'developing', 'released', 'archived'));
 
 ALTER TABLE plm_process
   DROP CONSTRAINT IF EXISTS ck_plm_process_status;
@@ -193,7 +184,7 @@ ALTER TABLE plm_process
 ALTER TABLE plm_product_bom
   DROP CONSTRAINT IF EXISTS ck_plm_product_bom_status;
 ALTER TABLE plm_product_bom
-  ADD CONSTRAINT ck_plm_product_bom_status CHECK (status IN ('draft', 'reviewing', 'released', 'archived'));
+  ADD CONSTRAINT ck_plm_product_bom_status CHECK (status IN ('draft', 'frozen', 'released', 'archived'));
 
 ALTER TABLE plm_attachment
   DROP CONSTRAINT IF EXISTS ck_plm_attachment_status;

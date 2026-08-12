@@ -2,6 +2,8 @@ package com.yuewei.plm.controller.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import lombok.Data;
 
 @Data
@@ -13,6 +15,21 @@ public class ProductUpdateDTO {
 
     @Size(max = 255, message = "产品名称长度不能超过255")
     private String productName;
+
+    @Size(max = 20)
+    private String productSpecificCode;
+
+    @Size(max = 20)
+    private String phoneModelCode;
+
+    @Size(max = 20)
+    private String colorCode;
+
+    @Size(max = 80)
+    private String finishedProductCode;
+
+    @Size(max = 20)
+    private String importShortCode;
 
     @Size(max = 128, message = "系列名称长度不能超过128")
     private String seriesName;
@@ -36,5 +53,18 @@ public class ProductUpdateDTO {
     private String coreProcess;
 
     private String composition;
+    private LocalDate expectedDeliveryDate;
+    private LocalDateTime expectedArrivalAt;
+    private LocalDateTime actualArrivalAt;
+    private String networkType;
+    private String holeType;
+    private String mobileFunction;
+    private String tipo;
+    private String priority;
+    private String manufacturingLocation;
+    private String moldMarking;
+    private String referenceUrl;
+    private String requirementType;
+    private String customerRequirement;
     private String remark;
 }

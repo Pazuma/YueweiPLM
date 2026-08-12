@@ -4,13 +4,14 @@ import type { CodeItem, CodeItemPayload } from '@/api/modules/code'
 
 const props = defineProps<{ modelValue: boolean; item?: CodeItem | null; loading?: boolean }>()
 const emit = defineEmits<{ (event: 'update:modelValue', value: boolean): void; (event: 'save', payload: CodeItemPayload): void }>()
-const form = reactive<CodeItemPayload>({ codeType: 'color', codeValue: '', codeName: '', sortOrder: 0 })
+const form = reactive<CodeItemPayload>({ codeType: 'color', codeValue: '', codeName: '', codeNameZh: '', sortOrder: 0 })
 
 watch(() => [props.modelValue, props.item], () => {
   if (!props.modelValue) return
   form.codeType = props.item?.codeType || 'color'
   form.codeValue = props.item?.codeValue || ''
   form.codeName = props.item?.codeName || ''
+  form.codeNameZh = props.item?.codeNameZh || ''
   form.sortOrder = props.item?.sortOrder || 0
 }, { immediate: true })
 </script>
@@ -22,7 +23,8 @@ watch(() => [props.modelValue, props.item], () => {
         <el-form-item label="编码类型"><el-input v-model="form.codeType" disabled /></el-form-item>
         <el-form-item label="编码值"><el-input v-model="form.codeValue" :disabled="Boolean(item)" placeholder="例如 02" /></el-form-item>
       </div>
-      <el-form-item label="编码名称"><el-input v-model="form.codeName" placeholder="例如 Negro" /></el-form-item>
+      <el-form-item label="原名称"><el-input v-model="form.codeName" placeholder="例如 Negro" /></el-form-item>
+      <el-form-item label="中文名称"><el-input v-model="form.codeNameZh" placeholder="例如 黑色" /></el-form-item>
       <el-form-item label="排序"><el-input-number v-model="form.sortOrder" :min="0" /></el-form-item>
     </el-form>
     <template #footer>

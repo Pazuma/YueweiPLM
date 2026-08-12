@@ -6,6 +6,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.yuewei.plm.module.bom.dto.BomRouteColorDTO;
 import com.yuewei.plm.module.bom.repository.ProductBomImportBatchRepository;
 import com.yuewei.plm.module.bom.repository.ProductBomRepository;
 import com.yuewei.plm.module.bom.entity.ProductBom;
@@ -13,9 +15,11 @@ import com.yuewei.plm.module.bom.entity.ProductBomImportBatch;
 import com.yuewei.plm.module.bom.service.BomMaterialLookup;
 import com.yuewei.plm.module.bom.service.BomProcessRouteLookup;
 import com.yuewei.plm.module.bom.service.ProductBomWorkflowService;
+import com.yuewei.plm.module.bom.vo.BomImportRowVO;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.Optional;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.Test;
@@ -23,6 +27,7 @@ import com.yuewei.plm.module.code.entity.CodeItem;
 import com.yuewei.plm.module.code.repository.CodeItemRepository;
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import java.util.List;
+import org.mockito.ArgumentCaptor;
 
 class BomImportServiceImplTest {
 
@@ -82,6 +87,39 @@ class BomImportServiceImplTest {
     }
 
     @Test
+    void commitMarksImportedBomAsReleasedFormalVersion() throws Exception {
+        ProductBomImportBatchRepository batchRepository = mock(ProductBomImportBatchRepository.class);
+        ProductBomRepository bomRepository = editableBomRepository("candidate");
+        ProductBomWorkflowService workflowService = mock(ProductBomWorkflowService.class);
+        ProductBomImportBatch batch = new ProductBomImportBatch();
+        batch.setProductBomImportBatchId(1L);
+        batch.setProductBomId(20L);
+        batch.setProductId(10L);
+        batch.setImportToken("token");
+        batch.setStatus("ready");
+        batch.setExpiresAt(LocalDateTime.now().plusHours(1));
+        batch.setDeletedFlag(0);
+        batch.setPreviewJson(new ObjectMapper().writeValueAsString(List.of(importRow())));
+        when(batchRepository.selectOne(any(Wrapper.class))).thenReturn(batch);
+        when(batchRepository.update(any(ProductBomImportBatch.class), any(Wrapper.class))).thenReturn(1);
+        BomImportServiceImpl service = new BomImportServiceImpl(
+            batchRepository, bomRepository, mock(BomMaterialLookup.class), mock(BomProcessRouteLookup.class),
+            workflowService, colorCodes()
+        );
+
+        service.commit("token");
+
+        ArgumentCaptor<ProductBom> bomCaptor = ArgumentCaptor.forClass(ProductBom.class);
+        verify(bomRepository).updateById(bomCaptor.capture());
+        ProductBom updated = bomCaptor.getValue();
+        assertThat(updated.getBomScope()).isEqualTo("formal");
+        assertThat(updated.getSourceType()).isEqualTo("import");
+        assertThat(updated.getStatus()).isEqualTo("released");
+        assertThat(updated.getFrozenFlag()).isEqualTo(1);
+        assertThat(updated.getReleasedBy()).isEqualTo("import");
+    }
+
+    @Test
     void invalidHeaderProducesDownloadableErrorWorkbook() throws Exception {
         ProductBomImportBatchRepository batchRepository = mock(ProductBomImportBatchRepository.class);
         BomImportServiceImpl service = new BomImportServiceImpl(
@@ -125,12 +163,38 @@ class BomImportServiceImplTest {
     private ProductBomRepository editableBomRepository(String bomScope) {
         ProductBomRepository repository = mock(ProductBomRepository.class);
         ProductBom bom = new ProductBom();
+        bom.setProductBomId(20L);
         bom.setProductId(10L);
         bom.setBomScope(bomScope);
         bom.setStatus("draft");
         bom.setFrozenFlag(0);
         when(repository.selectById(20L)).thenReturn(bom);
         return repository;
+    }
+
+    private BomImportRowVO importRow() {
+        BomRouteColorDTO color = new BomRouteColorDTO();
+        color.setCodeItemId(2L);
+        color.setCodeValue("02");
+        color.setCodeName("Negro");
+        BomImportRowVO row = new BomImportRowVO();
+        row.setLineNo(1);
+        row.setProcessId(100L);
+        row.setRouteCode("DYE");
+        row.setRouteName("Dye route");
+        row.setColors(List.of("Negro"));
+        row.setColorItems(List.of(color));
+        row.setInventoryId(1L);
+        row.setItemCode("MAT-001");
+        row.setItemName("Material");
+        row.setUnit("kg");
+        row.setQuantity(BigDecimal.ONE);
+        row.setLossRate(BigDecimal.ZERO);
+        row.setUnitCost(BigDecimal.ONE);
+        row.setLineCost(BigDecimal.ONE);
+        row.setCurrencyCode("CNY");
+        row.setSubstituteFlag(0);
+        return row;
     }
 
     private byte[] workbook(boolean validHeader) throws Exception {

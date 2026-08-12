@@ -35,25 +35,24 @@ public class ProductReleaseGateValidatorImpl implements ProductReleaseGateValida
     @Override
     public ProductReleaseGateCheckVO check(Product product) {
         List<ProductReleaseGateMissingItemVO> missingItems = new ArrayList<>();
+        List<ProductReleaseGateMissingItemVO> blockingItems = new ArrayList<>();
         String currentNodeKey = resolveCurrentNodeKey(product);
         boolean currentNodeConfirmed = Boolean.TRUE.equals(product.getTimelineCurrentConfirmed())
-            && currentNodeKey.equals(product.getTimelineConfirmedNodeKey());
+            && java.util.Objects.equals(currentNodeKey, product.getTimelineConfirmedNodeKey());
 
-        if (!ProductStatusConstants.REVIEWING.equals(product.getStatus())) {
-            missingItems.add(missing("PRODUCT_STATUS_NOT_REVIEWING", "产品当前状态不是 reviewing，不能发布"));
-        }
         if (ProductStatusConstants.ARCHIVED.equals(product.getStatus())) {
-            missingItems.add(missing("PRODUCT_ARCHIVED", "产品已归档，不能发布"));
+            blockingItems.add(missing("PRODUCT_ARCHIVED", "产品已归档，不能发布", "blocker"));
         }
         if ("abandoned".equals(product.getLockStatus())) {
-            missingItems.add(missing("PRODUCT_ABANDONED", "项目已废弃，不能发布"));
+            blockingItems.add(missing("PRODUCT_ABANDONED", "项目已废弃，不能发布", "blocker"));
         }
-        if (!isAllowedPublishNode(product.getProductType(), currentNodeKey)) {
-            missingItems.add(missing("TIMELINE_NODE_NOT_ALLOWED", "当前时间轴未到发布或投产决策节点"));
+        if (!isAllowedPublishNode(product, currentNodeKey)) {
+            blockingItems.add(missing("TIMELINE_NODE_NOT_ALLOWED", "当前时间轴未到允许发布的最终节点", "blocker"));
         }
         if (!currentNodeConfirmed) {
-            missingItems.add(missing("TIMELINE_NODE_NOT_CONFIRMED", "当前门禁节点尚未确认"));
+            blockingItems.add(missing("TIMELINE_NODE_NOT_CONFIRMED", "当前门禁节点尚未确认", "blocker"));
         }
+        missingItems.addAll(blockingItems);
 
         int frozenBomCount = countFrozenBom(product.getProductId());
         int lockedProcessRouteCount = countLockedProcessRoute(product.getProductId());
@@ -63,25 +62,27 @@ public class ProductReleaseGateValidatorImpl implements ProductReleaseGateValida
         int testingFileCount = countAttachment(product.getProductId(), List.of("testing"));
 
         if (frozenBomCount <= 0) {
-            missingItems.add(missing("BOM_NOT_FROZEN", "缺少已冻结或已发布 BOM"));
+            missingItems.add(missing("BOM_NOT_FROZEN", "缺少已冻结或已发布 BOM", "warning"));
         }
         if (lockedProcessRouteCount <= 0) {
-            missingItems.add(missing("PROCESS_ROUTE_NOT_LOCKED", "缺少已锁定或已冻结工艺路线"));
+            missingItems.add(missing("PROCESS_ROUTE_NOT_LOCKED", "缺少已锁定或已冻结工艺路线", "warning"));
         }
         if (drawingFileCount <= 0) {
-            missingItems.add(missing("DRAWING_FILE_MISSING", "缺少图纸文件"));
+            missingItems.add(missing("DRAWING_FILE_MISSING", "缺少图纸文件", "warning"));
         }
         if (sopFileCount + sipFileCount <= 0) {
-            missingItems.add(missing("SOP_OR_SIP_FILE_MISSING", "缺少 SOP 或 SIP 文件"));
+            missingItems.add(missing("SOP_OR_SIP_FILE_MISSING", "缺少 SOP 或 SIP 文件", "warning"));
         }
         if (testingFileCount <= 0) {
-            missingItems.add(missing("TESTING_FILE_MISSING", "缺少测试资料"));
+            missingItems.add(missing("TESTING_FILE_MISSING", "缺少测试资料", "warning"));
         }
 
         return ProductReleaseGateCheckVO.builder()
             .projectId(product.getProductId())
             .productId(product.getProductId())
-            .passed(missingItems.isEmpty())
+            .passed(blockingItems.isEmpty())
+            .blocking(!blockingItems.isEmpty())
+            .confirmRequired(missingItems.stream().anyMatch(item -> "warning".equals(item.getSeverity())))
             .currentStatus(product.getStatus())
             .currentNodeKey(currentNodeKey)
             .currentNodeConfirmed(currentNodeConfirmed)
@@ -96,20 +97,25 @@ public class ProductReleaseGateValidatorImpl implements ProductReleaseGateValida
     }
 
     private String resolveCurrentNodeKey(Product product) {
-        List<TimelineNodeDefinition> definitions = timelineDefinitionProvider.getDefinitions(product.getProductType());
+        List<TimelineNodeDefinition> definitions = timelineDefinitionProvider.getDefinitions(product);
+        if (definitions.isEmpty()) {
+            return null;
+        }
         int stepNo = product.getCurrentStepNo() == null ? 1 : product.getCurrentStepNo();
         int normalized = Math.min(Math.max(stepNo, 1), definitions.size());
         return definitions.get(normalized - 1).nodeCode();
     }
 
-    private boolean isAllowedPublishNode(String productType, String currentNodeKey) {
-        if (TimelineNodeConstants.PRODUCT_TYPE_PRODUCT_LINE.equals(productType)) {
-            return "PRODUCT_LINE_PRODUCTION_DECISION_STEP".equals(currentNodeKey);
+    private boolean isAllowedPublishNode(Product product, String currentNodeKey) {
+        if (!TimelineNodeConstants.PRODUCT_TYPE_PRODUCT_LINE.equals(product.getProductType())
+            && !TimelineNodeConstants.PRODUCT_TYPE_MODEL_VARIANT.equals(product.getProductType())) {
+            return false;
         }
-        if (TimelineNodeConstants.PRODUCT_TYPE_MODEL_VARIANT.equals(productType)) {
-            return "MODEL_VARIANT_RELEASE".equals(currentNodeKey);
+        List<TimelineNodeDefinition> definitions = timelineDefinitionProvider.getDefinitions(product);
+        if (definitions.isEmpty()) {
+            return false;
         }
-        return false;
+        return definitions.get(definitions.size() - 1).nodeCode().equals(currentNodeKey);
     }
 
     private int countFrozenBom(Long productId) {
@@ -141,10 +147,11 @@ public class ProductReleaseGateValidatorImpl implements ProductReleaseGateValida
         return count.intValue();
     }
 
-    private ProductReleaseGateMissingItemVO missing(String code, String message) {
+    private ProductReleaseGateMissingItemVO missing(String code, String message, String severity) {
         return ProductReleaseGateMissingItemVO.builder()
             .code(code)
             .message(message)
+            .severity(severity)
             .build();
     }
 }

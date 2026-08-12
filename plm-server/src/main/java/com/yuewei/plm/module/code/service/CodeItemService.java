@@ -31,7 +31,8 @@ public class CodeItemService {
             .eq(normalizedStatus != null, CodeItem::getStatus, normalizedStatus)
             .and(StringUtils.hasText(query.getKeyword()), value -> value
                 .like(CodeItem::getCodeValue, query.getKeyword().trim())
-                .or().like(CodeItem::getCodeName, query.getKeyword().trim()))
+                .or().like(CodeItem::getCodeName, query.getKeyword().trim())
+                .or().like(CodeItem::getCodeNameZh, query.getKeyword().trim()))
             .orderByAsc(CodeItem::getSortOrder, CodeItem::getCodeValue);
         IPage<CodeItem> result = repository.selectPage(new Page<>(query.getPage(), query.getSize()), wrapper);
         return PageVO.<CodeItemVO>builder()
@@ -49,6 +50,7 @@ public class CodeItemService {
         item.setCodeType(type);
         item.setCodeValue(value);
         item.setCodeName(required(dto.getCodeName(), "编码名称"));
+        item.setCodeNameZh(optional(dto.getCodeNameZh()));
         item.setStatus("enabled");
         item.setSortOrder(dto.getSortOrder());
         fillCreate(item);
@@ -60,6 +62,7 @@ public class CodeItemService {
     public CodeItemVO update(Long id, CodeItemSaveDTO dto) {
         CodeItem item = requireItem(id);
         item.setCodeName(required(dto.getCodeName(), "编码名称"));
+        item.setCodeNameZh(optional(dto.getCodeNameZh()));
         item.setSortOrder(dto.getSortOrder());
         touch(item);
         repository.updateById(item);
@@ -129,8 +132,13 @@ public class CodeItemService {
 
     private CodeItemVO toVO(CodeItem item) {
         return CodeItemVO.builder().codeItemId(item.getCodeItemId()).codeType(item.getCodeType())
-            .codeValue(item.getCodeValue()).codeName(item.getCodeName()).status(item.getStatus())
+            .codeValue(item.getCodeValue()).codeName(item.getCodeName()).codeNameZh(item.getCodeNameZh())
+            .status(item.getStatus())
             .sortOrder(item.getSortOrder()).updatedAt(item.getUpdatedAt()).build();
+    }
+
+    private String optional(String value) {
+        return StringUtils.hasText(value) ? value.trim() : null;
     }
 
     private BusinessException validation(String message) {

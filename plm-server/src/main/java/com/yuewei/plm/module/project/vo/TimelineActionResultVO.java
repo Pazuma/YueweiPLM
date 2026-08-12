@@ -2,6 +2,7 @@ package com.yuewei.plm.module.project.vo;
 
 import lombok.Builder;
 import lombok.Data;
+import java.util.List;
 
 @Data
 @Builder
@@ -18,4 +19,5 @@ public class TimelineActionResultVO {
     private Boolean currentConfirmed;
     private String productStatus;
     private Long logId;
+    private List<String> warnings;
 }

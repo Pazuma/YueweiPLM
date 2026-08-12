@@ -10,6 +10,7 @@ public final class ErrorCodeConstants {
     public static final int VERSION_FROZEN = 40301;
     public static final int VERSION_RELEASED = 40302;
     public static final int RELEASE_GATE_NOT_PASSED = 40307;
+    public static final int RELEASE_RISK_CONFIRM_REQUIRED = 40308;
     public static final int RESOURCE_NOT_FOUND = 40401;
     public static final int ATTACHMENT_NOT_FOUND = 40402;
     public static final int CODE_CONFLICT = 40901;

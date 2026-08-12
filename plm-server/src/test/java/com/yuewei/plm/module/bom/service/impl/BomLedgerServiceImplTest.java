@@ -73,6 +73,33 @@ class BomLedgerServiceImplTest {
             .hasMessageContaining("蓝色");
     }
 
+    @Test
+    void skuMatchesRouteByColorCodeWhenColorNamesDiffer() {
+        ProductBomRepository bomRepository = mock(ProductBomRepository.class);
+        ProductRepository productRepository = mock(ProductRepository.class);
+        ProductBomRouteRepository routeRepository = mock(ProductBomRouteRepository.class);
+        ProductBomRouteColorRepository colorRepository = mock(ProductBomRouteColorRepository.class);
+        BomLedgerServiceImpl service = new BomLedgerServiceImpl(
+            productRepository, bomRepository, routeRepository, colorRepository,
+            mock(ProductBomItemRepository.class), mock(ProductBomCostSnapshotRepository.class),
+            mock(ProductBomRouteFormalSelectionRepository.class)
+        );
+        when(bomRepository.selectById(10L)).thenReturn(bom(10L, "formal", "released"));
+        Product sku = product(2L, 1L, "黑色");
+        sku.setColorCode("02");
+        when(productRepository.selectList(Mockito.<Wrapper<Product>>any())).thenReturn(List.of(sku));
+        when(routeRepository.selectList(Mockito.<Wrapper<ProductBomRoute>>any()))
+            .thenReturn(List.of(route(100L, "DYE")));
+        when(colorRepository.selectList(Mockito.<Wrapper<ProductBomRouteColor>>any()))
+            .thenReturn(List.of(color(100L, "02", "Negro")));
+
+        var rows = service.listSkus(10L);
+
+        assertThat(rows).hasSize(1);
+        assertThat(rows.get(0).getProductBomRouteId()).isEqualTo(100L);
+        assertThat(rows.get(0).getRouteCode()).isEqualTo("DYE");
+    }
+
     private BomLedgerServiceImpl service(ProductBomRepository bomRepository, ProductRepository productRepository,
                                          ProductBomRouteFormalSelectionRepository formalSelectionRepository) {
         return new BomLedgerServiceImpl(
@@ -120,6 +147,12 @@ class BomLedgerServiceImplTest {
         color.setColorName(name);
         color.setStatus("active");
         color.setDeletedFlag(0);
+        return color;
+    }
+
+    private ProductBomRouteColor color(Long routeId, String code, String name) {
+        ProductBomRouteColor color = color(routeId, name);
+        color.setColorCode(code);
         return color;
     }
 

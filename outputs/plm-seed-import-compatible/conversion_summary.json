@@ -1,0 +1,94 @@
+[
+  {
+    "file": "color_import.xlsx",
+    "sheet": "Códigos de color",
+    "headers": [
+      "Código color",
+      "Nombre color",
+      "Estado",
+      "Actualizado"
+    ],
+    "rows": 71,
+    "expected_rows": 71
+  },
+  {
+    "file": "product_import.xlsx",
+    "sheet": "product_template",
+    "headers": [
+      "product_code",
+      "product_name",
+      "product_type",
+      "parent_product_code",
+      "series_name",
+      "model",
+      "color",
+      "version_no",
+      "status",
+      "current_stage",
+      "remark"
+    ],
+    "rows": 31,
+    "expected_rows": 31
+  },
+  {
+    "file": "inventory_import.xlsx",
+    "sheet": "inventory_template",
+    "headers": [
+      "inventory_code",
+      "inventory_name",
+      "inventory_type",
+      "specification",
+      "unit",
+      "supplier_name",
+      "unit_cost",
+      "currency_code",
+      "status",
+      "remark"
+    ],
+    "rows": 80,
+    "expected_rows": 80
+  },
+  {
+    "file": "process_import.xlsx",
+    "sheet": "process_template",
+    "headers": [
+      "product_code",
+      "process_code",
+      "process_name",
+      "process_type",
+      "parent_process_code",
+      "sequence_no",
+      "version_no",
+      "status",
+      "quality_requirement",
+      "remark"
+    ],
+    "rows": 24,
+    "expected_rows": 24
+  },
+  {
+    "file": "historical_bom_import.xlsx",
+    "sheet": "历史BOM导入",
+    "headers": [
+      "产品编码",
+      "BOM版本",
+      "行号",
+      "路线编码",
+      "路线名称",
+      "适用颜色",
+      "物料编码",
+      "物料名称",
+      "规格",
+      "单位",
+      "用量",
+      "供应商",
+      "单价",
+      "单个成本",
+      "损耗率",
+      "替代料标识",
+      "备注"
+    ],
+    "rows": 313,
+    "expected_rows": 313
+  }
+]

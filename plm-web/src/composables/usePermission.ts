@@ -44,16 +44,16 @@ export function usePermission() {
   }
 
   function canPublishProduct(status: string, createdBy?: string) {
+    if (['released', 'archived'].includes(status)) return false
     if (isSuperAdmin.value) return true
     if (!PRODUCT_PUBLISH_ROLES.includes(roleName.value)) return false
-    if (status !== 'reviewing') return false
     return !(isManager.value && createdBy && userStore.profile?.userName === createdBy)
   }
 
   function canFreezeProduct(status: string, createdBy?: string) {
+    if (status !== 'developing') return false
     if (isSuperAdmin.value) return true
     if (!PRODUCT_PUBLISH_ROLES.includes(roleName.value)) return false
-    if (!['developing', 'reviewing'].includes(status)) return false
     return !(isManager.value && createdBy && userStore.profile?.userName === createdBy)
   }
 

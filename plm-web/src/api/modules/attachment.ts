@@ -6,7 +6,14 @@ export interface AttachmentVO {
   attachmentId: number
   ownerObjectType: string
   ownerObjectId: number
+  projectId?: number | null
+  projectCode?: string | null
+  projectName?: string | null
   timelineNodeKey?: string | null
+  timelineStageCode?: string | null
+  timelineStageName?: string | null
+  timelineStepCode?: string | null
+  timelineStepName?: string | null
   fileCategory: string
   fileName: string
   originalFileName: string
@@ -16,11 +23,27 @@ export interface AttachmentVO {
   checksum: string
   storageType: string
   storageKey: string
+  previewable?: boolean
+  previewType?: string | null
+  previewStatus?: string | null
+  previewUrl?: string | null
+  downloadUrl?: string | null
+  previewErrorMessage?: string | null
   versionNo: string
   status: string
   remark?: string | null
   createdAt: string
   createdBy: string
+}
+
+export interface AttachmentPreviewVO {
+  attachmentId: number
+  previewable: boolean
+  previewType: string
+  previewStatus: string
+  previewUrl: string
+  downloadUrl: string
+  message?: string | null
 }
 
 export interface TimelineAttachmentMetadata {
@@ -56,6 +79,48 @@ export function uploadTimelineAttachment(
     .then((response) => unwrapResponse<AttachmentVO>(response))
 }
 
+/** POST /api/v1/projects/{projectId}/attachments */
+export function uploadProjectAttachment(
+  projectId: number,
+  file: File,
+  metadata: TimelineAttachmentMetadata
+) {
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('fileCategory', metadata.fileCategory)
+  if (metadata.versionNo) formData.append('versionNo', metadata.versionNo)
+  if (metadata.remark) formData.append('remark', metadata.remark)
+
+  return request
+    .post(`/projects/${projectId}/attachments`, formData)
+    .then((response) => unwrapResponse<AttachmentVO>(response))
+}
+
+
+/** POST /api/v1/products/{productId}/attachments */
+export function uploadProductAttachment(
+  productId: number,
+  file: File,
+  metadata: TimelineAttachmentMetadata
+) {
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('fileCategory', metadata.fileCategory)
+  if (metadata.versionNo) formData.append('versionNo', metadata.versionNo)
+  if (metadata.remark) formData.append('remark', metadata.remark)
+
+  return request
+    .post(`/products/${productId}/attachments`, formData)
+    .then((response) => unwrapResponse<AttachmentVO>(response))
+}
+
+/** GET /api/v1/products/{productId}/attachments */
+export async function getProductAttachments(productId: number, fileCategory?: string): Promise<AttachmentVO[]> {
+  const response = await request.get(`/products/${productId}/attachments`, {
+    params: fileCategory ? { fileCategory } : undefined
+  })
+  return unwrapResponse<AttachmentVO[]>(response)
+}
 /** GET /api/v1/projects/{projectId}/timeline/{nodeKey}/attachments */
 export async function getTimelineAttachments(projectId: number, nodeKey: string): Promise<AttachmentVO[]> {
   const response = await request.get(`/projects/${projectId}/timeline/${nodeKey}/attachments`)
@@ -74,6 +139,18 @@ export async function getAttachmentDetail(attachmentId: number): Promise<Attachm
   return unwrapResponse<AttachmentVO>(response)
 }
 
+/** GET /api/v1/attachments/{attachmentId}/preview/metadata */
+export async function getAttachmentPreviewMetadata(attachmentId: number): Promise<AttachmentPreviewVO> {
+  const response = await request.get(`/attachments/${attachmentId}/preview/metadata`)
+  return unwrapResponse<AttachmentPreviewVO>(response)
+}
+
+/** GET /api/v1/attachments/{attachmentId}/preview */
+export async function previewAttachment(attachmentId: number): Promise<Blob> {
+  const response = await request.get<Blob>(`/attachments/${attachmentId}/preview`, { responseType: 'blob' })
+  return response.data
+}
+
 /** GET /api/v1/attachments/{attachmentId}/download */
 export async function downloadAttachment(attachmentId: number): Promise<Blob> {
   const response = await request.get<Blob>(`/attachments/${attachmentId}/download`, { responseType: 'blob' })
@@ -85,3 +162,4 @@ export async function deleteAttachment(attachmentId: number) {
   const response = await request.delete(`/attachments/${attachmentId}`)
   return unwrapResponse<void>(response)
 }
+

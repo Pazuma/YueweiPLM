@@ -1,5 +1,6 @@
 import type {
   BomCenterSnapshot,
+  BomHistoryMergeResult,
   BomImportPreview,
   BomLedgerRow,
   BomRoute,
@@ -19,7 +20,7 @@ export function getBomCenterSnapshot(): Promise<BomCenterSnapshot> {
 
 /* ========== 项目级 BOM（文档 7.4） ========== */
 
-export type ProductBomStatus = 'draft' | 'reviewing' | 'released' | 'archived' | 'frozen'
+export type ProductBomStatus = 'draft' | 'released' | 'archived' | 'frozen'
 
 export interface ProductBomItemVO {
   productBomItemId: number
@@ -101,6 +102,78 @@ export interface ProductBomItemSavePayload {
   remark?: string
 }
 
+export interface BomRouteSavePayload {
+  productBomRouteId?: number
+  sourceProductBomRouteId?: number | null
+  sharedBomGroupCode?: string
+  routeVariantNo?: string
+  variantName?: string
+  processId: number
+  routeCode: string
+  routeName: string
+  colors: string[]
+  colorItems?: Array<{ codeItemId: number; codeValue: string; codeName: string }>
+  items: ProductBomItemSavePayload[]
+  processCost?: number
+  packageCost?: number
+  laborCost?: number
+  toolingCost?: number
+  otherCost?: number
+}
+
+function toBomItemSavePayload(item: BomRoute['items'][number]): ProductBomItemSavePayload {
+  return {
+    inventoryId: item.inventoryId ?? null,
+    itemCode: item.itemCode || undefined,
+    itemName: item.itemName,
+    specification: item.specification || undefined,
+    lineNo: item.lineNo,
+    quantity: item.quantity,
+    unit: item.unit,
+    lossRate: item.lossRate ?? null,
+    unitCost: item.unitCost ?? null,
+    lineCost: item.lineCost ?? null,
+    supplierCode: item.supplierCode ?? null,
+    supplierName: item.supplierName ?? null,
+    currencyCode: item.currencyCode ?? null,
+    materialSource: item.materialSource ?? null,
+    unmatchedFlag: item.unmatchedFlag ?? null,
+    lookupMessage: item.lookupMessage ?? null,
+    substituteFlag: item.substituteFlag ?? null,
+    remark: item.remark || undefined
+  }
+}
+
+export function toBomRouteSavePayload(route: BomRoute): BomRouteSavePayload {
+  const payload: BomRouteSavePayload = {
+    productBomRouteId: route.productBomRouteId,
+    sourceProductBomRouteId: route.sourceProductBomRouteId ?? null,
+    sharedBomGroupCode: route.sharedBomGroupCode,
+    routeVariantNo: route.routeVariantNo,
+    variantName: route.variantName,
+    processId: route.processId,
+    routeCode: route.routeCode,
+    routeName: route.routeName,
+    colors: route.colors,
+    colorItems: route.colorItems?.map(color => ({
+      codeItemId: color.codeItemId,
+      codeValue: color.codeValue,
+      codeName: color.codeName
+    })),
+    items: route.items.map(toBomItemSavePayload)
+  }
+  if (route.processCost !== undefined) payload.processCost = route.processCost
+  if (route.packageCost !== undefined) payload.packageCost = route.packageCost
+  if (route.laborCost !== undefined) payload.laborCost = route.laborCost
+  if (route.toolingCost !== undefined) payload.toolingCost = route.toolingCost
+  if (route.otherCost !== undefined) payload.otherCost = route.otherCost
+  return payload
+}
+
+export function toBomRoutesSavePayload(routes: BomRoute[]): BomRouteSavePayload[] {
+  return routes.map(toBomRouteSavePayload)
+}
+
 /** GET /api/v1/projects/{projectId}/boms */
 export async function getProjectBoms(projectId: number): Promise<ProductBomVO[]> {
   const response = await request.get(`/projects/${projectId}/boms`)
@@ -143,10 +216,25 @@ export async function deleteBomItem(bomId: number, itemId: number) {
   return unwrapResponse<ProductBomVO>(response)
 }
 
+/** DELETE /api/v1/boms/{bomId} */
+export async function deleteBomVersion(bomId: number): Promise<void> {
+  await request.delete(`/boms/${bomId}`)
+}
+
 /** POST /api/v1/boms/{bomId}/freeze */
 export async function freezeBom(bomId: number) {
   const response = await request.post(`/boms/${bomId}/freeze`)
   return unwrapResponse<ProductBomVO>(response)
+}
+
+/** POST /api/v1/boms/{bomId}/confirm-current-version */
+export async function confirmCurrentBomVersion(bomId: number) {
+  return unwrapResponse<ProductBomVO>(await request.post(`/boms/${bomId}/confirm-current-version`))
+}
+
+/** POST /api/v1/boms/{bomId}/cancel-confirmation */
+export async function cancelCurrentBomConfirmation(bomId: number) {
+  return unwrapResponse<ProductBomVO>(await request.post(`/boms/${bomId}/cancel-confirmation`))
 }
 
 export interface BomCopyVersionPayload {
@@ -185,15 +273,15 @@ export async function getProductBomSummary(productId: number): Promise<BomSummar
 }
 
 export async function saveBomRoutes(bomId: number, routes: BomRoute[]): Promise<void> {
-  await request.put(`/boms/${bomId}/routes`, routes)
+  await request.put(`/boms/${bomId}/routes`, toBomRoutesSavePayload(routes))
 }
 
 export async function recalculateBomCosts(bomId: number, routes: BomRoute[]) {
-  return unwrapResponse(await request.post(`/boms/${bomId}/costs/recalculate`, routes))
+  return unwrapResponse(await request.post(`/boms/${bomId}/costs/recalculate`, toBomRoutesSavePayload(routes)))
 }
 
 export async function submitBomReview(bomId: number) {
-  return unwrapResponse(await request.post(`/boms/${bomId}/submit-review`))
+  return publishBom(bomId)
 }
 
 export async function publishBom(bomId: number) {
@@ -253,6 +341,11 @@ export interface ProductionRouteConfirmPayload {
     productBomId: number
     productBomRouteId: number
     operationProcessIds: number[]
+    applicableColors: Array<{
+      codeItemId: number
+      colorCode: string
+      colorName: string
+    }>
   }>
   remark?: string
 }
@@ -270,6 +363,14 @@ export async function commitHistoricalBomImport(importToken: string) {
 export async function downloadHistoricalBomTemplate(): Promise<Blob> {
   const response = await request.get('/boms/history/import/template', { responseType: 'blob' })
   return response.data
+}
+
+export async function analyzeHistoricalBomMerge(productId?: number): Promise<BomHistoryMergeResult> {
+  return unwrapResponse<BomHistoryMergeResult>(await request.get('/boms/history/merge/analysis', { params: { productId } }))
+}
+
+export async function autoMergeHistoricalBoms(productId?: number): Promise<BomHistoryMergeResult> {
+  return unwrapResponse<BomHistoryMergeResult>(await request.post('/boms/history/merge/auto', null, { params: { productId } }))
 }
 
 export async function getProductionConfirmation(projectId: number): Promise<ProductionConfirmation> {

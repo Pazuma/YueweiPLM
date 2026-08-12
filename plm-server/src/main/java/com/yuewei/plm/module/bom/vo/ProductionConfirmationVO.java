@@ -24,5 +24,14 @@ public class ProductionConfirmationVO {
         private String routeName;
         private String bomVersionNo;
         private List<Long> operationProcessIds;
+        private List<ApplicableColorVO> applicableColors;
+    }
+
+    @Data
+    @Builder
+    public static class ApplicableColorVO {
+        private Long codeItemId;
+        private String colorCode;
+        private String colorName;
     }
 }

@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import { getReportCenterSnapshot } from '@/api/modules/foundation'
+import FixedTableViewport from '@/components/FixedTableViewport/index.vue'
 import PageContainer from '@/components/PageContainer/index.vue'
 import type { ReportCenterSnapshot, ReportMetricItem } from '@/types/foundation'
 
@@ -63,7 +64,13 @@ watch(
 
 async function loadData() {
   loading.value = true
-  try { snapshot.value = await getReportCenterSnapshot() } finally { loading.value = false }
+  try {
+    snapshot.value = await getReportCenterSnapshot()
+  } catch {
+    snapshot.value = null
+  } finally {
+    loading.value = false
+  }
 }
 
 function openTarget(targetPath: string | undefined) {
@@ -186,13 +193,15 @@ onMounted(loadData)
       <div class="report-main-grid" v-if="activeMetric">
         <section class="report-list-section">
           <div class="report-list-section__head"><h4>{{ activeMetric.detailTitle }}</h4><p>{{ activeMetric.detailSummary }}</p></div>
-          <el-table :data="filteredReportItems" border stripe class="report-progress-table">
+          <FixedTableViewport v-slot="{ tableHeight }" compact :refresh-key="filteredReportItems">
+          <el-table :data="filteredReportItems" :height="tableHeight" border stripe class="report-progress-table">
             <el-table-column label="项目" min-width="220"><template #default="{ row }"><div class="report-project-cell"><strong>{{ row.title }}</strong><span class="subtle-text">{{ row.subtitle }}</span></div></template></el-table-column>
             <el-table-column prop="currentNode" label="当前节点" min-width="140" />
             <el-table-column prop="owner" label="负责人" width="120" />
             <el-table-column prop="durationText" label="停留时间" width="120" />
             <el-table-column label="操作" width="170" fixed="right"><template #default="{ row }"><el-button link type="primary" @click="openTarget(row.targetPath)">查看进度</el-button><el-button link @click="openTarget(row.targetPath)">详情</el-button></template></el-table-column>
           </el-table>
+          </FixedTableViewport>
         </section>
 
         <section class="report-structure-summary">

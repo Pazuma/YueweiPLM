@@ -11,7 +11,7 @@ public class ProjectQueryDTO {
     private long page = 1;
 
     @Min(value = 1, message = "每页最小为1")
-    @Max(value = 100, message = "每页最大为100")
+    @Max(value = 200, message = "每页最大为200")
     private long size = 20;
 
     private String keyword;

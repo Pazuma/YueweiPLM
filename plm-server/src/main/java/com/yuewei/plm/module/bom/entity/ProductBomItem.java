@@ -19,6 +19,7 @@ public class ProductBomItem extends BaseEntity {
     private Long productBomId;
     private Long productBomRouteId;
     private Long productId;
+    private String sharedBomGroupCode;
     private Long inventoryId;
     private String itemCode;
     private String itemName;

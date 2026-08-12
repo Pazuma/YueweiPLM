@@ -1,0 +1,69 @@
+{
+  "products": {
+    "existing": 7,
+    "conflicts": 0
+  },
+  "colors": {
+    "inserted": 0,
+    "existing": 0,
+    "would_insert": 0,
+    "skipped": 0
+  },
+  "skus": {
+    "inserted": 0,
+    "existing": 3830,
+    "would_insert": 0,
+    "skipped": 0,
+    "conflicts": 0,
+    "conflict_rows": [],
+    "skipped_rows": []
+  },
+  "operations": {
+    "inserted": 0,
+    "existing": 30,
+    "would_insert": 0,
+    "skipped": 0
+  },
+  "routes": {
+    "inserted": 0,
+    "existing": 10,
+    "would_insert": 0,
+    "skipped": 0
+  },
+  "boms": {
+    "inserted": 0,
+    "existing": 24,
+    "would_insert": 0,
+    "skipped": 0,
+    "conflicts": 0,
+    "conflict_rows": []
+  },
+  "bom_routes": {
+    "inserted": 0,
+    "existing": 24,
+    "would_insert": 0,
+    "skipped": 0
+  },
+  "bom_route_colors": {
+    "inserted": 0,
+    "existing": 24,
+    "would_insert": 0,
+    "skipped": 0
+  },
+  "decisions": {
+    "inserted": 0,
+    "existing": 24,
+    "would_insert": 0,
+    "skipped": 0
+  },
+  "source": {
+    "deployment_seed": "PLM\\seeds\\deployment_master_data_seed.json",
+    "route_seed": "PLM\\seeds\\master_route_seed.json",
+    "sku_rows": 3830,
+    "bom_rows": 24,
+    "route_rows": 10,
+    "execute": true
+  },
+  "errors": [],
+  "completed_at": "2026-08-03T06:33:00.073513+00:00"
+}

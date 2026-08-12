@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
 import { getCustomerList } from '@/api/modules/customer'
+import FixedTableViewport from '@/components/FixedTableViewport/index.vue'
 import PageContainer from '@/components/PageContainer/index.vue'
 import SearchBar from '@/components/SearchBar/index.vue'
 import { usePermission } from '@/composables/usePermission'
@@ -41,6 +42,8 @@ async function loadCustomers() {
   loading.value = true
   try {
     rows.value = await getCustomerList()
+  } catch {
+    rows.value = []
   } finally {
     loading.value = false
   }
@@ -68,7 +71,8 @@ onMounted(loadCustomers)
     <SearchBar :fields="searchFields" @search="handleSearch" @reset="handleReset" />
 
     <section class="page-panel" v-loading="loading">
-      <el-table :data="table.pagedRows.value" border stripe>
+      <FixedTableViewport v-slot="{ tableHeight }" :refresh-key="table.pagedRows.value">
+      <el-table :data="table.pagedRows.value" :height="tableHeight" border stripe>
         <el-table-column prop="customerCode" label="客户编码" min-width="170" />
         <el-table-column prop="customerName" label="客户名称" min-width="220" />
         <el-table-column prop="customerShortName" label="简称" width="120" />
@@ -87,6 +91,7 @@ onMounted(loadCustomers)
           </template>
         </el-table-column>
       </el-table>
+      </FixedTableViewport>
 
       <div class="toolbar-row" style="margin-top: 16px">
         <span class="subtle-text">共 {{ table.filteredRows.value.length }} 条</span>

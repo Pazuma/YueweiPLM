@@ -9,7 +9,6 @@ export const STATUS_LABEL_MAP: Record<ObjectType, Partial<Record<CommonStatus, s
   product: {
     draft: '草稿',
     developing: '开发中',
-    reviewing: '评审中',
     released: '已发布',
     archived: '已归档',
     confirmed: '已确认',
@@ -66,7 +65,6 @@ export const STATUS_COLOR_MAP: Partial<Record<CommonStatus, string>> = {
   active: 'success',
   inactive: 'info',
   developing: 'primary',
-  reviewing: 'warning',
   released: 'success',
   archived: 'info',
   confirmed: 'primary',
@@ -100,8 +98,7 @@ export function getStatusColor(status: CommonStatus) {
 export function getStatusActions(status: CommonStatus) {
   const map: Partial<Record<CommonStatus, string[]>> = {
     draft: ['edit', 'submit'],
-    developing: ['edit', 'submit_review'],
-    reviewing: ['publish', 'freeze'],
+    developing: ['edit'],
     released: ['archive', 'copy'],
     active: ['edit'],
     pending: ['approve', 'reject']

@@ -44,7 +44,9 @@ import {
   createProcessOperationMaster,
   createProcessRoute,
   freezeProcessRoute,
+  getProcessCenterSnapshot,
   getProcessOperationMasters,
+  getProcessRouteRelations,
   getProcessRouteDetail,
   getProcessRouteTemplates,
   getProjectProcessRoutes
@@ -54,8 +56,10 @@ import {
   downloadAttachment,
   getFileCenterAttachments,
   getTimelineAttachments,
+  uploadProjectAttachment,
   uploadTimelineAttachment
 } from '../attachment'
+import { getProjects } from '../project'
 
 function apiResponse<T>(data: T) {
   return Promise.resolve({ data: { code: 0, message: 'success', data } })
@@ -106,6 +110,31 @@ describe('M4 API contract', () => {
     expect(requestMock.post).toHaveBeenNthCalledWith(3, '/boms/31/freeze')
   })
 
+  it('keeps archived sku project summaries as sku instead of coercing them to product lines', async () => {
+    requestMock.get.mockReturnValueOnce(apiResponse({
+      content: [{
+        projectId: 17,
+        productId: 17,
+        productCode: 'SKU-17',
+        productName: 'Archived SKU',
+        productType: 'sku',
+        versionNo: 'A',
+        status: 'archived',
+        currentStepNo: 18
+      }]
+    }))
+
+    await expect(getProjects({ page: 1, size: 200, status: 'archived' })).resolves.toMatchObject([{
+      productId: 17,
+      productType: 'sku',
+      completionRate: 1,
+      productFlowMode: 'new_model_variant',
+      moldAction: 'modify'
+    }])
+
+    expect(requestMock.get).toHaveBeenCalledWith('/projects', { params: { page: 1, size: 200, status: 'archived' } })
+  })
+
   it('confirms formal BOM and production operations per process route', async () => {
     const confirmation = {
       productId: 7,
@@ -119,7 +148,10 @@ describe('M4 API contract', () => {
         productBomRouteId: 81,
         routeName: '染色工艺路线',
         bomVersionNo: 'V1',
-        operationProcessIds: [91]
+        operationProcessIds: [91],
+        applicableColors: [
+          { codeItemId: 2, colorCode: '02', colorName: 'Negro' }
+        ]
       }],
       colors: []
     }
@@ -128,7 +160,10 @@ describe('M4 API contract', () => {
         processId: 9,
         productBomId: 31,
         productBomRouteId: 81,
-        operationProcessIds: [91]
+        operationProcessIds: [91],
+        applicableColors: [
+          { codeItemId: 2, colorCode: '02', colorName: 'Negro' }
+        ]
       }],
       remark: 'M4 route confirmation'
     }
@@ -173,7 +208,7 @@ describe('M4 API contract', () => {
     expect(requestMock.get).toHaveBeenCalledWith('/products/7/bom-summary')
     expect(requestMock.put).toHaveBeenCalledWith('/boms/31/routes', routes)
     expect(requestMock.post).toHaveBeenCalledWith('/boms/31/costs/recalculate', routes)
-    expect(requestMock.post).toHaveBeenCalledWith('/boms/31/submit-review')
+    expect(requestMock.post).toHaveBeenCalledWith('/boms/31/publish')
     expect(requestMock.post).toHaveBeenCalledWith('/boms/31/publish')
     expect(requestMock.post).toHaveBeenCalledWith('/boms/31/copy-version', { versionNo: 'V2', selectedColors: ['蓝色'] })
     expect(requestMock.post).toHaveBeenCalledWith('/products/7/boms/inherit', { sourceBomId: 31, selectedColors: ['蓝色'] })
@@ -185,8 +220,114 @@ describe('M4 API contract', () => {
     expect(requestMock.get).toHaveBeenCalledWith('/boms/import/token-1/errors', { responseType: 'blob' })
   })
 
+  it('strips read-only BOM route identifiers before saving routes', async () => {
+    requestMock.put.mockReturnValue(apiResponse(null))
+    const routes = [{
+      productBomRouteId: 12,
+      productBomId: 31,
+      processId: 81,
+      routeCode: 'DYE',
+      routeName: 'Dye route',
+      status: 'active' as const,
+      colors: ['Blue'],
+      colorItems: [{ codeItemId: 8, codeValue: '08', codeName: 'Blue' }],
+      items: [{
+        productBomItemId: 99,
+        inventoryId: 88,
+        itemCode: 'MAT-001',
+        itemName: 'PC shell',
+        lineNo: 1,
+        quantity: 1,
+        unit: 'PCS',
+        supplierName: 'Supplier A',
+        unitCost: 2.5,
+        lineCost: 2.5,
+        materialSource: 'inventory',
+        unmatchedFlag: 0
+      }]
+    }]
+
+    await saveBomRoutes(31, routes)
+
+    const payload = requestMock.put.mock.calls[0][1]
+    expect(payload[0]).not.toHaveProperty('productBomRouteId')
+    expect(payload[0]).not.toHaveProperty('productBomId')
+    expect(payload[0]).not.toHaveProperty('status')
+    expect(payload[0].items[0]).not.toHaveProperty('productBomItemId')
+    expect(payload[0]).toMatchObject({
+      processId: 81,
+      routeCode: 'DYE',
+      routeName: 'Dye route',
+      colors: ['Blue'],
+      colorItems: [{ codeItemId: 8, codeValue: '08', codeName: 'Blue' }]
+    })
+    expect(payload[0].items[0]).toMatchObject({
+      inventoryId: 88,
+      itemCode: 'MAT-001',
+      itemName: 'PC shell',
+      lineNo: 1,
+      quantity: 1,
+      unit: 'PCS',
+      supplierName: 'Supplier A'
+    })
+  })
+
+  it('strips read-only BOM route identifiers before recalculating costs', async () => {
+    requestMock.post.mockReturnValue(apiResponse([]))
+    const routes = [{
+      productBomRouteId: 12,
+      productBomId: 31,
+      processId: 81,
+      routeCode: 'DYE',
+      routeName: 'Dye route',
+      status: 'active' as const,
+      colors: ['Blue'],
+      items: [{
+        productBomItemId: 99,
+        itemName: 'PC shell',
+        lineNo: 1,
+        quantity: 1,
+        unit: 'PCS'
+      }],
+      processCost: 3
+    }]
+
+    await recalculateBomCosts(31, routes)
+
+    expect(requestMock.post).toHaveBeenCalledWith('/boms/31/costs/recalculate', [{
+      processId: 81,
+      routeCode: 'DYE',
+      routeName: 'Dye route',
+      colors: ['Blue'],
+      colorItems: undefined,
+      items: [{
+        inventoryId: null,
+        itemCode: undefined,
+        itemName: 'PC shell',
+        specification: undefined,
+        lineNo: 1,
+        quantity: 1,
+        unit: 'PCS',
+        lossRate: null,
+        unitCost: null,
+        lineCost: null,
+        supplierCode: null,
+        supplierName: null,
+        currencyCode: null,
+        materialSource: null,
+        unmatchedFlag: null,
+        lookupMessage: null,
+        substituteFlag: null,
+        remark: undefined
+      }],
+      processCost: 3
+    }])
+  })
+
   it('sends complete process route payloads to real endpoints', async () => {
     const route = { processId: 81, productId: 7, status: 'draft', operations: [] }
+    const snapshot = { metrics: [], routes: [{ routeId: 81, routeCode: 'DYE' }], routeDetails: {}, templates: [] }
+    const relation = { processId: 81, colors: [], skus: [], operations: [] }
     const payload = {
       processName: '样品工艺路线',
       versionNo: 'A',
@@ -201,16 +342,24 @@ describe('M4 API contract', () => {
         remark: ''
       }]
     }
-    requestMock.get.mockReturnValueOnce(apiResponse([route])).mockReturnValueOnce(apiResponse(route))
+    requestMock.get
+      .mockReturnValueOnce(apiResponse([route]))
+      .mockReturnValueOnce(apiResponse(route))
+      .mockReturnValueOnce(apiResponse(snapshot))
+      .mockReturnValueOnce(apiResponse(relation))
     requestMock.post.mockReturnValue(apiResponse(route))
 
     await expect(getProjectProcessRoutes(7)).resolves.toEqual([route])
     await expect(getProcessRouteDetail(81)).resolves.toEqual(route)
+    await expect(getProcessCenterSnapshot()).resolves.toEqual(snapshot)
+    await expect(getProcessRouteRelations(81)).resolves.toEqual(relation)
     await createProcessRoute(7, payload)
     await freezeProcessRoute(81)
 
     expect(requestMock.get).toHaveBeenNthCalledWith(1, '/projects/7/process-routes')
     expect(requestMock.get).toHaveBeenNthCalledWith(2, '/process-routes/81')
+    expect(requestMock.get).toHaveBeenNthCalledWith(3, '/process-center/snapshot')
+    expect(requestMock.get).toHaveBeenNthCalledWith(4, '/process-routes/81/relations')
     expect(requestMock.post).toHaveBeenNthCalledWith(1, '/projects/7/process-routes', payload)
     expect(requestMock.post).toHaveBeenNthCalledWith(2, '/process-routes/81/freeze')
   })
@@ -291,6 +440,26 @@ describe('M4 API contract', () => {
     expect(requestMock.get).toHaveBeenNthCalledWith(2, '/file-center/attachments', {
       params: { projectId: 7, nodeKey: 'sampling-process', page: 1, size: 20 }
     })
+  })
+
+  it('uploads project attachment without timeline step binding', async () => {
+    const attachment = { attachmentId: 92, originalFileName: '项目文件.txt', timelineNodeKey: null }
+    requestMock.post.mockReturnValue(apiResponse(attachment))
+
+    const file = new File(['project'], '项目文件.txt', { type: 'text/plain' })
+    await expect(uploadProjectAttachment(7, file, {
+      fileCategory: 'other',
+      versionNo: 'V1',
+      remark: '项目资料区上传'
+    })).resolves.toEqual(attachment)
+
+    const [url, body] = requestMock.post.mock.calls[0]
+    expect(url).toBe('/projects/7/attachments')
+    expect(body).toBeInstanceOf(FormData)
+    expect(body.get('file')).toBe(file)
+    expect(body.get('fileCategory')).toBe('other')
+    expect(body.get('versionNo')).toBe('V1')
+    expect(body.get('remark')).toBe('项目资料区上传')
   })
 
   it('downloads binary content and deletes by attachment id', async () => {

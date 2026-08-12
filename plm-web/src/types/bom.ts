@@ -49,7 +49,7 @@ export interface BomCenterSnapshot {
 }
 
 export type BomScope = 'test' | 'formal' | 'candidate'
-export type BomLifecycleStatus = 'draft' | 'reviewing' | 'released' | 'archived' | 'confirmed'
+export type BomLifecycleStatus = 'draft' | 'frozen' | 'released' | 'archived' | 'confirmed'
 
 export interface BomItem {
   productBomItemId?: number
@@ -89,6 +89,10 @@ export interface BomCostSnapshot {
 export interface BomRoute {
   productBomRouteId?: number
   productBomId?: number
+  sharedBomGroupCode?: string
+  routeVariantNo?: string
+  variantName?: string
+  sourceProductBomRouteId?: number | null
   processId: number
   routeCode: string
   routeName: string
@@ -97,6 +101,7 @@ export interface BomRoute {
   colorItems?: Array<{ codeItemId: number; codeValue: string; codeName: string }>
   items: BomItem[]
   costSnapshot?: BomCostSnapshot | null
+  skuUnitCost?: number | null
   processCost?: number
   packageCost?: number
   laborCost?: number
@@ -113,6 +118,9 @@ export interface BomWorkbench {
   versionNo: string
   status: BomLifecycleStatus
   testTotalCost?: number | null
+  rdTotalCost?: number | null
+  formalAverageUnitCost?: number | null
+  currentBomSkuUnitCost?: number | null
   calculatedAt?: string | null
   testItems: BomItem[]
   routes: BomRoute[]
@@ -125,6 +133,13 @@ export interface ProductionRouteSelection {
   routeName?: string | null
   bomVersionNo?: string | null
   operationProcessIds: number[]
+  applicableColors?: ProductionApplicableColor[]
+}
+
+export interface ProductionApplicableColor {
+  codeItemId: number
+  colorCode: string
+  colorName: string
 }
 
 export interface BomLedgerRow {
@@ -151,12 +166,19 @@ export interface BomSkuRow {
   status: string
   productBomRouteId?: number | null
   routeCode?: string | null
+  sharedBomGroupCode?: string | null
+  routeVariantNo?: string | null
+  variantName?: string | null
+  skuUnitCost?: number | null
 }
 
 export interface BomSummary {
   testTotalCost?: number | null
   testCalculatedAt?: string | null
   testVersionNo?: string | null
+  rdTotalCost?: number | null
+  formalAverageUnitCost?: number | null
+  currentBomSkuUnitCost?: number | null
   formalVersions: BomWorkbench[]
 }
 
@@ -193,4 +215,33 @@ export interface BomImportPreview {
   errorRows: number
   rows: BomImportRow[]
   errors: BomImportError[]
+}
+
+export interface BomHistoryMergeCandidate {
+  productId: number
+  productCode?: string | null
+  productName?: string | null
+  processId: number
+  routeName?: string | null
+  routeVariantNo?: string | null
+  bomType?: string | null
+  candidateBomIds: number[]
+  candidateVersions: string[]
+  colors: string[]
+  commonItemCount: number
+  colorDiffItemCount: number
+  riskLevel: 'low' | 'medium' | 'high'
+  canAutoMerge: boolean
+  reason: string
+  mainProductBomId: number
+  mainProductBomRouteId: number
+}
+
+export interface BomHistoryMergeResult {
+  analyzedGroupCount: number
+  autoMergeableGroupCount: number
+  autoMergedGroupCount: number
+  archivedBomCount: number
+  candidates: BomHistoryMergeCandidate[]
+  mergedGroups: BomHistoryMergeCandidate[]
 }

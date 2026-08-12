@@ -1,0 +1,39 @@
+{
+  "executed": false,
+  "import_tag": "erp-sync-20260804-seed-detail",
+  "source_seed_file": "D:\\work\\资料\\PLM\\seeds\\deployment_master_data_seed.json",
+  "bom_file": "D:\\Users\\46733\\Downloads\\BOM管理-2026-08-04.xlsx",
+  "source_bom_count": 24,
+  "seed_bom_count": 24,
+  "seed_child_count": 313,
+  "matched_boms": 24,
+  "inserted_items": 313,
+  "placeholder_items_soft_deleted": 0,
+  "unmanaged_active_items": 0,
+  "missing_inventory": [],
+  "route_updates": [],
+  "component_count_mismatches": [
+    {
+      "bom_code": "BOM-NHA4030000002-001",
+      "source_component_count": 20,
+      "seed_child_count": 16
+    },
+    {
+      "bom_code": "BOM-NHA4030000007-001",
+      "source_component_count": 21,
+      "seed_child_count": 17
+    },
+    {
+      "bom_code": "BOM-NHA4030000008-001",
+      "source_component_count": 21,
+      "seed_child_count": 17
+    },
+    {
+      "bom_code": "BOM-NHA4030000013-001",
+      "source_component_count": 20,
+      "seed_child_count": 16
+    }
+  ],
+  "skipped": [],
+  "finished_at": "2026-08-04T11:45:01"
+}

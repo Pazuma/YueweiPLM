@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -16,8 +17,10 @@ import com.yuewei.plm.module.bom.entity.ProductBom;
 import com.yuewei.plm.module.bom.entity.ProductBomItem;
 import com.yuewei.plm.module.bom.entity.ProductBomRoute;
 import com.yuewei.plm.module.bom.entity.ProductBomRouteFormalSelection;
+import com.yuewei.plm.module.bom.repository.ProductBomCostSnapshotRepository;
 import com.yuewei.plm.module.bom.repository.ProductBomItemRepository;
 import com.yuewei.plm.module.bom.repository.ProductBomRepository;
+import com.yuewei.plm.module.bom.repository.ProductBomRouteColorRepository;
 import com.yuewei.plm.module.bom.repository.ProductBomRouteFormalSelectionRepository;
 import com.yuewei.plm.module.bom.repository.ProductBomRouteRepository;
 import com.yuewei.plm.module.bom.vo.ProductBomItemVO;
@@ -44,8 +47,9 @@ class ProductBomServiceImplTest {
         ProcessRepository processRepository = mock(ProcessRepository.class);
         OperationLogService operationLogService = mock(OperationLogService.class);
         ProductBomServiceImpl service = new ProductBomServiceImpl(
-            productRepository, bomRepository, itemRepository, routeRepository, formalSelectionRepository,
-            processRepository, operationLogService
+            productRepository, bomRepository, itemRepository, routeRepository,
+            mock(ProductBomRouteColorRepository.class), mock(ProductBomCostSnapshotRepository.class),
+            formalSelectionRepository, processRepository, operationLogService
         );
         Product product = product(10L);
         ProductBom bom = bom(100L, 10L, "draft");
@@ -115,8 +119,9 @@ class ProductBomServiceImplTest {
         ProductBomRouteRepository routeRepository = mock(ProductBomRouteRepository.class);
         ProductBomRouteFormalSelectionRepository formalSelectionRepository = mock(ProductBomRouteFormalSelectionRepository.class);
         ProductBomServiceImpl service = new ProductBomServiceImpl(
-            productRepository, bomRepository, itemRepository, routeRepository, formalSelectionRepository,
-            mock(ProcessRepository.class), mock(OperationLogService.class)
+            productRepository, bomRepository, itemRepository, routeRepository,
+            mock(ProductBomRouteColorRepository.class), mock(ProductBomCostSnapshotRepository.class),
+            formalSelectionRepository, mock(ProcessRepository.class), mock(OperationLogService.class)
         );
         ProductBom bom = bom(100L, 10L, "draft");
         bom.setVersionNo("V1");
@@ -169,23 +174,66 @@ class ProductBomServiceImplTest {
     }
 
     @Test
-    void frozenBomRejectsItemChange() {
+    void frozenBomAllowsItemChange() {
+        ProductRepository productRepository = mock(ProductRepository.class);
         ProductBomRepository bomRepository = mock(ProductBomRepository.class);
+        ProductBomItemRepository itemRepository = mock(ProductBomItemRepository.class);
+        ProductBomRouteRepository routeRepository = mock(ProductBomRouteRepository.class);
+        ProductBomRouteFormalSelectionRepository formalSelectionRepository = mock(ProductBomRouteFormalSelectionRepository.class);
         ProductBomServiceImpl service = new ProductBomServiceImpl(
-            mock(ProductRepository.class),
+            productRepository,
             bomRepository,
-            mock(ProductBomItemRepository.class),
-            mock(ProductBomRouteRepository.class),
-            mock(ProductBomRouteFormalSelectionRepository.class),
+            itemRepository,
+            routeRepository,
+            mock(ProductBomRouteColorRepository.class),
+            mock(ProductBomCostSnapshotRepository.class),
+            formalSelectionRepository,
             mock(ProcessRepository.class),
             mock(OperationLogService.class)
         );
-        when(bomRepository.selectById(100L)).thenReturn(bom(100L, 10L, "frozen"));
+        ProductBom bom = bom(100L, 10L, "frozen");
+        bom.setVersionNo("V1");
+        when(bomRepository.selectById(100L)).thenReturn(bom);
+        when(productRepository.selectById(10L)).thenReturn(product(10L));
+        when(itemRepository.selectCount(Mockito.<Wrapper<ProductBomItem>>any())).thenReturn(0L);
+        when(routeRepository.selectList(Mockito.<Wrapper<ProductBomRoute>>any())).thenReturn(List.of());
+        when(formalSelectionRepository.selectList(Mockito.<Wrapper<ProductBomRouteFormalSelection>>any())).thenReturn(List.of());
+        when(itemRepository.insert(any(ProductBomItem.class))).thenAnswer(invocation -> {
+            ProductBomItem inserted = invocation.getArgument(0);
+            inserted.setProductBomItemId(202L);
+            return 1;
+        });
+        when(itemRepository.selectList(Mockito.<Wrapper<ProductBomItem>>any())).thenAnswer(invocation -> {
+            ProductBomItem row = new ProductBomItem();
+            row.setProductBomItemId(202L);
+            row.setProductBomId(100L);
+            row.setItemCode("INV-FROZEN-001");
+            row.setItemName("冻结 TPU");
+            row.setLineNo(12);
+            row.setQuantity(new BigDecimal("1"));
+            row.setUnit("kg");
+            row.setSupplierNameSnapshot("冻结供应商");
+            row.setUnitCostSnapshot(new BigDecimal("5.00"));
+            row.setLineCostSnapshot(new BigDecimal("5.0000"));
+            row.setMaterialSource("manual");
+            row.setUnmatchedFlag(1);
+            row.setStatus("draft");
+            return List.of(row);
+        });
 
-        assertThatThrownBy(() -> service.addItem(100L, itemDTO(10), null))
-            .isInstanceOf(BusinessException.class)
-            .extracting("code")
-            .isEqualTo(ErrorCodeConstants.VERSION_FROZEN);
+        ProductBomItemDTO dto = itemDTO(12);
+        dto.setItemCode("INV-FROZEN-001");
+        dto.setItemName("冻结 TPU");
+        dto.setQuantity(new BigDecimal("1"));
+        dto.setSupplierName("冻结供应商");
+        dto.setUnitCost(new BigDecimal("5.00"));
+        dto.setMaterialSource("manual");
+        dto.setUnmatchedFlag(1);
+
+        var result = service.addItem(100L, dto, null);
+
+        assertThat(result.getItems()).hasSize(1);
+        assertThat(result.getItems().get(0).getItemCode()).isEqualTo("INV-FROZEN-001");
     }
 
     @Test
@@ -198,6 +246,8 @@ class ProductBomServiceImplTest {
             bomRepository,
             itemRepository,
             mock(ProductBomRouteRepository.class),
+            mock(ProductBomRouteColorRepository.class),
+            mock(ProductBomCostSnapshotRepository.class),
             mock(ProductBomRouteFormalSelectionRepository.class),
             mock(ProcessRepository.class),
             mock(OperationLogService.class)
@@ -222,6 +272,8 @@ class ProductBomServiceImplTest {
             bomRepository,
             mock(ProductBomItemRepository.class),
             mock(ProductBomRouteRepository.class),
+            mock(ProductBomRouteColorRepository.class),
+            mock(ProductBomCostSnapshotRepository.class),
             mock(ProductBomRouteFormalSelectionRepository.class),
             processRepository,
             mock(OperationLogService.class)
@@ -248,8 +300,9 @@ class ProductBomServiceImplTest {
         ProductBomRouteRepository routeRepository = mock(ProductBomRouteRepository.class);
         ProductBomRouteFormalSelectionRepository formalSelectionRepository = mock(ProductBomRouteFormalSelectionRepository.class);
         ProductBomServiceImpl service = new ProductBomServiceImpl(
-            productRepository, bomRepository, itemRepository, routeRepository, formalSelectionRepository,
-            mock(ProcessRepository.class), mock(OperationLogService.class)
+            productRepository, bomRepository, itemRepository, routeRepository,
+            mock(ProductBomRouteColorRepository.class), mock(ProductBomCostSnapshotRepository.class),
+            formalSelectionRepository, mock(ProcessRepository.class), mock(OperationLogService.class)
         );
         ProductBom candidate = bom(100L, 10L, "draft");
         candidate.setBomScope("candidate");
@@ -270,6 +323,158 @@ class ProductBomServiceImplTest {
                 org.assertj.core.groups.Tuple.tuple(100L, false),
                 org.assertj.core.groups.Tuple.tuple(101L, true)
             );
+    }
+
+    @Test
+    void confirmCurrentVersionCreatesMultipleFormalSelectionsForSameProcessAndClearsFreeze() {
+        ProductRepository productRepository = mock(ProductRepository.class);
+        ProductBomRepository bomRepository = mock(ProductBomRepository.class);
+        ProductBomItemRepository itemRepository = mock(ProductBomItemRepository.class);
+        ProductBomRouteRepository routeRepository = mock(ProductBomRouteRepository.class);
+        ProductBomRouteColorRepository colorRepository = mock(ProductBomRouteColorRepository.class);
+        ProductBomRouteFormalSelectionRepository formalSelectionRepository = mock(ProductBomRouteFormalSelectionRepository.class);
+        OperationLogService operationLogService = mock(OperationLogService.class);
+        ProductBomServiceImpl service = new ProductBomServiceImpl(
+            productRepository, bomRepository, itemRepository, routeRepository,
+            colorRepository, mock(ProductBomCostSnapshotRepository.class),
+            formalSelectionRepository, mock(ProcessRepository.class), operationLogService
+        );
+        ProductBom bom = bom(100L, 10L, "frozen");
+        bom.setBomScope("candidate");
+        bom.setFrozenFlag(1);
+        ProductBomRoute route = route(300L, 100L, 10L, 66L);
+        ProductBomRoute secondRoute = route(301L, 100L, 10L, 66L);
+        ProductBomRouteFormalSelection previous = formalSelection(99L);
+        previous.setProductBomRouteId(300L);
+        when(bomRepository.selectById(100L)).thenReturn(bom);
+        when(productRepository.selectById(10L)).thenReturn(product(10L));
+        when(routeRepository.selectList(Mockito.<Wrapper<ProductBomRoute>>any()))
+            .thenReturn(List.of(route, secondRoute), List.of(route, secondRoute));
+        when(colorRepository.selectCount(Mockito.any())).thenReturn(1L);
+        when(itemRepository.selectCount(Mockito.any())).thenReturn(1L);
+        when(itemRepository.selectList(Mockito.<Wrapper<ProductBomItem>>any())).thenReturn(List.of());
+        when(formalSelectionRepository.selectList(Mockito.<Wrapper<ProductBomRouteFormalSelection>>any()))
+            .thenReturn(List.of(previous), List.of(), List.of(formalSelection(100L)));
+
+        var result = service.confirmCurrentVersion(100L, null);
+
+        assertThat(result.getCurrentFormal()).isTrue();
+        assertThat(bom.getBomScope()).isEqualTo("formal");
+        assertThat(bom.getStatus()).isEqualTo("released");
+        assertThat(bom.getFrozenFlag()).isZero();
+        assertThat(bom.getConfirmedAt()).isNotNull();
+        assertThat(previous.getStatus()).isEqualTo("invalidated");
+        ArgumentCaptor<ProductBomRouteFormalSelection> selectionCaptor =
+            ArgumentCaptor.forClass(ProductBomRouteFormalSelection.class);
+        verify(formalSelectionRepository, times(2)).insert(selectionCaptor.capture());
+        assertThat(selectionCaptor.getAllValues())
+            .extracting(ProductBomRouteFormalSelection::getProductBomId)
+            .containsOnly(100L);
+        assertThat(selectionCaptor.getAllValues())
+            .extracting(ProductBomRouteFormalSelection::getProductBomRouteId)
+            .containsExactly(300L, 301L);
+        verify(operationLogService).logSuccess(any());
+    }
+
+    @Test
+    void cancelCurrentConfirmationInvalidatesFormalSelection() {
+        ProductRepository productRepository = mock(ProductRepository.class);
+        ProductBomRepository bomRepository = mock(ProductBomRepository.class);
+        ProductBomItemRepository itemRepository = mock(ProductBomItemRepository.class);
+        ProductBomRouteRepository routeRepository = mock(ProductBomRouteRepository.class);
+        ProductBomRouteFormalSelectionRepository formalSelectionRepository = mock(ProductBomRouteFormalSelectionRepository.class);
+        ProductBomServiceImpl service = new ProductBomServiceImpl(
+            productRepository, bomRepository, itemRepository, routeRepository,
+            mock(ProductBomRouteColorRepository.class), mock(ProductBomCostSnapshotRepository.class),
+            formalSelectionRepository, mock(ProcessRepository.class), mock(OperationLogService.class)
+        );
+        ProductBom bom = bom(100L, 10L, "released");
+        bom.setBomScope("formal");
+        ProductBomRouteFormalSelection active = formalSelection(100L);
+        when(bomRepository.selectById(100L)).thenReturn(bom);
+        when(productRepository.selectById(10L)).thenReturn(product(10L));
+        when(formalSelectionRepository.selectList(Mockito.<Wrapper<ProductBomRouteFormalSelection>>any()))
+            .thenReturn(List.of(active), List.of(), List.of());
+        when(routeRepository.selectList(Mockito.<Wrapper<ProductBomRoute>>any()))
+            .thenReturn(List.of(route(300L, 100L, 10L, 66L)));
+        when(itemRepository.selectList(Mockito.<Wrapper<ProductBomItem>>any())).thenReturn(List.of());
+
+        var result = service.cancelCurrentConfirmation(100L, null);
+
+        assertThat(result.getCurrentFormal()).isFalse();
+        assertThat(bom.getBomScope()).isEqualTo("candidate");
+        assertThat(bom.getConfirmedAt()).isNull();
+        assertThat(active.getStatus()).isEqualTo("invalidated");
+        assertThat(active.getInvalidatedReason()).contains("取消确认");
+        verify(formalSelectionRepository).updateById(active);
+    }
+
+    @Test
+    void deleteVersionSoftDeletesBomGraph() {
+        ProductRepository productRepository = mock(ProductRepository.class);
+        ProductBomRepository bomRepository = mock(ProductBomRepository.class);
+        ProductBomItemRepository itemRepository = mock(ProductBomItemRepository.class);
+        ProductBomRouteRepository routeRepository = mock(ProductBomRouteRepository.class);
+        ProductBomRouteColorRepository colorRepository = mock(ProductBomRouteColorRepository.class);
+        ProductBomCostSnapshotRepository costRepository = mock(ProductBomCostSnapshotRepository.class);
+        ProductBomRouteFormalSelectionRepository formalSelectionRepository = mock(ProductBomRouteFormalSelectionRepository.class);
+        ProductBomServiceImpl service = new ProductBomServiceImpl(
+            productRepository,
+            bomRepository,
+            itemRepository,
+            routeRepository,
+            colorRepository,
+            costRepository,
+            formalSelectionRepository,
+            mock(ProcessRepository.class),
+            mock(OperationLogService.class)
+        );
+        when(productRepository.selectById(10L)).thenReturn(product(10L));
+        when(bomRepository.selectById(100L)).thenReturn(bom(100L, 10L, "draft"));
+        when(formalSelectionRepository.selectList(Mockito.<Wrapper<ProductBomRouteFormalSelection>>any()))
+            .thenReturn(List.of());
+        when(bomRepository.update(Mockito.isNull(), Mockito.<Wrapper<ProductBom>>any())).thenReturn(1);
+        when(routeRepository.update(Mockito.isNull(), Mockito.<Wrapper<ProductBomRoute>>any())).thenReturn(1);
+        when(colorRepository.update(Mockito.isNull(), Mockito.<Wrapper<com.yuewei.plm.module.bom.entity.ProductBomRouteColor>>any())).thenReturn(1);
+        when(itemRepository.update(Mockito.isNull(), Mockito.<Wrapper<ProductBomItem>>any())).thenReturn(1);
+        when(costRepository.update(Mockito.isNull(), Mockito.<Wrapper<com.yuewei.plm.module.bom.entity.ProductBomCostSnapshot>>any())).thenReturn(1);
+        when(formalSelectionRepository.update(Mockito.isNull(), Mockito.<Wrapper<ProductBomRouteFormalSelection>>any())).thenReturn(1);
+
+        service.deleteVersion(100L, null);
+
+        verify(bomRepository).update(Mockito.isNull(), Mockito.<Wrapper<ProductBom>>any());
+        verify(routeRepository).update(Mockito.isNull(), Mockito.<Wrapper<ProductBomRoute>>any());
+        verify(colorRepository).update(Mockito.isNull(), Mockito.<Wrapper<com.yuewei.plm.module.bom.entity.ProductBomRouteColor>>any());
+        verify(itemRepository).update(Mockito.isNull(), Mockito.<Wrapper<ProductBomItem>>any());
+        verify(costRepository).update(Mockito.isNull(), Mockito.<Wrapper<com.yuewei.plm.module.bom.entity.ProductBomCostSnapshot>>any());
+        verify(formalSelectionRepository).update(Mockito.isNull(), Mockito.<Wrapper<ProductBomRouteFormalSelection>>any());
+    }
+
+    @Test
+    void deleteVersionRejectsCurrentFormalBom() {
+        ProductRepository productRepository = mock(ProductRepository.class);
+        ProductBomRepository bomRepository = mock(ProductBomRepository.class);
+        ProductBomRouteFormalSelectionRepository formalSelectionRepository = mock(ProductBomRouteFormalSelectionRepository.class);
+        ProductBomServiceImpl service = new ProductBomServiceImpl(
+            productRepository,
+            bomRepository,
+            mock(ProductBomItemRepository.class),
+            mock(ProductBomRouteRepository.class),
+            mock(ProductBomRouteColorRepository.class),
+            mock(ProductBomCostSnapshotRepository.class),
+            formalSelectionRepository,
+            mock(ProcessRepository.class),
+            mock(OperationLogService.class)
+        );
+        when(productRepository.selectById(10L)).thenReturn(product(10L));
+        when(bomRepository.selectById(100L)).thenReturn(bom(100L, 10L, "draft"));
+        when(formalSelectionRepository.selectList(Mockito.<Wrapper<ProductBomRouteFormalSelection>>any()))
+            .thenReturn(List.of(formalSelection(100L)));
+
+        assertThatThrownBy(() -> service.deleteVersion(100L, null))
+            .isInstanceOf(BusinessException.class)
+            .extracting("code")
+            .isEqualTo(ErrorCodeConstants.VALIDATION_ERROR);
     }
 
     private Product product(Long productId) {

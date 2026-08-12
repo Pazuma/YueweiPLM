@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import { getProductList } from '@/api/modules/product'
+import FixedTableViewport from '@/components/FixedTableViewport/index.vue'
 import PageContainer from '@/components/PageContainer/index.vue'
 import SearchBar from '@/components/SearchBar/index.vue'
 import StatusTag from '@/components/StatusTag/index.vue'
@@ -24,6 +25,7 @@ const router = useRouter()
 const route = useRoute()
 const rows = ref<ProductSummary[]>([])
 const loading = ref(false)
+const loadError = ref('')
 
 const lifecycleOptions: LifecycleOption[] = [
   { key: 'all', label: '全部产品', hint: '统一查看新产品线、新型号线与已发布版本。' },
@@ -95,7 +97,6 @@ const searchFields: SearchField[] = [
     options: [
       { label: '全部', value: '' },
       { label: '开发中', value: 'developing' },
-      { label: '评审中', value: 'reviewing' },
       { label: '已发布', value: 'released' }
     ]
   }
@@ -189,8 +190,6 @@ const highlightedRows = computed(() =>
   filteredRows.value
     .slice()
     .sort((a, b) => {
-      if (a.status === 'reviewing' && b.status !== 'reviewing') return -1
-      if (b.status === 'reviewing' && a.status !== 'reviewing') return 1
       return (b.currentStepNo || 0) - (a.currentStepNo || 0)
     })
     .slice(0, 4)
@@ -236,8 +235,12 @@ watch(
 onMounted(async () => {
   buildQueryFromRoute()
   loading.value = true
+  loadError.value = ''
   try {
     rows.value = await getProductList()
+  } catch (error) {
+    rows.value = []
+    loadError.value = error instanceof Error ? error.message : '产品列表接口未接入'
   } finally {
     loading.value = false
   }
@@ -285,7 +288,7 @@ onMounted(async () => {
           <h3 class="section-title">阶段入口</h3>
           <p class="page-panel-desc">{{ currentLifecycle.hint }}</p>
         </div>
-        <el-tag effect="light">前端假数据演示</el-tag>
+        <el-tag type="info" effect="light">后端数据</el-tag>
       </div>
 
       <div class="lifecycle-grid">
@@ -316,7 +319,7 @@ onMounted(async () => {
         <div class="toolbar-row">
           <div>
             <h3 class="section-title">当前重点对象</h3>
-            <p class="page-panel-desc">优先推进评审中、接近关口或资料缺口明显的产品。</p>
+            <p class="page-panel-desc">优先推进开发中、接近关口或资料缺口明显的产品。</p>
           </div>
         </div>
         <div class="page-stack">
@@ -352,13 +355,22 @@ onMounted(async () => {
       </article>
 
       <article class="page-panel table-panel" v-loading="loading">
+        <el-alert
+          v-if="loadError"
+          :title="loadError"
+          type="info"
+          show-icon
+          :closable="false"
+          style="margin-bottom: 12px"
+        />
         <div class="toolbar-row">
           <div>
             <h3 class="section-title">产品队列表</h3>
             <p class="page-panel-desc">列表聚焦流程推进，详情页承接时间轴、BOM、质量、文件、版本与日志。</p>
           </div>
         </div>
-        <el-table :data="table.pagedRows.value" border stripe>
+        <FixedTableViewport v-slot="{ tableHeight }" :refresh-key="table.pagedRows.value">
+        <el-table :data="table.pagedRows.value" :height="tableHeight" border stripe>
           <el-table-column prop="productCode" label="产品编码" min-width="180" />
           <el-table-column label="产品信息" min-width="250">
             <template #default="{ row }">
@@ -418,6 +430,7 @@ onMounted(async () => {
             </template>
           </el-table-column>
         </el-table>
+        </FixedTableViewport>
       </article>
     </section>
   </PageContainer>

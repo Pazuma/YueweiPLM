@@ -12,5 +12,8 @@ public class BomSummaryVO {
     private BigDecimal testTotalCost;
     private LocalDateTime testCalculatedAt;
     private String testVersionNo;
+    private BigDecimal rdTotalCost;
+    private BigDecimal formalAverageUnitCost;
+    private BigDecimal currentBomSkuUnitCost;
     private List<ProductBomWorkbenchVO> formalVersions;
 }

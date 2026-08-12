@@ -28,6 +28,7 @@ public class ProductBomVO {
     private Boolean currentFormal;
     private Integer materialCount;
     private BigDecimal totalCost;
+    private Integer frozenFlag;
     private LocalDateTime frozenAt;
     private String frozenBy;
     private String remark;
@@ -56,6 +57,7 @@ public class ProductBomVO {
             .currentFormal(currentFormal)
             .materialCount(items == null ? 0 : items.size())
             .totalCost(totalCost)
+            .frozenFlag(bom.getFrozenFlag())
             .frozenAt(bom.getFrozenAt())
             .frozenBy(bom.getFrozenBy())
             .remark(bom.getRemark())

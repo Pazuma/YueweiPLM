@@ -15,5 +15,7 @@ public interface ProcessRouteService {
 
     ProcessRouteVO update(Long processId, ProcessRouteSaveDTO dto, HttpServletRequest request);
 
+    void deleteVersion(Long processId, HttpServletRequest request);
+
     ProcessRouteVO freeze(Long processId, HttpServletRequest request);
 }
