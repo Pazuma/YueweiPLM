@@ -3,7 +3,13 @@ import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
-import { getSupplierCenterSnapshot } from '@/api/modules/supplier'
+import {
+  createInventorySupplier,
+  getSupplierCenterSnapshot,
+  updateInventorySupplier,
+  type SupplierSupplySidePayload
+} from '@/api/modules/supplier'
+import FixedTableViewport from '@/components/FixedTableViewport/index.vue'
 import PageContainer from '@/components/PageContainer/index.vue'
 import StatusTag from '@/components/StatusTag/index.vue'
 import type { SupplierCenterSnapshot, SupplierDetail, SupplierSupplyRecord } from '@/types/supplier'
@@ -62,9 +68,11 @@ function handleSupplierReset() {
 
 const createDialogVisible = ref(false)
 const createFormRef = ref<FormInstance>()
+const createSubmitting = ref(false)
 const editDialogVisible = ref(false)
 const editFormRef = ref<FormInstance>()
-const editingSupplierId = ref<number | null>(null)
+const editSubmitting = ref(false)
+const editingSupplierCode = ref('')
 const supplierDetailVisible = ref(false)
 const detailSupplier = ref<SupplierDetail | null>(null)
 
@@ -101,6 +109,7 @@ function normalizeSupplierStatus(status: SupplierDetail['status']): SupplierCrea
 }
 
 function openCreateDialog() {
+  resetCreateForm()
   createDialogVisible.value = true
 }
 
@@ -108,43 +117,38 @@ function resetCreateForm() {
   createForm.value = createEmptySupplierForm()
 }
 
+function toSupplierPayload(form: SupplierCreateForm, supplierCode?: string): SupplierSupplySidePayload {
+  return {
+    supplierCode,
+    supplierName: form.supplierName,
+    shortName: form.shortName,
+    contactPerson: form.contactPerson,
+    contactPhone: form.contactPhone,
+    contactEmail: form.contactEmail,
+    region: form.region,
+    supplyCategories: form.supplyCategories,
+    paymentTerm: form.paymentTerm,
+    cooperationLevel: form.cooperationLevel,
+    deliveryRisk: form.deliveryRisk,
+    status: form.status
+  }
+}
+
 async function submitCreateForm() {
   const form = createFormRef.value
-  if (!form || !snapshot.value) return
+  if (!form) return
 
   await form.validate()
-
-  const nextId = Math.max(...snapshot.value.suppliers.map((item) => item.supplierId), 0) + 1
-  const now = new Date().toISOString()
-
-  const newSupplier: SupplierDetail = {
-    supplierId: nextId,
-    supplierCode: `SUP-NEW-${String(nextId).padStart(4, '0')}`,
-    supplierName: createForm.value.supplierName,
-    shortName: createForm.value.shortName,
-    contactPerson: createForm.value.contactPerson,
-    contactPhone: createForm.value.contactPhone,
-    contactEmail: createForm.value.contactEmail,
-    supplyCategories: createForm.value.supplyCategories,
-    region: createForm.value.region,
-    status: createForm.value.status,
-    updatedAt: now,
-    cooperationLevel: createForm.value.cooperationLevel,
-    paymentTerm: createForm.value.paymentTerm,
-    deliveryRisk: createForm.value.deliveryRisk,
-    supplyRecords: [],
-    relatedProjects: [],
-    qualificationFiles: []
+  createSubmitting.value = true
+  try {
+    await createInventorySupplier(toSupplierPayload(createForm.value))
+    await loadSnapshot()
+    createDialogVisible.value = false
+    resetCreateForm()
+    ElMessage.success('新增供应商成功')
+  } finally {
+    createSubmitting.value = false
   }
-
-  snapshot.value = {
-    ...snapshot.value,
-    suppliers: [newSupplier, ...snapshot.value.suppliers]
-  }
-
-  createDialogVisible.value = false
-  resetCreateForm()
-  ElMessage.success('新增供应商成功')
 }
 
 function openSupplierDetail(row: SupplierDetail) {
@@ -153,7 +157,7 @@ function openSupplierDetail(row: SupplierDetail) {
 }
 
 function openEditSupplier(row: SupplierDetail) {
-  editingSupplierId.value = row.supplierId
+  editingSupplierCode.value = row.supplierCode
   editForm.value = {
     supplierName: row.supplierName,
     shortName: row.shortName,
@@ -172,29 +176,21 @@ function openEditSupplier(row: SupplierDetail) {
 
 async function submitEditSupplier() {
   const form = editFormRef.value
-  const supplierId = editingSupplierId.value
-  if (!form || !snapshot.value || supplierId == null) return
+  const supplierCode = editingSupplierCode.value
+  if (!form || !supplierCode) return
 
   await form.validate()
-
-  const updatedAt = new Date().toISOString()
-  snapshot.value = {
-    ...snapshot.value,
-    suppliers: snapshot.value.suppliers.map((item) =>
-      item.supplierId === supplierId
-        ? {
-            ...item,
-            ...editForm.value,
-            updatedAt
-          }
-        : item
-    )
+  editSubmitting.value = true
+  try {
+    const supplier = await updateInventorySupplier(supplierCode, toSupplierPayload(editForm.value, supplierCode))
+    await loadSnapshot()
+    detailSupplier.value = supplier
+    editDialogVisible.value = false
+    editingSupplierCode.value = ''
+    ElMessage.success('供应商信息已更新')
+  } finally {
+    editSubmitting.value = false
   }
-
-  detailSupplier.value = snapshot.value.suppliers.find((item) => item.supplierId === supplierId) || detailSupplier.value
-  editDialogVisible.value = false
-  editingSupplierId.value = null
-  ElMessage.success('供应商信息已更新')
 }
 
 function openTarget(path: string) {
@@ -211,6 +207,8 @@ async function loadSnapshot() {
   loading.value = true
   try {
     snapshot.value = await getSupplierCenterSnapshot()
+  } catch {
+    snapshot.value = null
   } finally {
     loading.value = false
   }
@@ -280,7 +278,8 @@ onMounted(loadSnapshot)
         <span class="subtle-text">调整搜索词、供应品类或状态后再试一次。</span>
       </div>
 
-      <el-table v-else :data="filteredRows" border stripe>
+      <FixedTableViewport v-else v-slot="{ tableHeight }" :refresh-key="filteredRows">
+      <el-table :data="filteredRows" :height="tableHeight" border stripe>
         <el-table-column prop="supplierCode" label="供应商编码" min-width="160" />
         <el-table-column prop="supplierName" label="供应商名称" min-width="180">
           <template #default="{ row }">
@@ -313,6 +312,7 @@ onMounted(loadSnapshot)
           </template>
         </el-table-column>
       </el-table>
+      </FixedTableViewport>
     </section>
 
     <el-dialog
@@ -436,7 +436,7 @@ onMounted(loadSnapshot)
 
       <template #footer>
         <el-button @click="createDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitCreateForm">确认新增</el-button>
+        <el-button type="primary" :loading="createSubmitting" @click="submitCreateForm">确认新增</el-button>
       </template>
     </el-dialog>
 
@@ -490,7 +490,7 @@ onMounted(loadSnapshot)
 
       <template #footer>
         <el-button @click="editDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitEditSupplier">保存</el-button>
+        <el-button type="primary" :loading="editSubmitting" @click="submitEditSupplier">保存</el-button>
       </template>
     </el-dialog>
   </PageContainer>

@@ -14,6 +14,13 @@ public class ProcessRouteSaveDTO {
     @NotBlank(message = "版本号不能为空")
     private String versionNo;
 
+    private String routeTemplateCode;
+    private String routeTemplateVersion;
+    private Boolean copyTemplateOperations;
+    private String applicableModel;
+    private String applicableColor;
+    private String linkedBomVersionNo;
+    private Boolean finalSelected;
     private String remark;
 
     @Valid

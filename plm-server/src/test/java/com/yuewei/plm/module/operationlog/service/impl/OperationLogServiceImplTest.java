@@ -2,6 +2,7 @@ package com.yuewei.plm.module.operationlog.service.impl;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -58,5 +59,23 @@ class OperationLogServiceImplTest {
         assertThat(log.getCreatedAt()).isNotNull();
         assertThat(log.getCreatedBy()).isEqualTo("工程部用户一");
         assertThat(log.getDeletedFlag()).isZero();
+    }
+
+    @Test
+    void logSuccessReturnsNullWhenRepositoryInsertFails() {
+        OperationLogRepository repository = mock(OperationLogRepository.class);
+        doThrow(new IllegalStateException("operation log table missing")).when(repository).insert(any(OperationLog.class));
+        OperationLogServiceImpl service = new OperationLogServiceImpl(repository);
+
+        Long logId = service.logSuccess(OperationLogCreateCommand.builder()
+            .action(OperationActionConstants.TEST_WRITE)
+            .businessType("M1_TEST")
+            .businessId("apifox-001")
+            .businessCode("M1-TEST-001")
+            .businessName("M1 Apifox 测试日志")
+            .detailJson("{\"source\":\"junit\"}")
+            .build());
+
+        assertThat(logId).isNull();
     }
 }

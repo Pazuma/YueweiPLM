@@ -11,6 +11,8 @@ public class ProductReleaseGateCheckVO {
     private Long projectId;
     private Long productId;
     private Boolean passed;
+    private Boolean blocking;
+    private Boolean confirmRequired;
     private String currentStatus;
     private String currentNodeKey;
     private Boolean currentNodeConfirmed;

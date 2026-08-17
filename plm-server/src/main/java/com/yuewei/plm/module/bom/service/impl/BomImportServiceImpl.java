@@ -60,8 +60,8 @@ public class BomImportServiceImpl implements BomImportService {
         if (bom == null || !productId.equals(bom.getProductId()) || !List.of("candidate", "formal").contains(bom.getBomScope())) {
             throw new BusinessException(ErrorCodeConstants.VALIDATION_ERROR, "BOM 不属于当前产品或不是可导入 BOM");
         }
-        if ("released".equals(bom.getStatus()) || Integer.valueOf(1).equals(bom.getFrozenFlag())) {
-            throw new BusinessException(ErrorCodeConstants.VERSION_FROZEN, "BOM 已冻结或发布，不可导入");
+        if ("archived".equals(bom.getStatus())) {
+            throw new BusinessException(ErrorCodeConstants.VERSION_FROZEN, "已归档 BOM 不可导入");
         }
         if (fileName == null || !fileName.toLowerCase().endsWith(".xlsx")) {
             throw new BusinessException(ErrorCodeConstants.VALIDATION_ERROR, "仅支持 xlsx 文件");
@@ -133,6 +133,7 @@ public class BomImportServiceImpl implements BomImportService {
         rows.forEach(row -> byRoute.computeIfAbsent(row.getRouteCode(), key -> new ArrayList<>()).add(row));
         List<BomRouteSaveDTO> routes = byRoute.values().stream().map(this::toRoute).toList();
         workflowService.saveRoutes(batch.getProductBomId(), routes);
+        markImportedBomAsFormal(batch.getProductBomId());
         batch.setStatus("committed");
         batch.setCommittedAt(LocalDateTime.now());
         batch.setCommittedBy("system");
@@ -140,6 +141,27 @@ public class BomImportServiceImpl implements BomImportService {
         batch.setUpdatedBy("system");
         batchRepository.updateById(batch);
         return batch;
+    }
+
+    private void markImportedBomAsFormal(Long productBomId) {
+        ProductBom bom = bomRepository.selectById(productBomId);
+        if (bom == null) {
+            throw new BusinessException(ErrorCodeConstants.RESOURCE_NOT_FOUND, "BOM 不存在");
+        }
+        LocalDateTime now = LocalDateTime.now();
+        bom.setBomScope("formal");
+        bom.setSourceType("import");
+        bom.setStatus("released");
+        bom.setFrozenFlag(1);
+        bom.setConfirmedAt(now);
+        bom.setConfirmedBy("import");
+        bom.setFrozenAt(now);
+        bom.setFrozenBy("import");
+        bom.setReleasedAt(now);
+        bom.setReleasedBy("import");
+        bom.setUpdatedAt(now);
+        bom.setUpdatedBy("import");
+        bomRepository.updateById(bom);
     }
 
     @Override

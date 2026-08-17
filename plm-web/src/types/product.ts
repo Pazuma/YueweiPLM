@@ -4,15 +4,28 @@ export interface ProductSummary {
   productId: number
   parentProductId?: number | null
   productCode: string
+  productSpecificCode?: string | null
+  phoneModelCode?: string | null
+  colorCode?: string | null
+  finishedProductCode?: string | null
+  importShortCode?: string | null
+  moldTransferAt?: string | null
+  expectedArrivalAt?: string | null
+  actualArrivalAt?: string | null
   productName: string
-  productType: 'product_line' | 'model_variant'
+  productType: 'product_line' | 'model_variant' | 'sku'
   seriesName: string
   model: string
+  moldCodes?: string | null
   color: string
   material: string
   ownerUserName: string
   versionNo: string
   status: CommonStatus
+  lockStatus?: string | null
+  abandonedAt?: string | null
+  abandonedBy?: string | null
+  abandonReason?: string | null
   currentStage: string
   currentStepNo?: number
   customerName: string
@@ -32,6 +45,23 @@ export interface ProductSummary {
   moldAction?: MoldAction | null
   nextAction?: string | null
   gateSummary?: string | null
+  colorSummary?: ProjectColorSummary | null
+}
+
+export interface ProjectColorUsage {
+  colorCode?: string | null
+  colorName: string
+  skuCount: number
+  decisionCount: number
+}
+
+export interface ProjectColorSummary {
+  skuColorCount: number
+  productionColorCount: number
+  skuColors: ProjectColorUsage[]
+  productionColors: ProjectColorUsage[]
+  skuOnlyColors: ProjectColorUsage[]
+  productionOnlyColors: ProjectColorUsage[]
 }
 
 export interface ProductBomItem {
@@ -97,6 +127,13 @@ export interface ProductVersionRecord {
 export interface ProductBasicInfo {
   productCode: string
   productName: string
+  moldCodes?: string | null
+  moldCodeDetails?: ProductMoldCodeDetail[]
+  productSpecificCode?: string | null
+  phoneModelCode?: string | null
+  colorCode?: string | null
+  finishedProductCode?: string | null
+  importShortCode?: string | null
   seriesName: string
   productType: string
   productFlowMode?: ProductFlowMode
@@ -108,6 +145,19 @@ export interface ProductBasicInfo {
   surfaceProcess: string
   coreProcess: string
   composition: string
+  moldTransferAt?: string | null
+  expectedArrivalAt?: string | null
+  actualArrivalAt?: string | null
+  networkType?: string | null
+  holeType?: string | null
+  mobileFunction?: string | null
+  tipo?: string | null
+  priority?: string | null
+  manufacturingLocation?: string | null
+  moldMarking?: string | null
+  referenceUrl?: string | null
+  requirementType?: string | null
+  customerRequirement?: string | null
   customerName: string
   currentStage: string
   currentStepNo?: number
@@ -129,6 +179,22 @@ export interface ProductBasicInfo {
   gateSummary?: string | null
 }
 
+export interface ProductMoldCodeDetail {
+  productMoldCodeId: number
+  productId: number
+  moldCode: string
+  moldPrefix?: string | null
+  productCodePrefix?: string | null
+  productSpecificCode?: string | null
+  moldName?: string | null
+  keyCode?: string | null
+  inventoryId?: number | null
+  inventoryStatus?: string | null
+  sourceFile?: string | null
+  sourceRowNo?: number | null
+  status?: string | null
+}
+
 export interface ProductDetail {
   productId: number
   basicInfo: ProductBasicInfo
@@ -147,8 +213,25 @@ export interface ProductFormPayload {
   parentProductId?: number | null
   productCode: string
   productName: string
+  productSpecificCode?: string | null
+  phoneModelCode?: string | null
+  colorCode?: string | null
+  finishedProductCode?: string | null
+  importShortCode?: string | null
+  expectedArrivalAt?: string | null
+  actualArrivalAt?: string | null
+  networkType?: string | null
+  holeType?: string | null
+  mobileFunction?: string | null
+  tipo?: string | null
+  priority?: string | null
+  manufacturingLocation?: string | null
+  moldMarking?: string | null
+  referenceUrl?: string | null
+  requirementType?: string | null
+  customerRequirement?: string | null
   seriesName: string
-  productType: 'product_line' | 'model_variant'
+  productType: 'product_line' | 'model_variant' | 'sku'
   ownerUserName: string
   versionNo: string
   material: string
@@ -172,3 +255,4 @@ export interface ProductFormPayload {
   costBreakdown: ProductCostBreakdownItem[]
   testItems: ProductTestItem[]
 }
+

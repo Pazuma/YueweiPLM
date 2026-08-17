@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
-import { mockUsers } from '@/mock/users'
 
 const props = withDefaults(
   defineProps<{
@@ -20,7 +19,7 @@ const emit = defineEmits<{
   (event: 'update:modelValue', value: number | number[] | null): void
 }>()
 
-const options = computed(() => mockUsers)
+const options = computed<Array<{ userId: number; userName: string; roleName: string; department?: string }>>(() => [])
 </script>
 
 <template>
@@ -41,7 +40,7 @@ const options = computed(() => mockUsers)
     >
       <div class="user-option">
         <span>{{ user.userName }}</span>
-        <span class="user-option__meta">{{ user.department }} / {{ user.roleName }}</span>
+        <span class="user-option__meta">{{ user.department || '--' }} / {{ user.roleName }}</span>
       </div>
     </el-option>
   </el-select>

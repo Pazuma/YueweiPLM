@@ -10,3 +10,6 @@ node_modules/
 
 # Logs
 *.log
+
+# CoDEX temporary workspace
+.codex_tmp/

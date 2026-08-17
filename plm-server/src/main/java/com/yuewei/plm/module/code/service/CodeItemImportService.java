@@ -30,8 +30,12 @@ import org.springframework.util.StringUtils;
 @Service
 @RequiredArgsConstructor
 public class CodeItemImportService {
-    private static final String SHEET_NAME = "Códigos de color";
-    private static final List<String> HEADERS = List.of("Código color", "Nombre color", "Estado", "Actualizado");
+    private static final List<ImportTemplate> TEMPLATES = List.of(
+        new ImportTemplate("Códigos de color",
+            List.of("Código color", "Nombre color", "Estado", "Actualizado"), false),
+        new ImportTemplate("颜色编码",
+            List.of("颜色编码", "颜色名称", "状态", "更新时间"), true)
+    );
     private final CodeItemRepository repository;
     private final Map<String, PreviewBatch> previews = new ConcurrentHashMap<>();
 
@@ -46,29 +50,38 @@ public class CodeItemImportService {
             .eq(CodeItem::getCodeType, "color").eq(CodeItem::getDeletedFlag, 0));
         if (existingRows != null) existingRows.forEach(item -> existing.put(item.getCodeValue(), item));
         try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(content))) {
-            var sheet = workbook.getSheet(SHEET_NAME);
-            if (sheet == null) throw validation("缺少工作表：" + SHEET_NAME);
             DataFormatter formatter = new DataFormatter();
-            if (!validHeader(sheet.getRow(5), formatter)) throw validation("第 6 行表头与颜色编码模板不一致");
+            ImportTemplate template = findTemplate(workbook, formatter);
+            if (template == null) throw validation("缺少颜色编码工作表或第 6 行表头不匹配");
+            var sheet = workbook.getSheet(template.sheetName());
             Set<String> seen = new HashSet<>();
             int sortOrder = 1;
             for (int index = 6; index <= sheet.getLastRowNum(); index++) {
                 Row row = sheet.getRow(index);
                 if (row == null) continue;
                 String code = formatter.formatCellValue(row.getCell(0)).trim();
-                String name = formatter.formatCellValue(row.getCell(1)).trim();
+                String sourceName = formatter.formatCellValue(row.getCell(1)).trim();
                 String sourceStatus = formatter.formatCellValue(row.getCell(2)).trim();
-                if (code.isBlank() && name.isBlank() && sourceStatus.isBlank()) continue;
+                if (code.isBlank() && sourceName.isBlank() && sourceStatus.isBlank()) continue;
                 if (code.isBlank()) { errors.add(error(index + 1, code, "编码", "颜色编码不能为空")); continue; }
-                if (name.isBlank()) { errors.add(error(index + 1, code, "名称", "颜色名称不能为空")); continue; }
+                if (sourceName.isBlank()) {
+                    errors.add(error(index + 1, code, template.chineseName() ? "中文名称" : "名称",
+                        "颜色名称不能为空"));
+                    continue;
+                }
                 if (!seen.add(code)) { errors.add(error(index + 1, code, "编码", "同一文件内颜色编码重复")); continue; }
                 String status;
                 try { status = mapStatus(sourceStatus); }
                 catch (BusinessException exception) { errors.add(error(index + 1, code, "状态", exception.getMessage())); continue; }
                 CodeItem current = existing.get(code);
+                String codeName = template.chineseName()
+                    ? currentName(current, sourceName) : sourceName;
+                String codeNameZh = template.chineseName()
+                    ? sourceName : current == null ? null : current.getCodeNameZh();
                 String action = current == null ? "create"
-                    : same(current, name, status, sortOrder) ? "unchanged" : "update";
-                rows.add(CodeImportRowVO.builder().rowNo(index + 1).codeValue(code).codeName(name)
+                    : same(current, codeName, codeNameZh, status, sortOrder) ? "unchanged" : "update";
+                rows.add(CodeImportRowVO.builder().rowNo(index + 1).codeValue(code).codeName(codeName)
+                    .codeNameZh(codeNameZh)
                     .status(status).sortOrder(sortOrder).action(action).build());
                 sortOrder++;
             }
@@ -100,7 +113,8 @@ public class CodeItemImportService {
                 existing.setCodeType("color"); existing.setCodeValue(row.getCodeValue());
                 fillCreate(existing);
             }
-            existing.setCodeName(row.getCodeName()); existing.setStatus(row.getStatus());
+            existing.setCodeName(row.getCodeName()); existing.setCodeNameZh(row.getCodeNameZh());
+            existing.setStatus(row.getStatus());
             existing.setSortOrder(row.getSortOrder()); touch(existing);
             if (existing.getCodeItemId() == null) repository.insert(existing); else repository.updateById(existing);
             committed++;
@@ -108,24 +122,40 @@ public class CodeItemImportService {
         return result(token, batch.rows(), batch.errors(), committed);
     }
 
-    private boolean validHeader(Row row, DataFormatter formatter) {
-        if (row == null) return false;
-        for (int index = 0; index < HEADERS.size(); index++) {
-            if (!HEADERS.get(index).equals(formatter.formatCellValue(row.getCell(index)).trim())) return false;
+    private ImportTemplate findTemplate(XSSFWorkbook workbook, DataFormatter formatter) {
+        for (ImportTemplate template : TEMPLATES) {
+            var sheet = workbook.getSheet(template.sheetName());
+            if (sheet != null && validHeader(sheet.getRow(5), formatter, template.headers())) return template;
         }
-        return true;
+        return null;
+    }
+
+    private boolean validHeader(Row row, DataFormatter formatter, List<String> headers) {
+        if (row == null) return false;
+        List<String> actual = new ArrayList<>();
+        for (int index = 0; index < 4; index++) {
+            actual.add(formatter.formatCellValue(row.getCell(index)).trim());
+        }
+        return headers.equals(actual);
+    }
+
+    private String currentName(CodeItem current, String fallback) {
+        return current == null || !StringUtils.hasText(current.getCodeName())
+            ? fallback : current.getCodeName();
     }
 
     private String mapStatus(String value) {
         return switch (value.toLowerCase(Locale.ROOT)) {
-            case "enabled" -> "enabled";
-            case "disabled" -> "disabled";
+            case "enabled", "启用" -> "enabled";
+            case "disabled", "停用", "禁用" -> "disabled";
             default -> throw validation("未知颜色状态：" + value);
         };
     }
 
-    private boolean same(CodeItem item, String name, String status, int sortOrder) {
-        return name.equals(item.getCodeName()) && status.equals(item.getStatus())
+    private boolean same(CodeItem item, String name, String nameZh, String status, int sortOrder) {
+        return name.equals(item.getCodeName())
+            && java.util.Objects.equals(nameZh, item.getCodeNameZh())
+            && status.equals(item.getStatus())
             && Integer.valueOf(sortOrder).equals(item.getSortOrder());
     }
 
@@ -157,5 +187,8 @@ public class CodeItemImportService {
 
     private record PreviewBatch(LocalDateTime expiresAt, List<CodeImportRowVO> rows,
                                 List<CodeImportErrorVO> errors) {
+    }
+
+    private record ImportTemplate(String sheetName, List<String> headers, boolean chineseName) {
     }
 }

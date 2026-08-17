@@ -3,12 +3,10 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, type FormInstance } from 'element-plus'
 
-import { createProduct, getProductDetail, getProductList, updateProduct } from '@/api/modules/product'
+import { createProduct, getProductDetail, getProductList, updateProduct, updateProductBasicInfo } from '@/api/modules/product'
 import PageContainer from '@/components/PageContainer/index.vue'
-import UserSelector from '@/components/UserSelector/index.vue'
-import { processCenterData } from '@/mock/process'
-import { mockUsers } from '@/mock/users'
 import type { MoldAction } from '@/types/common'
+import type { ProcessTemplateOption } from '@/types/process'
 import type { ProductFormPayload, ProductSummary, ProductTestItem } from '@/types/product'
 import { toArchivedProductRoute } from '@/utils/projectRoute'
 import { rules } from '@/utils/validate'
@@ -20,11 +18,13 @@ const formRef = ref<FormInstance>()
 const loading = ref(false)
 const submitting = ref(false)
 const productOptions = ref<ProductSummary[]>([])
+const detailStatus = ref<ProductSummary['status'] | null>(null)
 
 const productId = computed(() => Number(route.params.id || 0))
 const isEdit = computed(() => Boolean(productId.value))
 const isModelVariant = computed(() => form.productType === 'model_variant')
 const isProductLine = computed(() => form.productType === 'product_line')
+const isReleasedBasicInfoEdit = computed(() => isEdit.value && ['released', 'archived'].includes(detailStatus.value || ''))
 
 const lineStageOptions = [
   '产品立项（含立项说明书）',
@@ -89,12 +89,17 @@ const moldActionOptions: Array<{ label: string; value: MoldAction }> = [
   { label: '无需模具变更', value: 'none' }
 ]
 
-const processTemplates = processCenterData.templates
+const processTemplates: ProcessTemplateOption[] = []
 
 const form = reactive<ProductFormPayload>({
   parentProductId: null,
   productCode: '',
   productName: '',
+  productSpecificCode: null,
+  phoneModelCode: null,
+  colorCode: null,
+  finishedProductCode: null,
+  importShortCode: null,
   seriesName: '',
   productType: 'product_line',
   ownerUserName: '',
@@ -108,6 +113,18 @@ const form = reactive<ProductFormPayload>({
   currentStage: lineStageOptions[0],
   currentStepNo: 1,
   expectedReleaseDate: '',
+  expectedArrivalAt: null,
+  actualArrivalAt: null,
+  networkType: null,
+  holeType: null,
+  mobileFunction: null,
+  tipo: null,
+  priority: null,
+  manufacturingLocation: null,
+  moldMarking: null,
+  referenceUrl: null,
+  requirementType: null,
+  customerRequirement: null,
   model: '--',
   color: '--',
   estimatedCost: 0,
@@ -237,13 +254,16 @@ watch(
 )
 
 async function loadOptions() {
-  const list = await getProductList()
-  productOptions.value = list.filter((item) => item.productType === 'product_line')
+  try {
+    const list = await getProductList()
+    productOptions.value = list.filter((item) => item.productType === 'product_line')
+  } catch {
+    productOptions.value = []
+  }
 }
 
 async function loadDetail() {
   if (!isEdit.value) {
-    form.ownerUserName = mockUsers[0].userName
     applyModeDefaults(true)
     return
   }
@@ -251,8 +271,14 @@ async function loadDetail() {
   loading.value = true
   try {
     const detail = await getProductDetail(productId.value)
+    detailStatus.value = detail.basicInfo.status
     form.productCode = detail.basicInfo.productCode
     form.productName = detail.basicInfo.productName
+    form.productSpecificCode = detail.basicInfo.productSpecificCode
+    form.phoneModelCode = detail.basicInfo.phoneModelCode
+    form.colorCode = detail.basicInfo.colorCode
+    form.finishedProductCode = detail.basicInfo.finishedProductCode
+    form.importShortCode = detail.basicInfo.importShortCode
     form.seriesName = detail.basicInfo.seriesName
     form.productType = detail.basicInfo.productFlowMode === 'new_model_variant' ? 'model_variant' : 'product_line'
     form.ownerUserName = detail.basicInfo.ownerUserName
@@ -266,6 +292,18 @@ async function loadDetail() {
     form.currentStage = detail.basicInfo.currentStage
     form.currentStepNo = detail.basicInfo.currentStepNo || 1
     form.expectedReleaseDate = detail.basicInfo.expectedReleaseDate || ''
+    form.expectedArrivalAt = detail.basicInfo.expectedArrivalAt || null
+    form.actualArrivalAt = detail.basicInfo.actualArrivalAt || null
+    form.networkType = detail.basicInfo.networkType || null
+    form.holeType = detail.basicInfo.holeType || null
+    form.mobileFunction = detail.basicInfo.mobileFunction || null
+    form.tipo = detail.basicInfo.tipo || null
+    form.priority = detail.basicInfo.priority || null
+    form.manufacturingLocation = detail.basicInfo.manufacturingLocation || null
+    form.moldMarking = detail.basicInfo.moldMarking || null
+    form.referenceUrl = detail.basicInfo.referenceUrl || null
+    form.requirementType = detail.basicInfo.requirementType || null
+    form.customerRequirement = detail.basicInfo.customerRequirement || null
     form.model = detail.basicInfo.model
     form.color = detail.basicInfo.color
     form.estimatedCost = detail.basicInfo.estimatedCost
@@ -287,6 +325,9 @@ async function loadDetail() {
 
     syncStageStep()
     syncCostBreakdown()
+  } catch (error) {
+    ElMessage.info(error instanceof Error ? error.message : '产品详情接口未接入')
+    router.replace('/products')
   } finally {
     loading.value = false
   }
@@ -325,8 +366,13 @@ async function handleSubmit() {
   submitting.value = true
   try {
     if (isEdit.value) {
-      await updateProduct(productId.value, structuredClone(form))
-      ElMessage.success('产品已更新')
+      if (isReleasedBasicInfoEdit.value) {
+        await updateProductBasicInfo(productId.value, structuredClone(form))
+        ElMessage.success('项目基础信息已更新')
+      } else {
+        await updateProduct(productId.value, structuredClone(form))
+        ElMessage.success('产品已更新')
+      }
       router.push(toArchivedProductRoute(productId.value))
       return
     }
@@ -348,7 +394,7 @@ onMounted(async () => {
 <template>
   <PageContainer
     :title="isEdit ? '编辑产品' : '新建产品'"
-    description="仅做前端模拟：把新产品线和新型号线分开建档，并把工艺配置改成模板继承与差异配置的业务入口。"
+    :description="isReleasedBasicInfoEdit ? '已发布 / 已归档项目仅开放基础信息维护，版本成果物请走变更流程。' : '把新产品线和新型号线分开建档，并把工艺配置改成模板继承与差异配置的业务入口。'"
   >
     <section class="page-panel" v-loading="loading">
       <el-form ref="formRef" :model="form" :rules="formRules" label-width="120px">
@@ -366,6 +412,7 @@ onMounted(async () => {
           <el-form-item label="产品类型" prop="productType">
             <el-segmented
               v-model="form.productType"
+              :disabled="isReleasedBasicInfoEdit"
               :options="[
                 { label: '新产品线', value: 'product_line' },
                 { label: '新型号线', value: 'model_variant' }
@@ -393,13 +440,24 @@ onMounted(async () => {
           </div>
 
           <el-form-item v-if="isModelVariant" label="父产品线" required>
-            <el-select v-model="form.parentProductId" placeholder="先选择父产品线" style="width: 100%">
+            <el-select
+              v-model="form.parentProductId"
+              filterable
+              placeholder="先选择父产品线"
+              popper-class="product-line-select-popper"
+              style="width: 100%"
+            >
               <el-option
                 v-for="item in productOptions"
                 :key="item.productId"
                 :label="`${item.productName} / ${item.productCode}`"
                 :value="item.productId"
-              />
+              >
+                <div class="product-line-option" :title="`${item.productName} / ${item.productCode}`">
+                  <span class="product-line-option__name">{{ item.productName }}</span>
+                  <span class="product-line-option__code">{{ item.productCode }}</span>
+                </div>
+              </el-option>
             </el-select>
           </el-form-item>
 
@@ -422,7 +480,7 @@ onMounted(async () => {
         <div class="detail-grid">
           <div>
             <el-form-item label="产品编码" prop="productCode">
-              <el-input v-model="form.productCode" placeholder="例如 PRD-SC30-0001" />
+              <el-input v-model="form.productCode" :disabled="isEdit" placeholder="例如 PRD-SC30-0001" />
             </el-form-item>
             <el-form-item label="产品名称" prop="productName">
               <el-input v-model="form.productName" />
@@ -431,13 +489,10 @@ onMounted(async () => {
               <el-input v-model="form.seriesName" :disabled="isModelVariant && !!parentProduct" />
             </el-form-item>
             <el-form-item label="负责人" prop="ownerUserName">
-              <UserSelector
-                :model-value="mockUsers.find((item) => item.userName === form.ownerUserName)?.userId || null"
-                @update:model-value="form.ownerUserName = mockUsers.find((item) => item.userId === Number($event))?.userName || ''"
-              />
+              <el-input v-model="form.ownerUserName" placeholder="填写项目负责人" />
             </el-form-item>
             <el-form-item label="版本号" prop="versionNo">
-              <el-input v-model="form.versionNo" />
+              <el-input v-model="form.versionNo" :disabled="isReleasedBasicInfoEdit" />
             </el-form-item>
             <el-form-item label="客户来源">
               <el-input v-model="form.customerName" />
@@ -446,7 +501,7 @@ onMounted(async () => {
 
           <div>
             <el-form-item label="当前阶段" prop="currentStage">
-              <el-select v-model="form.currentStage" style="width: 100%">
+              <el-select v-model="form.currentStage" :disabled="isReleasedBasicInfoEdit" style="width: 100%">
                 <el-option v-for="item in currentStageOptions" :key="item" :label="item" :value="item" />
               </el-select>
             </el-form-item>
@@ -468,8 +523,61 @@ onMounted(async () => {
             <el-form-item label="预计发布时间">
               <el-date-picker v-model="form.expectedReleaseDate" type="date" value-format="YYYY-MM-DD" style="width: 100%" />
             </el-form-item>
+            <el-form-item label="预计到达时间">
+              <el-date-picker v-model="form.expectedArrivalAt" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" style="width: 100%" />
+            </el-form-item>
+            <el-form-item label="实际到达时间">
+              <el-date-picker v-model="form.actualArrivalAt" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" style="width: 100%" />
+            </el-form-item>
           </div>
         </div>
+
+        <section v-if="isModelVariant" class="form-block">
+          <div class="toolbar-row">
+            <div>
+              <h3 class="section-title">新型号需求信息</h3>
+            </div>
+          </div>
+          <div class="detail-grid">
+            <div>
+              <el-form-item label="4G/5G">
+                <el-input v-model="form.networkType" />
+              </el-form-item>
+              <el-form-item label="大孔或精孔">
+                <el-input v-model="form.holeType" />
+              </el-form-item>
+              <el-form-item label="Tipo 类型">
+                <el-input v-model="form.tipo" />
+              </el-form-item>
+              <el-form-item label="紧急度">
+                <el-input v-model="form.priority" />
+              </el-form-item>
+              <el-form-item label="制造地">
+                <el-input v-model="form.manufacturingLocation" />
+              </el-form-item>
+            </div>
+            <div>
+              <el-form-item label="模具印字">
+                <el-input v-model="form.moldMarking" />
+              </el-form-item>
+              <el-form-item label="订单类型">
+                <el-select v-model="form.requirementType" clearable style="width: 100%">
+                  <el-option label="客户订单" value="customer_requirement" />
+                  <el-option label="市场需求" value="market_requirement" />
+                </el-select>
+              </el-form-item>
+              <el-form-item label="钉钉链接">
+                <el-input v-model="form.referenceUrl" />
+              </el-form-item>
+              <el-form-item label="手机功能">
+                <el-input v-model="form.mobileFunction" type="textarea" :rows="3" />
+              </el-form-item>
+              <el-form-item label="客户要求">
+                <el-input v-model="form.customerRequirement" type="textarea" :rows="3" />
+              </el-form-item>
+            </div>
+          </div>
+        </section>
 
         <section class="form-block">
           <div class="toolbar-row">
@@ -714,6 +822,32 @@ onMounted(async () => {
   flex-wrap: wrap;
   gap: 6px;
   margin-top: 10px;
+}
+
+.product-line-option {
+  display: grid;
+  gap: 2px;
+  padding: 3px 0;
+  white-space: normal;
+  line-height: 1.35;
+}
+
+.product-line-option__name {
+  color: #0f172a;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.product-line-option__code {
+  color: #64748b;
+  font-size: 12px;
+}
+
+:global(.product-line-select-popper .el-select-dropdown__item) {
+  height: auto;
+  min-height: 36px;
+  padding-top: 5px;
+  padding-bottom: 5px;
 }
 
 @media (max-width: 1200px) {

@@ -1,6 +1,6 @@
 spring:
   datasource:
-    url: ${DB_URL:jdbc:postgresql://8.135.19.108:5432/plm_data_management}
+    url: ${DB_URL:jdbc:postgresql://<DB_HOST>:5432/plm_data_management}
     username: ${DB_USERNAME:postgres}
     password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
@@ -16,5 +16,5 @@ app:
     dev-token: ${APP_SECURITY_DEV_TOKEN}
   storage:
     local-root: ${APP_STORAGE_LOCAL_ROOT}
-    max-file-size-bytes: ${APP_STORAGE_MAX_FILE_SIZE_BYTES:52428800}
-    allowed-extensions: ${APP_STORAGE_ALLOWED_EXTENSIONS:pdf,doc,docx,xls,xlsx,ppt,pptx,txt,csv,jpg,jpeg,png,zip}
+    max-file-size-bytes: ${APP_STORAGE_MAX_FILE_SIZE_BYTES:209715200}
+    allowed-extensions: ${APP_STORAGE_ALLOWED_EXTENSIONS:pdf,doc,docx,xls,xlsx,ppt,pptx,txt,csv,jpg,jpeg,png,webp,zip,rar,7z,dwg,dxf,step,stp,igs,iges,stl,obj,3dm,prt,sldprt,sldasm}

@@ -1,23 +1,25 @@
 <script setup lang="ts">
-import { Delete, Download, FolderOpened, Refresh, Search } from '@element-plus/icons-vue'
+import { Delete, Download, FolderOpened, Refresh, Search, View } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
 import {
   deleteAttachment,
-  downloadAttachment,
   getFileCenterAttachments,
   type AttachmentVO,
   type FileCenterQuery
 } from '@/api/modules/attachment'
+import FixedTableViewport from '@/components/FixedTableViewport/index.vue'
 import PageContainer from '@/components/PageContainer/index.vue'
+import { useAttachmentViewer } from '@/composables/useAttachmentViewer'
 import type { PageResponse } from '@/api/request'
 import { formatDate } from '@/utils/format'
-import { formatFileSize, saveBlob } from '@/utils/file'
+import { FILE_CATEGORY_OPTIONS, fileCategoryLabel, formatFileSize } from '@/utils/file'
 import { toInProgressProjectRoute } from '@/utils/projectRoute'
 
 const router = useRouter()
+const { viewAttachment, downloadFile } = useAttachmentViewer()
 const loading = ref(false)
 const loadError = ref('')
 const pageData = ref<PageResponse<AttachmentVO>>({
@@ -37,21 +39,10 @@ const filters = reactive({
   size: 20
 })
 
-const categoryOptions = [
-  { label: '图纸', value: 'drawing' },
-  { label: 'SOP', value: 'sop' },
-  { label: 'SIP', value: 'sip' },
-  { label: '测试资料', value: 'testing' },
-  { label: '客户确认件', value: 'customer_confirm' },
-  { label: '其他', value: 'other' }
-]
+const categoryOptions = FILE_CATEGORY_OPTIONS
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : '文件中心查询失败，请稍后重试'
-}
-
-function categoryLabel(value: string) {
-  return categoryOptions.find((item) => item.value === value)?.label || value
 }
 
 function buildQuery(): FileCenterQuery {
@@ -103,14 +94,9 @@ function changePageSize(size: number) {
   loadData()
 }
 
-function openProject(projectId: number) {
+function openProject(projectId: number | null | undefined) {
+  if (!projectId) return
   router.push(toInProgressProjectRoute({ productId: String(projectId) }))
-}
-
-async function downloadFile(attachment: AttachmentVO) {
-  const blob = await downloadAttachment(attachment.attachmentId)
-  saveBlob(blob, attachment.originalFileName || attachment.fileName)
-  ElMessage.success('文件已开始下载')
 }
 
 async function removeFile(attachment: AttachmentVO) {
@@ -180,24 +166,32 @@ onMounted(loadData)
       <el-alert v-if="loadError" :title="loadError" type="error" show-icon :closable="false" />
 
       <template v-else>
-        <el-table :data="pageData.content" border stripe class="file-center-table">
+        <FixedTableViewport v-slot="{ tableHeight }" :refresh-key="pageData.content">
+        <el-table :data="pageData.content" :height="tableHeight" border stripe class="file-center-table">
           <el-table-column prop="originalFileName" label="文件名称" min-width="230" />
-          <el-table-column label="项目" width="110"><template #default="{ row }">Product #{{ row.ownerObjectId }}</template></el-table-column>
+          <el-table-column label="项目编码" min-width="170">
+            <template #default="{ row }">{{ row.projectCode || '--' }}</template>
+          </el-table-column>
+          <el-table-column label="项目名称" min-width="200">
+            <template #default="{ row }">{{ row.projectName || '--' }}</template>
+          </el-table-column>
           <el-table-column prop="timelineNodeKey" label="时间轴节点" min-width="150"><template #default="{ row }">{{ row.timelineNodeKey || '--' }}</template></el-table-column>
-          <el-table-column label="分类" width="110"><template #default="{ row }">{{ categoryLabel(row.fileCategory) }}</template></el-table-column>
+          <el-table-column label="分类" width="110"><template #default="{ row }">{{ fileCategoryLabel(row.fileCategory) }}</template></el-table-column>
           <el-table-column prop="versionNo" label="版本" width="90" />
           <el-table-column label="大小" width="100"><template #default="{ row }">{{ formatFileSize(row.fileSize) }}</template></el-table-column>
           <el-table-column prop="createdBy" label="上传人" width="120" />
           <el-table-column label="上传时间" width="150"><template #default="{ row }">{{ formatDate(row.createdAt) }}</template></el-table-column>
           <el-table-column prop="remark" label="备注" min-width="150"><template #default="{ row }">{{ row.remark || '--' }}</template></el-table-column>
-          <el-table-column label="操作" width="150" fixed="right">
+          <el-table-column label="操作" width="180" fixed="right">
             <template #default="{ row }">
-              <el-button link type="primary" :icon="FolderOpened" title="进入项目" @click="openProject(row.ownerObjectId)" />
+              <el-button link type="primary" :icon="FolderOpened" title="进入项目" @click="openProject(row.projectId || row.ownerObjectId)" />
+              <el-button link type="primary" :icon="View" title="查看" @click="viewAttachment(row)" />
               <el-button link type="primary" :icon="Download" title="下载" @click="downloadFile(row)" />
               <el-button link type="danger" :icon="Delete" title="删除" @click="removeFile(row)" />
             </template>
           </el-table-column>
         </el-table>
+        </FixedTableViewport>
 
         <el-empty v-if="!pageData.content.length" description="当前筛选条件下没有文件" />
 
@@ -239,3 +233,4 @@ onMounted(loadData)
   .file-center-pagination { justify-content: flex-start; overflow-x: auto; }
 }
 </style>
+

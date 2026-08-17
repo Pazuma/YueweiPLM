@@ -17,6 +17,9 @@ public class ProductBomWorkbenchVO {
     private String versionNo;
     private String status;
     private BigDecimal testTotalCost;
+    private BigDecimal rdTotalCost;
+    private BigDecimal formalAverageUnitCost;
+    private BigDecimal currentBomSkuUnitCost;
     private LocalDateTime calculatedAt;
     private List<ProductBomItemVO> testItems;
     private List<ProductBomRouteVO> routes;

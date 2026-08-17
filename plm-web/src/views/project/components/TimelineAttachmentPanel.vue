@@ -1,19 +1,39 @@
 <script setup lang="ts">
-import { Delete, Download, Refresh, Upload } from '@element-plus/icons-vue'
+import { Delete, Download, Refresh, Upload, View } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type UploadFile, type UploadUserFile } from 'element-plus'
 import { computed, reactive, ref, watch } from 'vue'
 
 import {
   deleteAttachment,
-  downloadAttachment,
+  getFileCenterAttachments,
   getTimelineAttachments,
   uploadTimelineAttachment,
+  uploadProjectAttachment,
   type AttachmentVO
 } from '@/api/modules/attachment'
-import { formatFileSize, saveBlob } from '@/utils/file'
+import { useAttachmentViewer } from '@/composables/useAttachmentViewer'
+import {
+  ENGINEERING_UPLOAD_ACCEPT,
+  FILE_CATEGORY_OPTIONS,
+  MAX_UPLOAD_FILE_SIZE_BYTES,
+  fileCategoryLabel,
+  formatFileSize
+} from '@/utils/file'
 
-const props = defineProps<{ projectId: number; nodeKey: string | null }>()
+const props = withDefaults(defineProps<{
+  projectId: number
+  nodeKey?: string | null
+  scope?: 'project' | 'node'
+  title?: string
+  description?: string
+}>(), {
+  nodeKey: null,
+  scope: 'project',
+  title: '',
+  description: ''
+})
 const emit = defineEmits<{ (event: 'changed'): void }>()
+const { viewAttachment, downloadFile } = useAttachmentViewer()
 
 const loading = ref(false)
 const uploading = ref(false)
@@ -27,34 +47,35 @@ const uploadForm = reactive({
   remark: ''
 })
 
-const categoryOptions = [
-  { label: '图纸', value: 'drawing' },
-  { label: 'SOP', value: 'sop' },
-  { label: 'SIP', value: 'sip' },
-  { label: '测试资料', value: 'testing' },
-  { label: '客户确认件', value: 'customer_confirm' },
-  { label: '其他', value: 'other' }
-]
+const categoryOptions = FILE_CATEGORY_OPTIONS.filter((item) => item.value !== 'sample_image')
 
-const canUpload = computed(() => Boolean(props.nodeKey && selectedFile.value && !uploading.value))
+const isNodeScope = computed(() => props.scope === 'node')
+const panelTitle = computed(() => props.title || (isNodeScope.value ? '当前节点资料' : '项目文件'))
+const panelDescription = computed(() =>
+  props.description || (isNodeScope.value
+    ? '上传当前步骤需要的图纸、工程文件、生产资料或客户确认件。'
+    : '汇总当前 Product 下的项目文件，可在文件中心按项目统一查询。')
+)
+const canUpload = computed(() => Boolean(selectedFile.value && !uploading.value && (!isNodeScope.value || props.nodeKey)))
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : '请求失败，请稍后重试'
 }
 
-function categoryLabel(value: string) {
-  return categoryOptions.find((item) => item.value === value)?.label || value
-}
-
 async function loadAttachments() {
   loadError.value = ''
-  if (!props.nodeKey) {
+  if (isNodeScope.value && !props.nodeKey) {
     attachments.value = []
     return
   }
   loading.value = true
   try {
-    attachments.value = await getTimelineAttachments(props.projectId, props.nodeKey)
+    if (isNodeScope.value && props.nodeKey) {
+      attachments.value = await getTimelineAttachments(props.projectId, props.nodeKey)
+    } else {
+      const page = await getFileCenterAttachments({ projectId: props.projectId, page: 1, size: 100 })
+      attachments.value = page.content
+    }
   } catch (error) {
     loadError.value = errorMessage(error)
   } finally {
@@ -65,8 +86,8 @@ async function loadAttachments() {
 function handleFileChange(uploadFile: UploadFile) {
   const file = uploadFile.raw || null
   if (!file) return
-  if (file.size > 50 * 1024 * 1024) {
-    ElMessage.warning('单个文件不能超过 50 MB')
+  if (file.size > MAX_UPLOAD_FILE_SIZE_BYTES) {
+    ElMessage.warning(`单个文件不能超过 ${formatFileSize(MAX_UPLOAD_FILE_SIZE_BYTES)}`)
     selectedFile.value = null
     fileList.value = []
     return
@@ -81,32 +102,35 @@ function handleFileRemove() {
 }
 
 async function uploadFile() {
-  if (!props.nodeKey || !selectedFile.value) {
-    ElMessage.warning(props.nodeKey ? '请先选择文件' : '当前项目没有可用的时间轴节点')
+  if (isNodeScope.value && !props.nodeKey) {
+    ElMessage.warning('当前项目没有可用的时间轴节点')
+    return
+  }
+  if (!selectedFile.value) {
+    ElMessage.warning('请先选择文件')
     return
   }
   uploading.value = true
   try {
-    await uploadTimelineAttachment(props.projectId, props.nodeKey, selectedFile.value, {
+    const metadata = {
       fileCategory: uploadForm.fileCategory,
       versionNo: uploadForm.versionNo.trim() || undefined,
       remark: uploadForm.remark.trim() || undefined
-    })
+    }
+    if (isNodeScope.value && props.nodeKey) {
+      await uploadTimelineAttachment(props.projectId, props.nodeKey, selectedFile.value, metadata)
+    } else {
+      await uploadProjectAttachment(props.projectId, selectedFile.value, metadata)
+    }
     selectedFile.value = null
     fileList.value = []
     uploadForm.remark = ''
     await loadAttachments()
     emit('changed')
-    ElMessage.success('附件已上传到当前时间轴节点')
+    ElMessage.success(isNodeScope.value ? '当前节点资料已上传' : '项目文件已上传')
   } finally {
     uploading.value = false
   }
-}
-
-async function downloadFile(attachment: AttachmentVO) {
-  const blob = await downloadAttachment(attachment.attachmentId)
-  saveBlob(blob, attachment.originalFileName || attachment.fileName)
-  ElMessage.success('文件已开始下载')
 }
 
 async function removeFile(attachment: AttachmentVO) {
@@ -121,28 +145,20 @@ async function removeFile(attachment: AttachmentVO) {
   ElMessage.success('附件已删除')
 }
 
-watch([() => props.projectId, () => props.nodeKey], loadAttachments, { immediate: true })
+watch([() => props.projectId, () => props.nodeKey, () => props.scope], loadAttachments, { immediate: true })
 </script>
 
 <template>
   <div class="attachment-panel" v-loading="loading">
     <div class="attachment-panel__toolbar">
       <div>
-        <h4 class="section-title">当前节点附件</h4>
-        <p class="page-panel-desc">附件归属当前 Product 和时间轴节点，上传后可在文件中心统一查询。</p>
+        <h4 class="section-title">{{ panelTitle }}</h4>
+        <p class="page-panel-desc">{{ panelDescription }}</p>
       </div>
-      <el-button :icon="Refresh" circle title="刷新附件" :disabled="!nodeKey" @click="loadAttachments" />
+      <el-button :icon="Refresh" circle title="刷新附件" @click="loadAttachments" />
     </div>
 
-    <el-alert
-      v-if="!nodeKey"
-      title="当前项目没有可用的时间轴节点"
-      description="请先完成项目时间轴初始化，再上传节点成果文件。"
-      type="warning"
-      show-icon
-      :closable="false"
-    />
-    <el-alert v-else-if="loadError" :title="loadError" type="error" show-icon :closable="false" />
+    <el-alert v-if="loadError" :title="loadError" type="error" show-icon :closable="false" />
 
     <div class="attachment-upload-bar">
       <el-select v-model="uploadForm.fileCategory" aria-label="文件分类" placeholder="文件分类">
@@ -155,7 +171,7 @@ watch([() => props.projectId, () => props.nodeKey], loadAttachments, { immediate
         action="#"
         :auto-upload="false"
         :limit="1"
-        accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.jpg,.jpeg,.png,.zip"
+        :accept="ENGINEERING_UPLOAD_ACCEPT"
         :on-change="handleFileChange"
         :on-remove="handleFileRemove"
       >
@@ -173,23 +189,27 @@ watch([() => props.projectId, () => props.nodeKey], loadAttachments, { immediate
       </el-button>
     </div>
 
-    <template v-if="nodeKey && !loadError">
+    <template v-if="!loadError">
       <el-table :data="attachments" border stripe size="small" class="attachment-panel__table">
         <el-table-column prop="originalFileName" label="文件名称" min-width="220" />
-        <el-table-column label="分类" width="110"><template #default="{ row }">{{ categoryLabel(row.fileCategory) }}</template></el-table-column>
+        <el-table-column label="归属节点" min-width="150">
+          <template #default="{ row }">{{ row.timelineStepName || row.timelineStageName || row.timelineNodeKey || '--' }}</template>
+        </el-table-column>
+        <el-table-column label="分类" width="110"><template #default="{ row }">{{ fileCategoryLabel(row.fileCategory) }}</template></el-table-column>
         <el-table-column prop="versionNo" label="版本" width="90" />
         <el-table-column label="大小" width="100"><template #default="{ row }">{{ formatFileSize(row.fileSize) }}</template></el-table-column>
         <el-table-column prop="createdBy" label="上传人" width="120" />
         <el-table-column prop="createdAt" label="上传时间" min-width="170" />
         <el-table-column prop="remark" label="备注" min-width="150"><template #default="{ row }">{{ row.remark || '--' }}</template></el-table-column>
-        <el-table-column label="操作" width="120" fixed="right">
+        <el-table-column label="操作" width="150" fixed="right">
           <template #default="{ row }">
+            <el-button link type="primary" :icon="View" title="查看" @click="viewAttachment(row)" />
             <el-button link type="primary" :icon="Download" title="下载" @click="downloadFile(row)" />
             <el-button link type="danger" :icon="Delete" title="删除" @click="removeFile(row)" />
           </template>
         </el-table-column>
       </el-table>
-      <el-empty v-if="!attachments.length" description="当前节点还没有附件" />
+      <el-empty v-if="!attachments.length" :description="isNodeScope ? '当前节点还没有附件' : '当前项目还没有附件'" />
     </template>
   </div>
 </template>

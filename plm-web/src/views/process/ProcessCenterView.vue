@@ -9,13 +9,14 @@ import {
   createProcessOperationMaster,
   getProcessCenterSnapshot,
   getProcessOperationMasters,
+  getProcessRouteRelations,
   getProcessRouteTemplates,
   type ProcessOperationMasterSavePayload,
   type ProcessOperationMasterVO,
   type ProcessRouteTemplateOperationVO,
   type ProcessRouteTemplateVO
 } from '@/api/modules/process'
-import { getProcessRouteSkus } from '@/api/modules/bom'
+import FixedTableViewport from '@/components/FixedTableViewport/index.vue'
 import PageContainer from '@/components/PageContainer/index.vue'
 import ProjectTimeRangeFilter, { type ProjectTimeRangeValue } from '@/components/ProjectTimeRangeFilter/index.vue'
 import SearchBar from '@/components/SearchBar/index.vue'
@@ -28,9 +29,9 @@ import type {
   ProcessCenterViewMode,
   ProcessOperationRecord,
   ProcessRouteDetail,
-  ProcessRouteListItem
+  ProcessRouteListItem,
+  ProcessRouteRelation
 } from '@/types/process'
-import type { BomSkuRow } from '@/types/bom'
 import { formatAmount } from '@/utils/format'
 import { normalizeLegacyProductTarget } from '@/utils/projectRoute'
 
@@ -53,10 +54,9 @@ const operationMasterRows = ref<ProcessOperationMasterVO[]>([])
 const routeTemplateLoading = ref(false)
 const routeTemplateRows = ref<ProcessRouteTemplateVO[]>([])
 const operationMasterDialogVisible = ref(false)
-const skuDialogVisible = ref(false)
-const skuLoading = ref(false)
-const skuRows = ref<BomSkuRow[]>([])
-const activeSkuRouteCode = ref('')
+const relationDrawerVisible = ref(false)
+const relationLoading = ref(false)
+const activeRelation = ref<ProcessRouteRelation | null>(null)
 const operationMasterForm = reactive<ProcessOperationMasterSavePayload>({
   processCode: '',
   processName: '',
@@ -361,32 +361,22 @@ async function loadSnapshot() {
   }
 }
 
-function openRouteDetail(row: ProcessRouteListItem) {
-  activeManagementTab.value = 'project-route'
-  activeSection.value = 'overview'
-  operationKeyword.value = ''
-  router.push({
-    path: '/processes',
-    query: {
-      ...route.query,
-      routeId: row.routeId
-    }
-  })
+async function openRouteRelation(row: ProcessRouteListItem) {
+  relationDrawerVisible.value = true
+  relationLoading.value = true
+  activeRelation.value = null
+  try {
+    activeRelation.value = await getProcessRouteRelations(row.processId || row.routeId)
+  } catch (error) {
+    relationDrawerVisible.value = false
+    ElMessage.error(error instanceof Error ? error.message : '工艺路线详情加载失败')
+  } finally {
+    relationLoading.value = false
+  }
 }
 
 async function openRouteSkus(row: ProcessRouteListItem) {
-  activeSkuRouteCode.value = row.routeCode
-  skuDialogVisible.value = true
-  skuLoading.value = true
-  skuRows.value = []
-  try {
-    skuRows.value = await getProcessRouteSkus(row.routeId)
-  } catch {
-    skuDialogVisible.value = false
-    ElMessage.error('关联 SKU 加载失败')
-  } finally {
-    skuLoading.value = false
-  }
+  await openRouteRelation(row)
 }
 
 function backToList() {
@@ -491,7 +481,8 @@ onMounted(async () => {
         </div>
       </div>
 
-      <el-table :data="operationMasterRows" border stripe>
+      <FixedTableViewport v-slot="{ tableHeight }" :refresh-key="operationMasterRows">
+      <el-table :data="operationMasterRows" :height="tableHeight" border stripe>
         <el-table-column prop="processCode" label="工序编码" min-width="150" />
         <el-table-column prop="processName" label="工序名称" min-width="150" />
         <el-table-column prop="processCategory" label="工序分类" min-width="120" />
@@ -513,6 +504,7 @@ onMounted(async () => {
           </template>
         </el-table-column>
       </el-table>
+      </FixedTableViewport>
     </section>
 
     <section v-else-if="activeManagementTab === 'route-template'" class="page-panel route-table-panel" v-loading="routeTemplateLoading">
@@ -524,7 +516,8 @@ onMounted(async () => {
         <el-button :icon="Refresh" circle title="刷新标准工艺路线" @click="loadRouteTemplateRows" />
       </div>
 
-      <el-table :data="routeTemplateRows" border stripe>
+      <FixedTableViewport v-slot="{ tableHeight }" :refresh-key="routeTemplateRows">
+      <el-table :data="routeTemplateRows" :height="tableHeight" border stripe>
         <el-table-column prop="routeTemplateCode" label="路线编码" min-width="170" />
         <el-table-column prop="routeTemplateName" label="路线名称" min-width="180" />
         <el-table-column prop="versionNo" label="版本" width="90" />
@@ -548,6 +541,7 @@ onMounted(async () => {
           </template>
         </el-table-column>
       </el-table>
+      </FixedTableViewport>
     </section>
 
     <SearchBar
@@ -565,16 +559,31 @@ onMounted(async () => {
     <section v-if="activeManagementTab === 'project-route' && !isDetailMode" class="page-panel route-table-panel" v-loading="loading">
       <div class="toolbar-row route-table-panel__header">
         <div>
-          <h3 class="section-title">工艺产品列表</h3>
-          <p class="page-panel-desc">先找到产品和路线，再进入工序、资料、门禁和版本变更详情。</p>
+          <h3 class="section-title">项目工艺路线</h3>
+          <p class="page-panel-desc">先找到项目工艺路线，再在右侧抽屉查看适用颜色、关联 SKU 和工序明细。</p>
         </div>
         <el-tag effect="light">共 {{ table.filteredRows.value.length }} 条</el-tag>
       </div>
 
-      <el-table :data="table.filteredRows.value" border stripe class="route-table">
-        <el-table-column prop="routeCode" label="编号" min-width="160" />
+      <FixedTableViewport v-slot="{ tableHeight }" :refresh-key="table.filteredRows.value">
+      <el-table :data="table.filteredRows.value" :height="tableHeight" border stripe class="route-table">
+        <el-table-column prop="routeCode" label="路线编号" min-width="170" />
         <el-table-column label="所属项目" min-width="230"><template #default="{ row }"><strong>{{ row.productName }}</strong></template></el-table-column>
-        <el-table-column prop="routeName" label="名字" min-width="250" />
+        <el-table-column prop="routeName" label="工序名称" min-width="230" />
+        <el-table-column label="适用颜色" min-width="180">
+          <template #default="{ row }">
+            <div v-if="row.colors?.length" class="tag-wrap">
+              <el-tag v-for="color in row.colors.slice(0, 3)" :key="`${row.routeId}-${color.colorCode || color.colorName}`" size="small" effect="light">{{ color.colorName }}</el-tag>
+              <el-tag v-if="row.colors.length > 3" size="small" effect="plain">+{{ row.colors.length - 3 }}</el-tag>
+            </div>
+            <span v-else class="subtle-text">尚未关联颜色</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="关联 SKU" width="120">
+          <template #default="{ row }">
+            <el-button data-test="process-route-skus" link type="primary" @click="openRouteSkus(row)">{{ row.skuCount || 0 }} 个 SKU</el-button>
+          </template>
+        </el-table-column>
         <el-table-column label="状态" width="120">
           <template #default="{ row }">
             <StatusTag :status="row.status" object-type="process" />
@@ -582,13 +591,13 @@ onMounted(async () => {
         </el-table-column>
         <el-table-column prop="currentGate" label="进程" min-width="170" />
         <el-table-column prop="versionNo" label="版本" width="90" />
-        <el-table-column label="操作" width="180" fixed="right">
+        <el-table-column label="操作" width="110" fixed="right">
           <template #default="{ row }">
-            <el-button data-test="process-route-skus" link type="primary" @click="openRouteSkus(row)">关联 SKU</el-button>
-            <el-button link type="primary" @click="openRouteDetail(row)">详情</el-button>
+            <el-button data-test="process-route-detail" link type="primary" @click="openRouteRelation(row)">详情</el-button>
           </template>
         </el-table-column>
       </el-table>
+      </FixedTableViewport>
     </section>
 
     <article v-else-if="activeManagementTab === 'project-route' && activeDetail" class="page-panel detail-panel">
@@ -875,17 +884,60 @@ onMounted(async () => {
       </template>
     </el-dialog>
 
-    <el-dialog v-model="skuDialogVisible" :title="`关联 SKU - ${activeSkuRouteCode}`" width="min(920px, 94vw)" append-to-body>
-      <el-table v-loading="skuLoading" :data="skuRows" border stripe empty-text="暂无关联 SKU">
-        <el-table-column prop="skuCode" label="SKU 编码" min-width="160" />
-        <el-table-column prop="productName" label="产品" min-width="150" />
-        <el-table-column prop="phoneModel" label="手机型号" min-width="150" />
-        <el-table-column prop="color" label="颜色" width="110" />
-        <el-table-column label="状态" width="110">
-          <template #default="{ row }"><StatusTag :status="row.status" object-type="product" /></template>
-        </el-table-column>
-      </el-table>
-    </el-dialog>
+    <el-drawer
+      v-model="relationDrawerVisible"
+      :title="`工艺路线详情：${activeRelation?.processName || ''}`"
+      size="min(920px, 96vw)"
+      append-to-body
+    >
+      <div v-loading="relationLoading" class="relation-drawer">
+        <template v-if="activeRelation">
+          <section class="relation-section">
+            <h3 class="section-title">路线信息</h3>
+            <dl class="relation-facts">
+              <div><dt>路线编号</dt><dd>{{ activeRelation.processCode }}</dd></div>
+              <div><dt>工序名称</dt><dd>{{ activeRelation.processName }}</dd></div>
+              <div><dt>所属产品</dt><dd>{{ activeRelation.productName }}</dd></div>
+              <div><dt>版本</dt><dd>{{ activeRelation.versionNo }}</dd></div>
+              <div><dt>状态</dt><dd><StatusTag :status="activeRelation.status" object-type="process" /></dd></div>
+            </dl>
+          </section>
+
+          <section class="relation-section">
+            <h3 class="section-title">适用颜色</h3>
+            <div v-if="activeRelation.colors.length" class="tag-wrap">
+              <el-tag v-for="color in activeRelation.colors" :key="color.colorCode || color.colorName" effect="light">{{ color.colorName }}</el-tag>
+            </div>
+            <el-empty v-else description="尚未关联适用颜色" />
+          </section>
+
+          <section class="relation-section">
+            <h3 class="section-title">关联 SKU</h3>
+            <el-table :data="activeRelation.skus" border stripe empty-text="暂无关联 SKU">
+              <el-table-column prop="skuCode" label="SKU 编码" min-width="160" />
+              <el-table-column prop="productName" label="产品" min-width="150" />
+              <el-table-column prop="phoneModel" label="手机型号" min-width="150" />
+              <el-table-column prop="color" label="颜色" width="110" />
+              <el-table-column label="状态" width="110">
+                <template #default="{ row }"><StatusTag :status="row.status" object-type="product" /></template>
+              </el-table-column>
+            </el-table>
+          </section>
+
+          <section class="relation-section">
+            <h3 class="section-title">工序明细</h3>
+            <el-table :data="activeRelation.operations" border stripe empty-text="暂无工序明细">
+              <el-table-column prop="sequenceNo" label="顺序" width="80" />
+              <el-table-column prop="processName" label="工序名称" min-width="150" />
+              <el-table-column label="工艺编码" min-width="130">
+                <template #default="{ row }">{{ row.operationCraftCode || row.operationCode || row.processCode || '--' }}</template>
+              </el-table-column>
+              <el-table-column prop="qualityRequirement" label="质量要求" min-width="220" />
+            </el-table>
+          </section>
+        </template>
+      </div>
+    </el-drawer>
   </PageContainer>
 </template>
 
@@ -1123,6 +1175,41 @@ onMounted(async () => {
   gap: 6px;
 }
 
+.relation-drawer {
+  min-height: 240px;
+}
+
+.relation-section + .relation-section {
+  margin-top: 18px;
+}
+
+.relation-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 18px;
+  margin: 0;
+}
+
+.relation-facts div {
+  min-width: 0;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--plm-color-border-light);
+}
+
+.relation-facts dt {
+  color: var(--plm-color-text-secondary);
+  font-size: var(--plm-font-size-sm);
+}
+
+.relation-facts dd {
+  margin: 5px 0 0;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--plm-color-text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 @media (max-width: 1280px) {
   .overview-panel,
   .overview-detail-grid,
@@ -1157,6 +1244,10 @@ onMounted(async () => {
   }
 
   .impact-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .relation-facts {
     grid-template-columns: 1fr;
   }
 }

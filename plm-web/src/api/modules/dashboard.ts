@@ -1,6 +1,5 @@
-import { dashboardData } from '@/mock/data'
-import { mockResolve } from '../request'
+import { notConnected } from '../notConnected'
 
 export function getDashboardSnapshot() {
-  return mockResolve(() => dashboardData)
+  return notConnected('工作台快照')
 }

@@ -23,5 +23,11 @@ public interface ProductBomService {
 
     ProductBomVO deleteItem(Long bomId, Long itemId, HttpServletRequest request);
 
+    void deleteVersion(Long bomId, HttpServletRequest request);
+
     ProductBomVO freeze(Long bomId, HttpServletRequest request);
+
+    ProductBomVO confirmCurrentVersion(Long bomId, HttpServletRequest request);
+
+    ProductBomVO cancelCurrentConfirmation(Long bomId, HttpServletRequest request);
 }

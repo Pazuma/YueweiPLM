@@ -7,6 +7,19 @@ __pycache__/
 *.env
 !.env.example
 !.env.database.example
+!.env.baota.example
+
+# Runtime logs and local deployment output
+*.log
+*.out.log
+*.err.log
+docker-compose.yml.bak.*
+outputs/
+.tmp_*
+temp/
+
+# Uploaded runtime files
+plm-server/data/uploads/
 
 # IDE
 .idea/
@@ -17,3 +30,9 @@ __pycache__/
 
 # Claude Code
 .claude/
+
+# Local toolchains
+.jdks/
+
+# CoDEX temporary workspace
+.codex_tmp/

@@ -21,17 +21,24 @@ import com.yuewei.plm.module.attachment.repository.AttachmentRepository;
 import com.yuewei.plm.module.attachment.service.AttachmentDownloadResource;
 import com.yuewei.plm.module.attachment.service.AttachmentService;
 import com.yuewei.plm.module.attachment.vo.AttachmentVO;
+import com.yuewei.plm.module.attachment.vo.AttachmentPreviewVO;
 import com.yuewei.plm.module.operationlog.constant.OperationActionConstants;
 import com.yuewei.plm.module.operationlog.service.OperationLogCreateCommand;
 import com.yuewei.plm.module.operationlog.service.OperationLogService;
+import com.yuewei.plm.module.project.constant.TimelineNodeConstants.TimelineNodeDefinition;
 import com.yuewei.plm.module.project.service.TimelineDefinitionProvider;
+import com.yuewei.plm.module.project.variant.entity.RequirementForm;
+import com.yuewei.plm.module.project.variant.repository.RequirementFormRepository;
 import com.yuewei.plm.repository.ProductRepository;
 import com.yuewei.plm.repository.entity.Product;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.LocalDateTime;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.Resource;
@@ -46,9 +53,14 @@ public class AttachmentServiceImpl implements AttachmentService {
 
     private static final String STORAGE_LOCAL = "local";
     private static final String STATUS_DRAFT = "draft";
+    private static final String PREVIEW_STATUS_NONE = "none";
+    private static final String PREVIEW_STATUS_READY = "ready";
+    private static final String PREVIEW_STATUS_UNSUPPORTED = "unsupported";
     private static final Set<String> CATEGORIES = Set.of(
-        "sop", "sip", "testing", "drawing", "customer_confirm", "other"
+        "sop", "sip", "testing", "drawing", "engineering", "customer_confirm", "sample_image", "other"
     );
+    private static final Set<String> IMAGE_EXTENSIONS = Set.of("jpg", "jpeg", "png", "webp");
+    private static final Set<String> TEXT_EXTENSIONS = Set.of("txt", "csv");
 
     private final ProductRepository productRepository;
     private final AttachmentRepository attachmentRepository;
@@ -57,17 +69,75 @@ public class AttachmentServiceImpl implements AttachmentService {
     private final StorageClient storageClient;
     private final AppProperties appProperties;
     private final OperationLogService operationLogService;
+    private final RequirementFormRepository requirementFormRepository;
 
     @Override
     @Transactional
     public AttachmentVO uploadTimelineAttachment(Long projectId, String nodeKey, MultipartFile file, String fileCategory,
                                                  String versionNo, String remark, HttpServletRequest request) {
         Product product = getProductOrThrow(projectId);
-        requireValidNode(product, nodeKey);
+        requireTimelineStarted(product);
+        TimelineNodeDefinition step = requireValidNode(product, nodeKey);
+        requireStepInCurrentStage(product, step);
+        return createAttachment(projectId, nodeKey, file, fileCategory, versionNo, remark, request, product, step);
+    }
+
+    private void requireTimelineStarted(Product product) {
+        if (!"model_variant".equals(product.getProductType())) {
+            return;
+        }
+        RequirementForm form = requirementFormRepository.selectList(new LambdaQueryWrapper<RequirementForm>()
+                .eq(RequirementForm::getProjectId, product.getProductId())
+                .eq(RequirementForm::getDeletedFlag, 0))
+            .stream()
+            .findFirst()
+            .orElse(null);
+        if (form == null || !"confirmed".equals(form.getStatus())) {
+            throw new BusinessException(
+                ErrorCodeConstants.STATUS_TRANSITION_ILLEGAL,
+                "请先完成新型号项目信息完善表，确认后才能上传时间轴资料"
+            );
+        }
+    }
+
+    @Override
+    @Transactional
+    public AttachmentVO uploadProjectAttachment(Long projectId, MultipartFile file, String fileCategory,
+                                                String versionNo, String remark, HttpServletRequest request) {
+        Product product = getProductOrThrow(projectId);
+        return createAttachment(projectId, null, file, fileCategory, versionNo, remark, request, product, null);
+    }
+
+    @Override
+    @Transactional
+    public AttachmentVO uploadProductAttachment(Long productId, MultipartFile file, String fileCategory,
+                                                String versionNo, String remark, HttpServletRequest request) {
+        Product product = getProductOrThrow(productId);
+        return createAttachment(productId, null, file, fileCategory, versionNo, remark, request, product, null);
+    }
+
+    @Override
+    public java.util.List<AttachmentVO> listProductAttachments(Long productId, String fileCategory) {
+        Product product = getProductOrThrow(productId);
+        return attachmentRepository.selectList(baseQuery()
+                .eq(Attachment::getOwnerObjectId, productId)
+                .eq(StringUtils.hasText(fileCategory), Attachment::getFileCategory, fileCategory)
+                .orderByDesc(Attachment::getCreatedAt))
+            .stream()
+            .map(attachment -> AttachmentVO.from(attachment).withProjectAndStep(product, null))
+            .toList();
+    }
+
+    private AttachmentVO createAttachment(Long projectId, String nodeKey, MultipartFile file, String fileCategory,
+                                          String versionNo, String remark, HttpServletRequest request, Product product,
+                                          TimelineNodeDefinition step) {
         requireValidUpload(file, fileCategory);
         String originalName = file.getOriginalFilename();
         String ext = extension(originalName);
-        StoredFile storedFile = storageClient.store("projects/" + projectId + "/" + nodeKey, file);
+        String storageFolder = StringUtils.hasText(nodeKey)
+            ? "projects/" + projectId + "/" + nodeKey
+            : "projects/" + projectId + "/project-files";
+        StoredFile storedFile = storageClient.store(storageFolder, file);
         LocalDateTime now = LocalDateTime.now();
         String operator = currentUserName();
         Attachment attachment = new Attachment();
@@ -83,13 +153,15 @@ public class AttachmentServiceImpl implements AttachmentService {
         attachment.setChecksum(storedFile.checksum());
         attachment.setStorageType(STORAGE_LOCAL);
         attachment.setStorageKey(storedFile.storageKey());
+        attachment.setPreviewType(resolvePreviewType(ext));
+        attachment.setPreviewStatus(isPreviewable(attachment.getPreviewType()) ? PREVIEW_STATUS_READY : PREVIEW_STATUS_UNSUPPORTED);
         attachment.setVersionNo(StringUtils.hasText(versionNo) ? versionNo : "V1");
         attachment.setStatus(STATUS_DRAFT);
         attachment.setRemark(remark);
         fillCreateAudit(attachment, now, operator);
         attachmentRepository.insert(attachment);
         writeLog(OperationActionConstants.ATTACHMENT_UPLOAD, attachment, "{\"action\":\"upload\"}", request);
-        return AttachmentVO.from(attachment);
+        return AttachmentVO.from(attachment).withProjectAndStep(product, step);
     }
 
     @Override
@@ -108,7 +180,7 @@ public class AttachmentServiceImpl implements AttachmentService {
     @Override
     public PageVO<AttachmentVO> pageFileCenter(AttachmentQueryDTO queryDTO) {
         long pageNo = queryDTO.getPage() == null || queryDTO.getPage() < 1 ? 1 : queryDTO.getPage();
-        long pageSize = queryDTO.getSize() == null || queryDTO.getSize() < 1 ? 20 : Math.min(queryDTO.getSize(), 100);
+        long pageSize = queryDTO.getSize() == null || queryDTO.getSize() < 1 ? 20 : Math.min(queryDTO.getSize(), 200);
         LambdaQueryWrapper<Attachment> wrapper = baseQuery()
             .eq(queryDTO.getProjectId() != null, Attachment::getOwnerObjectId, queryDTO.getProjectId())
             .eq(StringUtils.hasText(queryDTO.getNodeKey()), Attachment::getTimelineNodeKey, queryDTO.getNodeKey())
@@ -120,7 +192,7 @@ public class AttachmentServiceImpl implements AttachmentService {
             .orderByDesc(Attachment::getCreatedAt);
         IPage<Attachment> page = attachmentRepository.selectPage(new Page<>(pageNo, pageSize), wrapper);
         return PageVO.<AttachmentVO>builder()
-            .content(page.getRecords().stream().map(AttachmentVO::from).toList())
+            .content(enrichFileCenterRows(page.getRecords()))
             .page(page.getCurrent())
             .size(page.getSize())
             .totalElements(page.getTotal())
@@ -131,6 +203,40 @@ public class AttachmentServiceImpl implements AttachmentService {
     @Override
     public AttachmentVO getById(Long attachmentId) {
         return AttachmentVO.from(getAttachmentOrThrow(attachmentId));
+    }
+
+    @Override
+    public AttachmentPreviewVO previewMetadata(Long attachmentId) {
+        Attachment attachment = getAttachmentOrThrow(attachmentId);
+        String previewType = resolvePreviewType(attachment);
+        boolean previewable = isPreviewable(previewType);
+        String previewStatus = resolvePreviewStatus(attachment, previewType);
+        return AttachmentPreviewVO.builder()
+            .attachmentId(attachment.getAttachmentId())
+            .previewable(previewable)
+            .previewType(previewType)
+            .previewStatus(previewStatus)
+            .previewUrl("/api/v1/attachments/" + attachmentId + "/preview")
+            .downloadUrl("/api/v1/attachments/" + attachmentId + "/download")
+            .message(previewable && PREVIEW_STATUS_READY.equals(previewStatus) ? null : "当前文件类型暂不支持在线预览，请下载后查看")
+            .build();
+    }
+
+    @Override
+    @Transactional
+    public AttachmentDownloadResource preview(Long attachmentId, HttpServletRequest request) {
+        Attachment attachment = getAttachmentOrThrow(attachmentId);
+        String previewType = resolvePreviewType(attachment);
+        if (!isPreviewable(previewType)) {
+            writeLog(OperationActionConstants.ATTACHMENT_PREVIEW, attachment, "{\"action\":\"preview\",\"status\":\"unsupported\"}", request);
+            throw new BusinessException(ErrorCodeConstants.FILE_TYPE_NOT_SUPPORTED, "当前文件类型暂不支持在线预览，请下载后查看");
+        }
+        String storageKey = StringUtils.hasText(attachment.getPreviewStorageKey())
+            ? attachment.getPreviewStorageKey()
+            : attachment.getStorageKey();
+        Resource resource = storageClient.loadAsResource(storageKey);
+        writeLog(OperationActionConstants.ATTACHMENT_PREVIEW, attachment, "{\"action\":\"preview\",\"status\":\"ready\"}", request);
+        return new AttachmentDownloadResource(attachment.getOriginalFileName(), resolvePreviewContentType(attachment, previewType), resource);
     }
 
     @Override
@@ -175,13 +281,54 @@ public class AttachmentServiceImpl implements AttachmentService {
         return attachment;
     }
 
-    private void requireValidNode(Product product, String nodeKey) {
-        boolean exists = timelineDefinitionProvider.getDefinitions(product.getProductType())
-            .stream()
-            .anyMatch(definition -> definition.nodeCode().equals(nodeKey));
-        if (!exists) {
+    private TimelineNodeDefinition requireValidNode(Product product, String nodeKey) {
+        try {
+            return timelineDefinitionProvider.getDefinitionByCode(product, nodeKey);
+        } catch (BusinessException ex) {
             throw new BusinessException(ErrorCodeConstants.VALIDATION_ERROR, "时间轴节点不存在");
         }
+    }
+
+    private void requireStepInCurrentStage(Product product, TimelineNodeDefinition selectedStep) {
+        TimelineNodeDefinition currentStep = timelineDefinitionProvider.getDefinitionByStepNo(
+            product,
+            product.getCurrentStepNo()
+        );
+        if (!selectedStep.stageCode().equals(currentStep.stageCode())) {
+            throw new BusinessException(ErrorCodeConstants.STATUS_TRANSITION_ILLEGAL, "only current stage steps can upload documents");
+        }
+    }
+
+    private java.util.List<AttachmentVO> enrichFileCenterRows(java.util.List<Attachment> attachments) {
+        if (attachments == null || attachments.isEmpty()) {
+            return java.util.List.of();
+        }
+        Set<Long> productIds = attachments.stream()
+            .map(Attachment::getOwnerObjectId)
+            .filter(id -> id != null)
+            .collect(Collectors.toSet());
+        Map<Long, Product> productMap = productIds.isEmpty()
+            ? Collections.emptyMap()
+            : productRepository.selectBatchIds(productIds).stream()
+                .collect(Collectors.toMap(Product::getProductId, Function.identity(), (left, right) -> left));
+
+        return attachments.stream()
+            .map(attachment -> {
+                Product product = productMap.get(attachment.getOwnerObjectId());
+                TimelineNodeDefinition step = null;
+                if (product != null && StringUtils.hasText(attachment.getTimelineNodeKey())) {
+                    try {
+                        step = timelineDefinitionProvider.getDefinitionByCode(
+                            product,
+                            attachment.getTimelineNodeKey()
+                        );
+                    } catch (BusinessException ignored) {
+                        step = null;
+                    }
+                }
+                return AttachmentVO.from(attachment).withProjectAndStep(product, step);
+            })
+            .toList();
     }
 
     private void requireValidUpload(MultipartFile file, String fileCategory) {
@@ -202,6 +349,9 @@ public class AttachmentServiceImpl implements AttachmentService {
         if (!allowed.contains(ext)) {
             throw new BusinessException(ErrorCodeConstants.FILE_TYPE_NOT_SUPPORTED, "文件类型不支持");
         }
+        if ("sample_image".equals(fileCategory) && !IMAGE_EXTENSIONS.contains(ext)) {
+            throw new BusinessException(ErrorCodeConstants.FILE_TYPE_NOT_SUPPORTED, "SKU示例照片仅支持jpg、jpeg、png、webp");
+        }
     }
 
     private String extension(String fileName) {
@@ -209,6 +359,48 @@ public class AttachmentServiceImpl implements AttachmentService {
             return "";
         }
         return fileName.substring(fileName.lastIndexOf('.') + 1).toLowerCase(Locale.ROOT);
+    }
+
+    private String resolvePreviewType(Attachment attachment) {
+        if (StringUtils.hasText(attachment.getPreviewType())) {
+            return attachment.getPreviewType();
+        }
+        return resolvePreviewType(attachment.getFileExt());
+    }
+
+    private String resolvePreviewType(String ext) {
+        String normalized = ext == null ? "" : ext.toLowerCase(Locale.ROOT);
+        if (IMAGE_EXTENSIONS.contains(normalized)) return "image";
+        if ("pdf".equals(normalized)) return "pdf";
+        if (TEXT_EXTENSIONS.contains(normalized)) return "text";
+        if (Set.of("doc", "docx", "xls", "xlsx", "ppt", "pptx").contains(normalized)) return "office";
+        if (Set.of("dwg", "dxf", "step", "stp", "igs", "iges", "stl", "obj", "3dm", "prt", "sldprt", "sldasm").contains(normalized)) return "cad";
+        return "unsupported";
+    }
+
+    private String resolvePreviewStatus(Attachment attachment, String previewType) {
+        String status = attachment.getPreviewStatus();
+        if (isPreviewable(previewType) && (!StringUtils.hasText(status) || PREVIEW_STATUS_NONE.equals(status))) {
+            return PREVIEW_STATUS_READY;
+        }
+        if (StringUtils.hasText(status)) {
+            return status;
+        }
+        return PREVIEW_STATUS_UNSUPPORTED;
+    }
+
+    private boolean isPreviewable(String previewType) {
+        return "image".equals(previewType) || "pdf".equals(previewType) || "text".equals(previewType);
+    }
+
+    private String resolvePreviewContentType(Attachment attachment, String previewType) {
+        if ("text".equals(previewType)) {
+            return "text/plain;charset=UTF-8";
+        }
+        if ("pdf".equals(previewType)) {
+            return "application/pdf";
+        }
+        return StringUtils.hasText(attachment.getContentType()) ? attachment.getContentType() : "application/octet-stream";
     }
 
     private void writeDownloadLog(Attachment attachment, HttpServletRequest request) {

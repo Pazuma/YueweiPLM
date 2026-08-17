@@ -52,15 +52,41 @@ class CodeItemImportServiceTest {
             .hasMessageContaining("不存在、已过期或已提交");
     }
 
+    @Test
+    void previewsChineseWorkbookAndMapsEnabledStatus() throws Exception {
+        when(repository.selectList(any(Wrapper.class))).thenReturn(List.of());
+
+        var result = service.preview("颜色编码.xlsx", workbook(
+            "颜色编码",
+            new String[] {"63", "Navy", "启用", "2026-08-04"},
+            new String[] {"64", "Light Pink", "启用", "2026-08-04"}));
+
+        assertThat(result.getCreateCount()).isEqualTo(2);
+        assertThat(result.getRows()).extracting("codeValue").containsExactly("63", "64");
+        assertThat(result.getRows()).extracting("codeNameZh").containsExactly("Navy", "Light Pink");
+        assertThat(result.getRows()).extracting("status").containsOnly("enabled");
+    }
+
     private byte[] workbook(String[]... values) throws Exception {
+        return workbook("Códigos de color", values);
+    }
+
+    private byte[] workbook(String sheetName, String[]... values) throws Exception {
         try (XSSFWorkbook workbook = new XSSFWorkbook(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
-            var sheet = workbook.createSheet("Códigos de color");
+            var sheet = workbook.createSheet(sheetName);
             for (int index = 0; index < 5; index++) sheet.createRow(index);
             var header = sheet.createRow(5);
-            header.createCell(0).setCellValue("Código color");
-            header.createCell(1).setCellValue("Nombre color");
-            header.createCell(2).setCellValue("Estado");
-            header.createCell(3).setCellValue("Actualizado");
+            if ("颜色编码".equals(sheetName)) {
+                header.createCell(0).setCellValue("颜色编码");
+                header.createCell(1).setCellValue("颜色名称");
+                header.createCell(2).setCellValue("状态");
+                header.createCell(3).setCellValue("更新时间");
+            } else {
+                header.createCell(0).setCellValue("Código color");
+                header.createCell(1).setCellValue("Nombre color");
+                header.createCell(2).setCellValue("Estado");
+                header.createCell(3).setCellValue("Actualizado");
+            }
             for (int rowIndex = 0; rowIndex < values.length; rowIndex++) {
                 var row = sheet.createRow(rowIndex + 6);
                 for (int column = 0; column < values[rowIndex].length; column++) {

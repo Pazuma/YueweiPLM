@@ -1,6 +1,7 @@
 package com.yuewei.plm.module.bom.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.yuewei.plm.common.constant.ErrorCodeConstants;
 import com.yuewei.plm.common.exception.BusinessException;
 import com.yuewei.plm.common.security.CurrentUser;
@@ -9,11 +10,15 @@ import com.yuewei.plm.module.bom.dto.ProductBomCreateDTO;
 import com.yuewei.plm.module.bom.dto.ProductBomItemDTO;
 import com.yuewei.plm.module.bom.dto.ProductBomUpdateDTO;
 import com.yuewei.plm.module.bom.entity.ProductBom;
+import com.yuewei.plm.module.bom.entity.ProductBomCostSnapshot;
 import com.yuewei.plm.module.bom.entity.ProductBomItem;
 import com.yuewei.plm.module.bom.entity.ProductBomRoute;
+import com.yuewei.plm.module.bom.entity.ProductBomRouteColor;
 import com.yuewei.plm.module.bom.entity.ProductBomRouteFormalSelection;
+import com.yuewei.plm.module.bom.repository.ProductBomCostSnapshotRepository;
 import com.yuewei.plm.module.bom.repository.ProductBomItemRepository;
 import com.yuewei.plm.module.bom.repository.ProductBomRepository;
+import com.yuewei.plm.module.bom.repository.ProductBomRouteColorRepository;
 import com.yuewei.plm.module.bom.repository.ProductBomRouteFormalSelectionRepository;
 import com.yuewei.plm.module.bom.repository.ProductBomRouteRepository;
 import com.yuewei.plm.module.bom.service.ProductBomService;
@@ -31,6 +36,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,13 +48,18 @@ public class ProductBomServiceImpl implements ProductBomService {
 
     private static final String STATUS_DRAFT = "draft";
     private static final String STATUS_FROZEN = "frozen";
+    private static final String STATUS_RELEASED = "released";
+    private static final String STATUS_ARCHIVED = "archived";
     private static final String BOM_SCOPE_CANDIDATE = "candidate";
+    private static final String BOM_SCOPE_FORMAL = "formal";
     private static final String PROCESS_TYPE_ROUTING = "routing";
 
     private final ProductRepository productRepository;
     private final ProductBomRepository productBomRepository;
     private final ProductBomItemRepository productBomItemRepository;
     private final ProductBomRouteRepository productBomRouteRepository;
+    private final ProductBomRouteColorRepository productBomRouteColorRepository;
+    private final ProductBomCostSnapshotRepository productBomCostSnapshotRepository;
     private final ProductBomRouteFormalSelectionRepository productBomRouteFormalSelectionRepository;
     private final ProcessRepository processRepository;
     private final OperationLogService operationLogService;
@@ -111,6 +122,10 @@ public class ProductBomServiceImpl implements ProductBomService {
         route.setProcessId(processRoute.getProcessId());
         route.setRouteCode(processRoute.getProcessCode());
         route.setRouteName(processRoute.getProcessName());
+        route.setSharedBomGroupCode("BOM-" + bom.getProductBomId());
+        route.setRouteVariantNo("BASE");
+        route.setVariantName("基础用料");
+        route.setVariantSourceType("manual");
         route.setStatus("active");
         fillCreateAudit(route, now, operator);
         productBomRouteRepository.insert(route);
@@ -187,6 +202,55 @@ public class ProductBomServiceImpl implements ProductBomService {
 
     @Override
     @Transactional
+    public void deleteVersion(Long bomId, HttpServletRequest request) {
+        ProductBom bom = requireDeletableBom(bomId);
+        Product product = getProductOrThrow(bom.getProductId());
+        LocalDateTime now = LocalDateTime.now();
+        String operator = currentUserName();
+
+        productBomRepository.update(null, new UpdateWrapper<ProductBom>()
+            .set("deleted_flag", 1)
+            .set("updated_at", now)
+            .set("updated_by", operator)
+            .eq("product_bom_id", bomId)
+            .eq("deleted_flag", 0));
+        productBomRouteRepository.update(null, new UpdateWrapper<ProductBomRoute>()
+            .set("deleted_flag", 1)
+            .set("updated_at", now)
+            .set("updated_by", operator)
+            .eq("product_bom_id", bomId)
+            .eq("deleted_flag", 0));
+        productBomRouteColorRepository.update(null, new UpdateWrapper<ProductBomRouteColor>()
+            .set("deleted_flag", 1)
+            .set("updated_at", now)
+            .set("updated_by", operator)
+            .eq("product_bom_id", bomId)
+            .eq("deleted_flag", 0));
+        productBomItemRepository.update(null, new UpdateWrapper<ProductBomItem>()
+            .set("deleted_flag", 1)
+            .set("updated_at", now)
+            .set("updated_by", operator)
+            .eq("product_bom_id", bomId)
+            .eq("deleted_flag", 0));
+        productBomCostSnapshotRepository.update(null, new UpdateWrapper<ProductBomCostSnapshot>()
+            .set("deleted_flag", 1)
+            .set("updated_at", now)
+            .set("updated_by", operator)
+            .eq("product_bom_id", bomId)
+            .eq("deleted_flag", 0));
+        productBomRouteFormalSelectionRepository.update(null, new UpdateWrapper<ProductBomRouteFormalSelection>()
+            .set("deleted_flag", 1)
+            .set("updated_at", now)
+            .set("updated_by", operator)
+            .eq("product_bom_id", bomId)
+            .eq("deleted_flag", 0));
+
+        writeLog(OperationActionConstants.BOM_DELETE, bom, product,
+            "{\"action\":\"delete_version\",\"versionNo\":\"" + bom.getVersionNo() + "\"}", request);
+    }
+
+    @Override
+    @Transactional
     public ProductBomVO freeze(Long bomId, HttpServletRequest request) {
         ProductBom bom = requireEditableBom(bomId);
         Product product = getProductOrThrow(bom.getProductId());
@@ -199,6 +263,82 @@ public class ProductBomServiceImpl implements ProductBomService {
         fillUpdateAudit(bom);
         productBomRepository.updateById(bom);
         writeLog(OperationActionConstants.BOM_FREEZE, bom, product, "{\"action\":\"freeze\"}", request);
+        return getById(bomId);
+    }
+
+    @Override
+    @Transactional
+    public ProductBomVO confirmCurrentVersion(Long bomId, HttpServletRequest request) {
+        ProductBom bom = requireEditableBom(bomId);
+        Product product = getProductOrThrow(bom.getProductId());
+        List<ProductBomRoute> routes = requireConfirmableRoutes(bom);
+        LocalDateTime now = LocalDateTime.now();
+        String operator = currentUserName();
+        String batchNo = UUID.randomUUID().toString();
+        for (ProductBomRoute route : routes) {
+            invalidateCurrentRouteSelection(bom.getProductId(), route.getProductBomRouteId(), now, operator,
+                "重新确认当前 BOM 版本");
+            ProductBomRouteFormalSelection selection = new ProductBomRouteFormalSelection();
+            selection.setProductId(bom.getProductId());
+            selection.setProductBomId(bom.getProductBomId());
+            selection.setProductBomRouteId(route.getProductBomRouteId());
+            selection.setProcessId(route.getProcessId());
+            selection.setBomVersionNo(bom.getVersionNo());
+            selection.setSelectionBatchNo(batchNo);
+            selection.setStatus("active");
+            selection.setConfirmedAt(now);
+            selection.setConfirmedBy(operator);
+            selection.setRemark("confirm current BOM version");
+            fillCreateAudit(selection, now, operator);
+            productBomRouteFormalSelectionRepository.insert(selection);
+        }
+        bom.setBomScope(BOM_SCOPE_FORMAL);
+        bom.setStatus(STATUS_RELEASED);
+        bom.setConfirmedAt(now);
+        bom.setConfirmedBy(operator);
+        bom.setFrozenFlag(0);
+        bom.setFrozenAt(null);
+        bom.setFrozenBy(null);
+        bom.setReleasedAt(now);
+        bom.setReleasedBy(operator);
+        fillUpdateAudit(bom);
+        productBomRepository.updateById(bom);
+        writeLog(OperationActionConstants.BOM_CONFIRM_CURRENT, bom, product,
+            "{\"action\":\"confirm_current_version\",\"versionNo\":\"" + bom.getVersionNo() + "\"}", request);
+        return getById(bomId);
+    }
+
+    @Override
+    @Transactional
+    public ProductBomVO cancelCurrentConfirmation(Long bomId, HttpServletRequest request) {
+        ProductBom bom = requireEditableBom(bomId);
+        Product product = getProductOrThrow(bom.getProductId());
+        LocalDateTime now = LocalDateTime.now();
+        String operator = currentUserName();
+        List<ProductBomRouteFormalSelection> activeSelections = activeSelectionsByBom(bom.getProductId(), bomId);
+        if (activeSelections.isEmpty()) {
+            throw new BusinessException(ErrorCodeConstants.VALIDATION_ERROR, "当前 BOM 版本尚未确认");
+        }
+        for (ProductBomRouteFormalSelection selection : activeSelections) {
+            selection.setStatus("invalidated");
+            selection.setInvalidatedAt(now);
+            selection.setInvalidatedReason("取消确认当前 BOM 版本");
+            selection.setUpdatedAt(now);
+            selection.setUpdatedBy(operator);
+            productBomRouteFormalSelectionRepository.updateById(selection);
+        }
+        if (activeSelectionsByBom(bom.getProductId(), bomId).isEmpty()) {
+            bom.setBomScope(BOM_SCOPE_CANDIDATE);
+            bom.setConfirmedAt(null);
+            bom.setConfirmedBy(null);
+        }
+        bom.setFrozenFlag(0);
+        bom.setFrozenAt(null);
+        bom.setFrozenBy(null);
+        fillUpdateAudit(bom);
+        productBomRepository.updateById(bom);
+        writeLog(OperationActionConstants.BOM_CANCEL_CONFIRM, bom, product,
+            "{\"action\":\"cancel_current_confirmation\",\"versionNo\":\"" + bom.getVersionNo() + "\"}", request);
         return getById(bomId);
     }
 
@@ -220,8 +360,19 @@ public class ProductBomServiceImpl implements ProductBomService {
 
     private ProductBom requireEditableBom(Long bomId) {
         ProductBom bom = getBomOrThrow(bomId);
-        if (STATUS_FROZEN.equals(bom.getStatus())) {
-            throw new BusinessException(ErrorCodeConstants.VERSION_FROZEN, "BOM已冻结，不能修改");
+        if (STATUS_ARCHIVED.equals(bom.getStatus())) {
+            throw new BusinessException(ErrorCodeConstants.VERSION_FROZEN, "已归档BOM不能修改");
+        }
+        return bom;
+    }
+
+    private ProductBom requireDeletableBom(Long bomId) {
+        ProductBom bom = getBomOrThrow(bomId);
+        if (STATUS_ARCHIVED.equals(bom.getStatus())) {
+            throw new BusinessException(ErrorCodeConstants.VALIDATION_ERROR, "BOM已归档，不能删除");
+        }
+        if (currentFormalBomIds(bom.getProductId()).contains(bomId)) {
+            throw new BusinessException(ErrorCodeConstants.VALIDATION_ERROR, "BOM已被正式选用，不能删除");
         }
         return bom;
     }
@@ -251,6 +402,67 @@ public class ProductBomServiceImpl implements ProductBomService {
             .eq(ProductBomRoute::getDeletedFlag, 0)
             .orderByAsc(ProductBomRoute::getProductBomRouteId));
         return routes == null || routes.isEmpty() ? null : routes.get(0);
+    }
+
+    private List<ProductBomRoute> activeRoutes(Long bomId) {
+        List<ProductBomRoute> routes = productBomRouteRepository.selectList(new LambdaQueryWrapper<ProductBomRoute>()
+            .eq(ProductBomRoute::getProductBomId, bomId)
+            .eq(ProductBomRoute::getStatus, "active")
+            .eq(ProductBomRoute::getDeletedFlag, 0)
+            .orderByAsc(ProductBomRoute::getProductBomRouteId));
+        return routes == null ? List.of() : routes;
+    }
+
+    private List<ProductBomRoute> requireConfirmableRoutes(ProductBom bom) {
+        List<ProductBomRoute> routes = activeRoutes(bom.getProductBomId());
+        if (routes.isEmpty()) {
+            throw new BusinessException(ErrorCodeConstants.VALIDATION_ERROR, "BOM 至少需要一条有效工艺路线才能确认");
+        }
+        for (ProductBomRoute route : routes) {
+            Long colorCount = productBomRouteColorRepository.selectCount(new LambdaQueryWrapper<ProductBomRouteColor>()
+                .eq(ProductBomRouteColor::getProductBomRouteId, route.getProductBomRouteId())
+                .eq(ProductBomRouteColor::getStatus, "active")
+                .eq(ProductBomRouteColor::getDeletedFlag, 0));
+            if (colorCount == null || colorCount == 0) {
+                throw new BusinessException(ErrorCodeConstants.VALIDATION_ERROR, "BOM 路线缺少适用颜色，不能确认");
+            }
+            Long itemCount = productBomItemRepository.selectCount(new LambdaQueryWrapper<ProductBomItem>()
+                .eq(ProductBomItem::getProductBomRouteId, route.getProductBomRouteId())
+                .eq(ProductBomItem::getDeletedFlag, 0));
+            if (itemCount == null || itemCount == 0) {
+                throw new BusinessException(ErrorCodeConstants.VALIDATION_ERROR, "BOM 路线缺少明细，不能确认");
+            }
+        }
+        return routes;
+    }
+
+    private void invalidateCurrentRouteSelection(Long productId, Long productBomRouteId, LocalDateTime now,
+                                                 String operator, String reason) {
+        List<ProductBomRouteFormalSelection> selections = productBomRouteFormalSelectionRepository.selectList(
+            new LambdaQueryWrapper<ProductBomRouteFormalSelection>()
+                .eq(ProductBomRouteFormalSelection::getProductId, productId)
+                .eq(ProductBomRouteFormalSelection::getProductBomRouteId, productBomRouteId)
+                .eq(ProductBomRouteFormalSelection::getStatus, "active")
+                .eq(ProductBomRouteFormalSelection::getDeletedFlag, 0));
+        if (selections == null) return;
+        for (ProductBomRouteFormalSelection selection : selections) {
+            selection.setStatus("invalidated");
+            selection.setInvalidatedAt(now);
+            selection.setInvalidatedReason(reason);
+            selection.setUpdatedAt(now);
+            selection.setUpdatedBy(operator);
+            productBomRouteFormalSelectionRepository.updateById(selection);
+        }
+    }
+
+    private List<ProductBomRouteFormalSelection> activeSelectionsByBom(Long productId, Long bomId) {
+        List<ProductBomRouteFormalSelection> selections = productBomRouteFormalSelectionRepository.selectList(
+            new LambdaQueryWrapper<ProductBomRouteFormalSelection>()
+                .eq(ProductBomRouteFormalSelection::getProductId, productId)
+                .eq(ProductBomRouteFormalSelection::getProductBomId, bomId)
+                .eq(ProductBomRouteFormalSelection::getStatus, "active")
+                .eq(ProductBomRouteFormalSelection::getDeletedFlag, 0));
+        return selections == null ? List.of() : selections;
     }
 
     private Set<Long> currentFormalBomIds(Long productId) {

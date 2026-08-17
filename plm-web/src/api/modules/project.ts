@@ -1,26 +1,42 @@
 import type { ProductSummary } from '@/types/product'
 import request, { unwrapPage, unwrapResponse } from '../request'
 
-type ProductType = 'product_line' | 'model_variant'
+type ProductType = 'product_line' | 'model_variant' | 'sku'
 type TimelineStatus = 'completed' | 'current' | 'pending' | 'rejected'
 
 interface BackendProjectSummary {
   projectId: number
   productId: number
+  parentProductId?: number | null
   productCode: string
+  productSpecificCode?: string | null
+  phoneModelCode?: string | null
+  colorCode?: string | null
+  finishedProductCode?: string | null
+  importShortCode?: string | null
   productName: string
   productType: ProductType
   productTypeName?: string
   model?: string | null
+  moldCodes?: string | null
   color?: string | null
   versionNo: string
   status: ProductSummary['status']
   statusName?: string
+  lockStatus?: string | null
+  abandonedAt?: string | null
+  abandonedBy?: string | null
+  abandonReason?: string | null
   ownerUserId?: number | null
   ownerUserName?: string | null
   currentStepNo: number
   currentNodeName?: string | null
+  moldTransferAt?: string | null
+  expectedArrivalAt?: string | null
+  actualArrivalAt?: string | null
   documentCount?: number | null
+  totalCost?: number | null
+  currencyCode?: string | null
   createdAt?: string | null
   updatedAt?: string | null
 }
@@ -34,14 +50,39 @@ interface BackendProjectDetail extends BackendProjectSummary {
   surfaceProcess?: string | null
   coreProcess?: string | null
   composition?: string | null
+  colorSummary?: {
+    skuColorCount?: number | null
+    productionColorCount?: number | null
+    skuColors?: BackendProjectColorUsage[] | null
+    productionColors?: BackendProjectColorUsage[] | null
+    skuOnlyColors?: BackendProjectColorUsage[] | null
+    productionOnlyColors?: BackendProjectColorUsage[] | null
+  } | null
   timeline?: BackendTimelineDetail | null
   remark?: string | null
+}
+
+interface BackendProjectColorUsage {
+  colorCode?: string | null
+  colorName?: string | null
+  skuCount?: number | null
+  decisionCount?: number | null
 }
 
 interface BackendTimelineNode {
   stepNo: number
   nodeCode: string
   nodeName: string
+  stageCode?: string | null
+  stageName?: string | null
+  phaseName?: string | null
+  requiredFileCategory?: string | null
+  requiredAttachment?: boolean | null
+  uploadPrompt?: string | null
+  confirmPrompt?: string | null
+  emptyFileMessage?: string | null
+  gateFlag?: boolean | null
+  enabledFlag?: boolean | null
   nodeStatus: TimelineStatus
   documentCount?: number | null
   confirmed?: boolean | null
@@ -51,7 +92,15 @@ interface BackendTimelineDetail {
   projectId: number
   productId: number
   productType: ProductType
+  started?: boolean | null
+  startBlockReason?: string | null
+  timelineCompleted?: boolean | null
   currentStepNo: number
+  currentStageCode?: string | null
+  currentStageName?: string | null
+  currentPhaseName?: string | null
+  currentStepCode?: string | null
+  currentStepName?: string | null
   currentConfirmed?: boolean | null
   confirmedNodeKey?: string | null
   lastAction?: string | null
@@ -59,6 +108,7 @@ interface BackendTimelineDetail {
   lastOperatedAt?: string | null
   lastOperatorUserId?: number | null
   lastOperatorUserName?: string | null
+  moldTransferExpress?: MoldTransferExpressVO | null
   nodes: BackendTimelineNode[]
 }
 
@@ -80,7 +130,16 @@ export interface ProjectDetailVO extends ProjectSummaryVO {
 export interface TimelineNodeVO {
   nodeKey: string
   nodeName: string
+  stageCode?: string | null
+  stageName?: string | null
   phaseName: string
+  requiredFileCategory?: string | null
+  requiredAttachment?: boolean | null
+  uploadPrompt?: string | null
+  confirmPrompt?: string | null
+  emptyFileMessage?: string | null
+  gateFlag?: boolean | null
+  enabledFlag?: boolean | null
   stepNo: number
   status: TimelineStatus
   nodeStatus: TimelineStatus
@@ -105,8 +164,16 @@ export interface TimelineDetailVO {
   projectId: number
   productId?: number
   productType?: ProductType
+  started: boolean
+  startBlockReason?: string | null
+  timelineCompleted?: boolean | null
   currentNode: string
   currentStepNo: number
+  currentStageCode?: string | null
+  currentStageName?: string | null
+  currentPhaseName?: string | null
+  currentStepCode?: string | null
+  currentStepName?: string | null
   currentConfirmed?: boolean | null
   confirmedNodeKey?: string | null
   lastAction?: string | null
@@ -114,7 +181,71 @@ export interface TimelineDetailVO {
   lastOperatedAt?: string | null
   lastOperatorUserId?: number | null
   lastOperatorUserName?: string | null
+  moldTransferExpress?: MoldTransferExpressVO | null
   nodes: TimelineNodeVO[]
+}
+
+export interface MoldTransferExpressVO {
+  moldTransferExpressId?: number | null
+  projectId: number
+  timelineNodeKey: string
+  trackingNo?: string | null
+  shippedAt?: string | null
+  status?: string | null
+}
+
+export interface MoldTransferExpressSavePayload {
+  trackingNo: string
+  shippedAt?: string
+}
+
+export type ProjectCostCategory = 'mold' | 'other'
+export type ProjectCostStatus = 'draft' | 'confirmed' | 'void'
+
+export interface ProjectCostSummaryVO {
+  projectId: number
+  productId: number
+  bomCost?: number | null
+  rdCost: number
+  moldCost: number
+  otherCost: number
+  totalCost: number
+  currencyCode: string
+  manualItemCount: number
+  confirmedManualItemCount: number
+}
+
+export interface ProjectCostItemVO {
+  projectCostItemId: number
+  productId: number
+  costCategory: ProjectCostCategory
+  costCategoryName: string
+  costName: string
+  amount: number
+  currencyCode: string
+  supplierName?: string | null
+  occurredAt?: string | null
+  status: ProjectCostStatus
+  statusName: string
+  confirmedAt?: string | null
+  confirmedBy?: string | null
+  voidedAt?: string | null
+  voidedBy?: string | null
+  remark?: string | null
+  createdAt?: string | null
+  createdBy?: string | null
+  updatedAt?: string | null
+  updatedBy?: string | null
+}
+
+export interface ProjectCostItemPayload {
+  costCategory: ProjectCostCategory
+  costName: string
+  amount: number
+  currencyCode?: string
+  supplierName?: string
+  occurredAt?: string
+  remark?: string
 }
 
 export interface TimelineActionResultVO {
@@ -129,12 +260,56 @@ export interface TimelineActionResultVO {
   currentConfirmed: boolean
   productStatus: string
   logId: number
+  warnings?: string[]
 }
 
 export interface TimelineActionPayload {
   remark?: string
   reason?: string
   returnToPrevious?: boolean
+}
+
+export interface ProductReleaseGateMissingItemVO {
+  code: string
+  message: string
+  severity?: 'blocker' | 'warning'
+}
+
+export interface ProductReleaseGateCheckVO {
+  projectId: number
+  productId: number
+  passed: boolean
+  blocking?: boolean
+  confirmRequired?: boolean
+  currentStatus: string
+  currentNodeKey?: string | null
+  currentNodeConfirmed?: boolean | null
+  frozenBomCount: number
+  lockedProcessRouteCount: number
+  drawingFileCount: number
+  sopFileCount: number
+  sipFileCount: number
+  testingFileCount: number
+  missingItems: ProductReleaseGateMissingItemVO[]
+}
+
+export interface ProductLifecycleActionPayload {
+  reason?: string
+  riskConfirmed?: boolean
+}
+
+export interface ProductLifecycleResultVO {
+  productId: number
+  productCode: string
+  productName: string
+  status: ProductSummary['status']
+  lockStatus?: string | null
+  releasedAt?: string | null
+  releasedBy?: string | null
+  archivedAt?: string | null
+  archivedBy?: string | null
+  abandonedAt?: string | null
+  abandonedBy?: string | null
 }
 
 interface ProjectQueryParams {
@@ -147,16 +322,17 @@ interface ProjectQueryParams {
 }
 
 function normalizeProductType(value?: string | null): ProductType {
-  return value === 'model_variant' ? 'model_variant' : 'product_line'
+  return value === 'model_variant' || value === 'sku' ? value : 'product_line'
 }
 
 function getSeriesName(item: Pick<BackendProjectSummary, 'productName'> & { seriesName?: string | null }) {
   return item.seriesName || item.productName.split(/\s+/)[0] || item.productName
 }
 
-function getCompletionRate(currentStepNo?: number | null) {
-  const step = Math.max(1, Math.min(Number(currentStepNo || 1), 6))
-  return Number((step / 6).toFixed(2))
+function getCompletionRate(currentStepNo?: number | null, productType?: ProductType) {
+  const maxStep = productType === 'product_line' ? 22 : 18
+  const step = Math.max(1, Math.min(Number(currentStepNo || 1), maxStep))
+  return Number((step / maxStep).toFixed(2))
 }
 
 function mapProjectSummary(item: BackendProjectSummary | BackendProjectDetail): ProductSummary {
@@ -164,34 +340,47 @@ function mapProjectSummary(item: BackendProjectSummary | BackendProjectDetail): 
   const currentStepNo = Number(item.currentStepNo || 1)
   return {
     productId: Number(item.productId || item.projectId),
-    parentProductId: 'parentProductId' in item ? item.parentProductId || null : null,
+    parentProductId: item.parentProductId || null,
     productCode: item.productCode,
+    productSpecificCode: item.productSpecificCode || null,
+    phoneModelCode: item.phoneModelCode || null,
+    colorCode: item.colorCode || null,
+    finishedProductCode: item.finishedProductCode || null,
+    importShortCode: item.importShortCode || null,
     productName: item.productName,
     productType,
     seriesName: getSeriesName(item),
     model: item.model || '--',
+    moldCodes: item.moldCodes || null,
     color: item.color || '--',
     material: 'material' in item ? item.material || '' : '',
+    moldTransferAt: item.moldTransferAt || null,
+    expectedArrivalAt: item.expectedArrivalAt || null,
+    actualArrivalAt: item.actualArrivalAt || null,
     ownerUserName: item.ownerUserName || '--',
     versionNo: item.versionNo || 'A',
     status: item.status,
+    lockStatus: item.lockStatus || null,
+    abandonedAt: item.abandonedAt || null,
+    abandonedBy: item.abandonedBy || null,
+    abandonReason: item.abandonReason || null,
     currentStage: item.currentNodeName || '待推进',
     currentStepNo,
     customerName: '',
     frozenFlag: false,
     releasedAt: ['released', 'archived'].includes(item.status) ? item.updatedAt || null : null,
-    completionRate: getCompletionRate(currentStepNo),
+    completionRate: getCompletionRate(currentStepNo, productType),
     estimatedCost: 0,
     estimatedCostCurrency: 'CNY',
     actualCost: null,
     rdCost: null,
     productCost: null,
-    totalCost: null,
+    totalCost: item.totalCost ?? null,
     testItemCount: 0,
     activeBomVersion: '',
-    productFlowMode: productType === 'model_variant' ? 'new_model_variant' : 'new_product_line',
+    productFlowMode: productType === 'product_line' ? 'new_product_line' : 'new_model_variant',
     lifecycle: 'initiation',
-    moldAction: productType === 'model_variant' ? 'modify' : null,
+    moldAction: productType === 'product_line' ? null : 'modify',
     nextAction: item.currentNodeName ? `继续处理：${item.currentNodeName}` : '继续推进当前节点',
     gateSummary: '来自后端 M2 项目时间轴'
   }
@@ -202,12 +391,21 @@ function mapTimelineNode(node: BackendTimelineNode): TimelineNodeVO {
   return {
     nodeKey: node.nodeCode,
     nodeName: node.nodeName,
-    phaseName: `第 ${node.stepNo} 节点`,
+    stageCode: node.stageCode || null,
+    stageName: node.stageName || null,
+    phaseName: node.phaseName || `第 ${node.stepNo} 节点`,
+    requiredFileCategory: node.requiredFileCategory || null,
+    requiredAttachment: Boolean(node.requiredAttachment),
+    uploadPrompt: node.uploadPrompt || null,
+    confirmPrompt: node.confirmPrompt || null,
+    emptyFileMessage: node.emptyFileMessage || null,
+    gateFlag: Boolean(node.gateFlag),
+    enabledFlag: node.enabledFlag !== false,
     stepNo: node.stepNo,
     status,
     nodeStatus: status,
-    summary: node.confirmed ? '当前节点已确认' : '等待节点处理',
-    experienceSummary: node.confirmed ? '节点确认记录已写入后端。' : '节点状态来自后端 M2 时间轴。',
+    summary: status === 'completed' ? '已完成' : node.confirmed ? '当前节点已确认' : '等待节点处理',
+    experienceSummary: status === 'completed' ? '节点已完成。' : node.confirmed ? '节点确认记录已写入后端。' : '节点状态来自后端 M2 时间轴。',
     ownerRole: '工程',
     receiverRole: '工程',
     nextAction: status === 'current' ? '处理当前节点' : undefined,
@@ -219,12 +417,23 @@ function mapTimelineNode(node: BackendTimelineNode): TimelineNodeVO {
 function mapTimeline(detail: BackendTimelineDetail): TimelineDetailVO {
   const nodes = (detail.nodes || []).map(mapTimelineNode)
   const current = nodes.find((node) => node.status === 'current')
+  const timelineCompleted = Boolean(detail.timelineCompleted)
+    || (nodes.length > 0 && !current && nodes.every((node) => node.status === 'completed'))
+  const displayNode = current || (timelineCompleted ? nodes[nodes.length - 1] : nodes[0])
   return {
     projectId: Number(detail.projectId),
     productId: Number(detail.productId),
     productType: normalizeProductType(detail.productType),
-    currentNode: current?.nodeName || nodes[0]?.nodeName || '待推进',
-    currentStepNo: Number(detail.currentStepNo || current?.stepNo || 1),
+    started: detail.started !== false,
+    startBlockReason: detail.startBlockReason || null,
+    timelineCompleted,
+    currentNode: displayNode?.nodeName || '待推进',
+    currentStepNo: Number(detail.currentStepNo || displayNode?.stepNo || 1),
+    currentStageCode: detail.currentStageCode || displayNode?.stageCode || null,
+    currentStageName: detail.currentStageName || displayNode?.stageName || null,
+    currentPhaseName: detail.currentPhaseName || displayNode?.phaseName || null,
+    currentStepCode: detail.currentStepCode || displayNode?.nodeKey || null,
+    currentStepName: detail.currentStepName || displayNode?.nodeName || null,
     currentConfirmed: detail.currentConfirmed,
     confirmedNodeKey: detail.confirmedNodeKey,
     lastAction: detail.lastAction,
@@ -232,6 +441,7 @@ function mapTimeline(detail: BackendTimelineDetail): TimelineDetailVO {
     lastOperatedAt: detail.lastOperatedAt,
     lastOperatorUserId: detail.lastOperatorUserId,
     lastOperatorUserName: detail.lastOperatorUserName,
+    moldTransferExpress: detail.moldTransferExpress || null,
     nodes
   }
 }
@@ -248,9 +458,26 @@ function mapProjectDetail(item: BackendProjectDetail): ProjectDetailVO {
     surfaceProcess: item.surfaceProcess || '',
     coreProcess: item.coreProcess || '',
     composition: item.composition || '',
+    colorSummary: item.colorSummary ? {
+      skuColorCount: Number(item.colorSummary.skuColorCount || 0),
+      productionColorCount: Number(item.colorSummary.productionColorCount || 0),
+      skuColors: mapProjectColorUsages(item.colorSummary.skuColors),
+      productionColors: mapProjectColorUsages(item.colorSummary.productionColors),
+      skuOnlyColors: mapProjectColorUsages(item.colorSummary.skuOnlyColors),
+      productionOnlyColors: mapProjectColorUsages(item.colorSummary.productionOnlyColors)
+    } : null,
     summary: item.remark || item.currentNodeName || '',
     timeline: item.timeline ? mapTimeline(item.timeline) : undefined
   }
+}
+
+function mapProjectColorUsages(items?: BackendProjectColorUsage[] | null) {
+  return (items || []).map((item) => ({
+    colorCode: item.colorCode || null,
+    colorName: item.colorName || item.colorCode || '--',
+    skuCount: Number(item.skuCount || 0),
+    decisionCount: Number(item.decisionCount || 0)
+  }))
 }
 
 export async function getWorkbenchInProgressProjects(params?: ProjectQueryParams): Promise<ProjectSummaryVO[]> {
@@ -278,8 +505,52 @@ export async function getProjectTimeline(projectId: number): Promise<TimelineDet
   return mapTimeline(unwrapResponse<BackendTimelineDetail>(response))
 }
 
-function rejectUntestedM3Action(): Promise<never> {
-  return Promise.reject(new Error('M3 时间轴动作接口尚未完成前端接入，本次只接入 M1/M2 查询接口。'))
+export async function getMoldTransferExpress(projectId: number, nodeKey: string): Promise<MoldTransferExpressVO | null> {
+  const response = await request.get(`/projects/${projectId}/timeline/${nodeKey}/mold-transfer/express`)
+  return unwrapResponse<MoldTransferExpressVO | null>(response)
+}
+
+export async function saveMoldTransferExpress(
+  projectId: number,
+  nodeKey: string,
+  payload: MoldTransferExpressSavePayload
+): Promise<MoldTransferExpressVO> {
+  const response = await request.put(`/projects/${projectId}/timeline/${nodeKey}/mold-transfer/express`, payload)
+  return unwrapResponse<MoldTransferExpressVO>(response)
+}
+
+export async function getProjectCostSummary(projectId: number): Promise<ProjectCostSummaryVO> {
+  const response = await request.get(`/projects/${projectId}/cost-summary`)
+  return unwrapResponse<ProjectCostSummaryVO>(response)
+}
+
+export async function getProjectCostItems(projectId: number): Promise<ProjectCostItemVO[]> {
+  const response = await request.get(`/projects/${projectId}/cost-items`)
+  return unwrapResponse<ProjectCostItemVO[]>(response)
+}
+
+export async function createProjectCostItem(projectId: number, payload: ProjectCostItemPayload): Promise<ProjectCostItemVO> {
+  const response = await request.post(`/projects/${projectId}/cost-items`, payload)
+  return unwrapResponse<ProjectCostItemVO>(response)
+}
+
+export async function updateProjectCostItem(
+  projectId: number,
+  costItemId: number,
+  payload: ProjectCostItemPayload
+): Promise<ProjectCostItemVO> {
+  const response = await request.put(`/projects/${projectId}/cost-items/${costItemId}`, payload)
+  return unwrapResponse<ProjectCostItemVO>(response)
+}
+
+export async function confirmProjectCostItem(projectId: number, costItemId: number): Promise<ProjectCostItemVO> {
+  const response = await request.post(`/projects/${projectId}/cost-items/${costItemId}/confirm`)
+  return unwrapResponse<ProjectCostItemVO>(response)
+}
+
+export async function voidProjectCostItem(projectId: number, costItemId: number): Promise<ProjectCostItemVO> {
+  const response = await request.post(`/projects/${projectId}/cost-items/${costItemId}/void`)
+  return unwrapResponse<ProjectCostItemVO>(response)
 }
 
 export async function confirmTimelineNode(
@@ -317,18 +588,41 @@ export async function returnTimelineNode(
   return unwrapResponse<TimelineActionResultVO>(response)
 }
 
-export function freezeProject(_projectId: number) {
-  return rejectUntestedM3Action()
+export async function checkProjectReleaseGate(projectId: number): Promise<ProductReleaseGateCheckVO> {
+  const response = await request.get(`/projects/${projectId}/release-gate`)
+  return unwrapResponse<ProductReleaseGateCheckVO>(response)
 }
 
-export function publishProject(_projectId: number) {
-  return rejectUntestedM3Action()
+export async function freezeProject(
+  projectId: number,
+  payload: ProductLifecycleActionPayload = {}
+): Promise<ProductLifecycleResultVO> {
+  const response = await request.post(`/projects/${projectId}/freeze`, payload)
+  return unwrapResponse<ProductLifecycleResultVO>(response)
 }
 
-export function archiveProject(_projectId: number) {
-  return rejectUntestedM3Action()
+export async function publishProject(
+  projectId: number,
+  payload: ProductLifecycleActionPayload = {}
+): Promise<ProductLifecycleResultVO> {
+  const response = await request.post(`/projects/${projectId}/publish`, payload)
+  return unwrapResponse<ProductLifecycleResultVO>(response)
 }
 
-export function abandonProject(_projectId: number, _reason: string) {
-  return rejectUntestedM3Action()
+export async function archiveProject(
+  projectId: number,
+  payload: ProductLifecycleActionPayload = {}
+): Promise<ProductLifecycleResultVO> {
+  const response = await request.post(`/projects/${projectId}/archive`, payload)
+  return unwrapResponse<ProductLifecycleResultVO>(response)
+}
+
+export async function abandonProject(
+  projectId: number,
+  payload: ProductLifecycleActionPayload
+): Promise<ProductLifecycleResultVO> {
+  const reason = payload.reason?.trim()
+  if (!reason) throw new Error('请填写停止原因')
+  const response = await request.post(`/projects/${projectId}/abandon`, { reason })
+  return unwrapResponse<ProductLifecycleResultVO>(response)
 }

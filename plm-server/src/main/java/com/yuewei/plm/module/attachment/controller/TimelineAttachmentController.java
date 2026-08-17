@@ -38,6 +38,20 @@ public class TimelineAttachmentController {
         );
     }
 
+    @PostMapping("/projects/{projectId}/attachments")
+    public ResponseVO<AttachmentVO> uploadProjectFile(@PathVariable Long projectId,
+                                                      @RequestParam("file") MultipartFile file,
+                                                      @RequestParam String fileCategory,
+                                                      @RequestParam(required = false) String versionNo,
+                                                      @RequestParam(required = false) String remark,
+                                                      HttpServletRequest request) {
+        return ResponseVO.success(
+            attachmentService.uploadProjectAttachment(projectId, file, fileCategory, versionNo, remark, request),
+            RequestIdUtil.getRequestId(request),
+            OffsetDateTime.now()
+        );
+    }
+
     @GetMapping("/projects/{projectId}/timeline/{nodeKey}/attachments")
     public ResponseVO<List<AttachmentVO>> list(@PathVariable Long projectId,
                                                @PathVariable String nodeKey,

@@ -10,6 +10,7 @@ import com.yuewei.plm.module.bom.dto.TestBomSaveDTO;
 import com.yuewei.plm.module.bom.dto.ProductBomItemDTO;
 import com.yuewei.plm.module.bom.dto.ProductBomUpdateDTO;
 import com.yuewei.plm.module.bom.service.ProductBomService;
+import com.yuewei.plm.module.bom.service.impl.HistoricalBomMergeService;
 import com.yuewei.plm.module.bom.service.impl.HistoricalBomImportService;
 import com.yuewei.plm.module.bom.service.BomImportService;
 import com.yuewei.plm.module.bom.service.BomInheritanceService;
@@ -18,6 +19,7 @@ import com.yuewei.plm.module.bom.entity.ProductBom;
 import com.yuewei.plm.module.bom.entity.ProductBomCostSnapshot;
 import com.yuewei.plm.module.bom.entity.ProductBomImportBatch;
 import com.yuewei.plm.module.bom.vo.BomImportPreviewVO;
+import com.yuewei.plm.module.bom.vo.BomHistoryMergeResultVO;
 import com.yuewei.plm.module.bom.vo.ProductBomVO;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -50,6 +52,7 @@ public class ProductBomController {
     private final BomInheritanceService inheritanceService;
     private final BomImportService importService;
     private final HistoricalBomImportService historicalImportService;
+    private final HistoricalBomMergeService historicalBomMergeService;
 
     @GetMapping("/projects/{projectId}/boms")
     public ResponseVO<List<ProductBomVO>> listByProject(@PathVariable Long projectId, HttpServletRequest request) {
@@ -97,9 +100,27 @@ public class ProductBomController {
         return ResponseVO.success(productBomService.deleteItem(bomId, itemId, request), RequestIdUtil.getRequestId(request), OffsetDateTime.now());
     }
 
+    @DeleteMapping("/boms/{bomId}")
+    public ResponseVO<Void> deleteVersion(@PathVariable Long bomId, HttpServletRequest request) {
+        productBomService.deleteVersion(bomId, request);
+        return ResponseVO.success(null, RequestIdUtil.getRequestId(request), OffsetDateTime.now());
+    }
+
     @PostMapping("/boms/{bomId}/freeze")
     public ResponseVO<ProductBom> freeze(@PathVariable Long bomId, HttpServletRequest request) {
         return ResponseVO.success(workflowService.freeze(bomId), RequestIdUtil.getRequestId(request), OffsetDateTime.now());
+    }
+
+    @PostMapping("/boms/{bomId}/confirm-current-version")
+    public ResponseVO<ProductBomVO> confirmCurrentVersion(@PathVariable Long bomId, HttpServletRequest request) {
+        return ResponseVO.success(productBomService.confirmCurrentVersion(bomId, request),
+            RequestIdUtil.getRequestId(request), OffsetDateTime.now());
+    }
+
+    @PostMapping("/boms/{bomId}/cancel-confirmation")
+    public ResponseVO<ProductBomVO> cancelCurrentConfirmation(@PathVariable Long bomId, HttpServletRequest request) {
+        return ResponseVO.success(productBomService.cancelCurrentConfirmation(bomId, request),
+            RequestIdUtil.getRequestId(request), OffsetDateTime.now());
     }
 
     @PutMapping("/boms/{bomId}/routes")
@@ -208,6 +229,24 @@ public class ProductBomController {
     @GetMapping("/boms/history/import/template")
     public ResponseEntity<byte[]> downloadHistoricalTemplate() {
         return xlsx("historical-BOM-import-template.xlsx", historicalImportService.buildTemplate());
+    }
+
+    @GetMapping("/boms/history/merge/analysis")
+    public ResponseVO<BomHistoryMergeResultVO> analyzeHistoricalBomMerge(
+        @RequestParam(required = false) Long productId,
+        HttpServletRequest request
+    ) {
+        return ResponseVO.success(historicalBomMergeService.analyze(productId),
+            RequestIdUtil.getRequestId(request), OffsetDateTime.now());
+    }
+
+    @PostMapping("/boms/history/merge/auto")
+    public ResponseVO<BomHistoryMergeResultVO> autoMergeHistoricalBoms(
+        @RequestParam(required = false) Long productId,
+        HttpServletRequest request
+    ) {
+        return ResponseVO.success(historicalBomMergeService.autoMerge(productId, request),
+            RequestIdUtil.getRequestId(request), OffsetDateTime.now());
     }
 
     private ResponseEntity<byte[]> xlsx(String fileName, byte[] content) {

@@ -31,7 +31,7 @@ async function commit() {
 
 <template>
   <el-dialog :model-value="modelValue" title="批量导入颜色编码" width="760px" destroy-on-close @close="emit('update:modelValue', false)">
-    <el-alert title="读取 Códigos de color 工作表，第 6 行表头、第 7 行起为颜色数据。编码按文本保存，不会丢失前导零。" type="info" show-icon :closable="false" />
+    <el-alert title="支持 Códigos de color 或 颜色编码工作表，第 6 行表头、第 7 行起为颜色数据。西语模板更新原名称，中文模板更新中文名称。" type="info" show-icon :closable="false" />
     <el-upload class="import-drop" drag :auto-upload="false" :show-file-list="false" accept=".xlsx" :on-change="selectFile">
       <el-icon class="import-drop__icon"><Upload /></el-icon><div>拖入 XLSX，或点击选择文件</div>
     </el-upload>
@@ -40,7 +40,7 @@ async function commit() {
     </div>
     <el-table v-if="preview?.rows.length" :data="preview.rows" max-height="300" border>
       <el-table-column prop="rowNo" label="行" width="64" /><el-table-column prop="codeValue" label="编码" width="100" />
-      <el-table-column prop="codeName" label="颜色" /><el-table-column prop="status" label="状态" width="100" /><el-table-column prop="action" label="处理" width="100" />
+      <el-table-column prop="codeName" label="原名称" /><el-table-column prop="codeNameZh" label="中文名称" /><el-table-column prop="status" label="状态" width="100" /><el-table-column prop="action" label="处理" width="100" />
     </el-table>
     <el-alert v-for="error in preview?.errors || []" :key="`${error.rowNo}-${error.field}`" type="error" :title="`第 ${error.rowNo} 行 ${error.field}：${error.reason}`" :closable="false" />
     <template #footer><el-button @click="emit('update:modelValue', false)">取消</el-button><el-button type="primary" :loading="loading" :disabled="!preview || preview.errorCount > 0 || preview.createCount + preview.updateCount === 0" @click="commit">确认导入</el-button></template>

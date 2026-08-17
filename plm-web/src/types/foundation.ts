@@ -8,7 +8,7 @@ export interface FoundationProductRef {
   model: string
   color: string
   customerName: string
-  productType: 'product_line' | 'model_variant'
+  productType: 'product_line' | 'model_variant' | 'sku'
   parentProductId?: number | null
   versionNo: string
   status: CommonStatus
@@ -89,6 +89,9 @@ export interface ProductTimelineNode {
   experienceSummary?: string
   documentCount?: number
   phaseName?: string
+  stageCode?: string | null
+  stageName?: string | null
+  requiredFileCategory?: string | null
   nextReceiverRole?: string
   nextReceiverUserName?: string
 }
@@ -240,7 +243,7 @@ export interface InventoryListRow {
   inventoryType: string
   productName?: string
   phoneModel?: string
-  status: 'available' | 'reserved' | 'consumed' | 'in_use'
+  status: 'draft' | 'available' | 'reserved' | 'consumed' | 'closed' | 'in_use'
   supplierName: string
   updatedAt: string
   projectDate?: string
@@ -393,3 +396,4 @@ export interface SkuProcessRouteRow {
   outputType?: string
   summary?: string
 }
+

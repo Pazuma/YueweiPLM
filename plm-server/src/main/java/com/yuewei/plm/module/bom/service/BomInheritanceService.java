@@ -13,12 +13,15 @@ import com.yuewei.plm.module.bom.repository.ProductBomItemRepository;
 import com.yuewei.plm.module.bom.repository.ProductBomRepository;
 import com.yuewei.plm.module.bom.repository.ProductBomRouteColorRepository;
 import com.yuewei.plm.module.bom.repository.ProductBomRouteRepository;
+import com.yuewei.plm.module.process.entity.ProcessEntity;
+import com.yuewei.plm.module.process.repository.ProcessRepository;
 import com.yuewei.plm.repository.ProductRepository;
 import com.yuewei.plm.repository.entity.BaseEntity;
 import com.yuewei.plm.repository.entity.Product;
 import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -33,19 +36,11 @@ public class BomInheritanceService {
     private final ProductBomRouteColorRepository colorRepository;
     private final ProductBomItemRepository itemRepository;
     private final ProductBomCostSnapshotRepository costRepository;
+    private final ProcessRepository processRepository;
 
     @Transactional
     public ProductBom inheritLatestReleasedAllColors(Long sourceProductId, Long targetProductId) {
-        List<ProductBom> sources = bomRepository.selectList(new LambdaQueryWrapper<ProductBom>()
-            .eq(ProductBom::getProductId, sourceProductId)
-            .eq(ProductBom::getBomScope, "formal")
-            .eq(ProductBom::getStatus, "released")
-            .eq(ProductBom::getDeletedFlag, 0)
-            .orderByDesc(ProductBom::getUpdatedAt));
-        if (sources == null || sources.isEmpty()) {
-            throw new BusinessException(ErrorCodeConstants.VALIDATION_ERROR, "父产品没有已发布正式 BOM，不能创建新型号项目");
-        }
-        ProductBom source = sources.get(0);
+        ProductBom source = latestReleasedFormalBom(sourceProductId);
         List<ProductBomRoute> routes = routeRepository.selectList(new LambdaQueryWrapper<ProductBomRoute>()
             .eq(ProductBomRoute::getProductBomId, source.getProductBomId())
             .eq(ProductBomRoute::getStatus, "active")
@@ -57,6 +52,31 @@ public class BomInheritanceService {
             throw new BusinessException(ErrorCodeConstants.VALIDATION_ERROR, "父产品正式 BOM 没有有效颜色，不能创建新型号项目");
         }
         return inherit(source.getProductBomId(), targetProductId, List.copyOf(colors));
+    }
+
+    @Transactional
+    public ProductBom inheritLatestReleasedByColors(Long sourceProductId, Long targetProductId, List<String> selectedColors) {
+        return inheritLatestReleasedByColors(sourceProductId, targetProductId, selectedColors, Map.of());
+    }
+
+    @Transactional
+    public ProductBom inheritLatestReleasedByColors(Long sourceProductId, Long targetProductId, List<String> selectedColors,
+                                                    Map<Long, Long> processIdMapping) {
+        ProductBom source = latestReleasedFormalBom(sourceProductId);
+        return inherit(source.getProductBomId(), targetProductId, selectedColors, null, processIdMapping);
+    }
+
+    private ProductBom latestReleasedFormalBom(Long sourceProductId) {
+        List<ProductBom> sources = bomRepository.selectList(new LambdaQueryWrapper<ProductBom>()
+            .eq(ProductBom::getProductId, sourceProductId)
+            .eq(ProductBom::getBomScope, "formal")
+            .eq(ProductBom::getStatus, "released")
+            .eq(ProductBom::getDeletedFlag, 0)
+            .orderByDesc(ProductBom::getUpdatedAt));
+        if (sources == null || sources.isEmpty()) {
+            throw new BusinessException(ErrorCodeConstants.VALIDATION_ERROR, "父产品没有已发布正式 BOM，不能创建新型号项目");
+        }
+        return sources.get(0);
     }
 
     @Transactional
@@ -75,6 +95,13 @@ public class BomInheritanceService {
 
     private ProductBom inherit(
         Long sourceBomId, Long targetProductId, List<String> selectedColors, String targetVersionNo
+    ) {
+        return inherit(sourceBomId, targetProductId, selectedColors, targetVersionNo, Map.of());
+    }
+
+    private ProductBom inherit(
+        Long sourceBomId, Long targetProductId, List<String> selectedColors, String targetVersionNo,
+        Map<Long, Long> processIdMapping
     ) {
         ProductBom source = bomRepository.selectById(sourceBomId);
         if (source == null || !"released".equals(source.getStatus())) {
@@ -103,7 +130,7 @@ public class BomInheritanceService {
             if (selectedRouteColors.isEmpty()) {
                 continue;
             }
-            ProductBomRoute targetRoute = copyRoute(sourceRoute, targetBom, now);
+            ProductBomRoute targetRoute = copyRoute(sourceRoute, targetBom, now, processIdMapping);
             routeRepository.insert(targetRoute);
             selectedRouteColors.forEach(sourceColor -> colorRepository.insert(copyColor(sourceColor, targetBom, targetRoute, now)));
             List<ProductBomItem> sourceItems = itemRepository.selectList(new LambdaQueryWrapper<ProductBomItem>()
@@ -151,13 +178,25 @@ public class BomInheritanceService {
         return target;
     }
 
-    private ProductBomRoute copyRoute(ProductBomRoute source, ProductBom targetBom, LocalDateTime now) {
+    private ProductBomRoute copyRoute(ProductBomRoute source, ProductBom targetBom, LocalDateTime now,
+                                      Map<Long, Long> processIdMapping) {
         ProductBomRoute target = new ProductBomRoute();
+        Long sourceProcessId = source.getProcessId();
+        Long targetProcessId = sourceProcessId == null
+            ? null
+            : processIdMapping.getOrDefault(sourceProcessId, sourceProcessId);
+        ProcessEntity inheritedProcess = sourceProcessId != null && processIdMapping.containsKey(sourceProcessId)
+            ? processRepository.selectById(targetProcessId)
+            : null;
         target.setProductBomId(targetBom.getProductBomId());
         target.setProductId(targetBom.getProductId());
-        target.setProcessId(source.getProcessId());
-        target.setRouteCode(source.getRouteCode());
-        target.setRouteName(source.getRouteName());
+        target.setProcessId(targetProcessId);
+        target.setRouteCode(inheritedProcess == null ? source.getRouteCode() : inheritedProcess.getProcessCode());
+        target.setRouteName(inheritedProcess == null ? source.getRouteName() : inheritedProcess.getProcessName());
+        target.setSharedBomGroupCode(source.getSharedBomGroupCode());
+        target.setRouteVariantNo(source.getRouteVariantNo());
+        target.setVariantName(source.getVariantName());
+        target.setVariantSourceType("inherited");
         target.setStatus("active");
         target.setSourceProductBomRouteId(source.getProductBomRouteId());
         fillCreate(target, now);
@@ -184,6 +223,7 @@ public class BomInheritanceService {
         ProductBomItem target = new ProductBomItem();
         target.setProductBomId(targetBom.getProductBomId());
         target.setProductBomRouteId(targetRoute.getProductBomRouteId());
+        target.setSharedBomGroupCode(targetRoute.getSharedBomGroupCode());
         target.setProductId(targetBom.getProductId());
         target.setInventoryId(source.getInventoryId());
         target.setItemCode(source.getItemCode());

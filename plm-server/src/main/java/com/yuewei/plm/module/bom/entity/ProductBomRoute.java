@@ -18,6 +18,10 @@ public class ProductBomRoute extends BaseEntity {
     private Long processId;
     private String routeCode;
     private String routeName;
+    private String sharedBomGroupCode;
+    private String routeVariantNo;
+    private String variantName;
+    private String variantSourceType;
     private String status;
     private Long sourceProductBomRouteId;
 }

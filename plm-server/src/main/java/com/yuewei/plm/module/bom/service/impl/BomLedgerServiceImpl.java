@@ -25,13 +25,16 @@ import com.yuewei.plm.module.bom.vo.ProductBomRouteVO;
 import com.yuewei.plm.module.bom.vo.ProductBomWorkbenchVO;
 import com.yuewei.plm.repository.ProductRepository;
 import com.yuewei.plm.repository.entity.Product;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 @Service
 @RequiredArgsConstructor
@@ -87,21 +90,29 @@ public class BomLedgerServiceImpl implements BomLedgerService {
             ProductBomRouteVO.builder()
                 .productBomRouteId(route.getProductBomRouteId()).productBomId(bomId)
                 .processId(route.getProcessId()).routeCode(route.getRouteCode()).routeName(route.getRouteName())
+                .sharedBomGroupCode(route.getSharedBomGroupCode()).routeVariantNo(route.getRouteVariantNo())
+                .variantName(route.getVariantName()).sourceProductBomRouteId(route.getSourceProductBomRouteId())
                 .status(route.getStatus()).colors(activeColors(route.getProductBomRouteId()).stream()
                     .map(ProductBomRouteColor::getColorName).toList())
                 .colorItems(activeColors(route.getProductBomRouteId()).stream()
                     .map(com.yuewei.plm.module.bom.vo.ProductBomRouteColorVO::from).toList())
                 .items(activeItems(route.getProductBomRouteId()).stream().map(ProductBomItemVO::from).toList())
-                .costSnapshot(currentCost(bomId, route.getProductBomRouteId())).build()
+                .costSnapshot(currentCost(bomId, route.getProductBomRouteId()))
+                .skuUnitCost(currentCost(bomId, route.getProductBomRouteId()) == null
+                    ? null : currentCost(bomId, route.getProductBomRouteId()).getTotalCost()).build()
         ).toList();
         List<ProductBomItemVO> testItems = "test".equals(bom.getBomScope())
             ? safe(itemRepository.selectList(new LambdaQueryWrapper<ProductBomItem>()
                 .eq(ProductBomItem::getProductBomId, bomId).eq(ProductBomItem::getDeletedFlag, 0)))
                 .stream().map(ProductBomItemVO::from).toList()
             : List.of();
+        BigDecimal currentSkuCost = averageRouteCost(routeVOs);
         return ProductBomWorkbenchVO.builder().productBomId(bomId).productId(bom.getProductId())
             .bomCode(bom.getBomCode()).bomName(bom.getBomName()).bomScope(bom.getBomScope())
             .versionNo(bom.getVersionNo()).status(bom.getStatus()).testTotalCost(bom.getTestTotalCost())
+            .rdTotalCost(sumRouteCosts(routeVOs).add(bom.getTestTotalCost() == null ? BigDecimal.ZERO : bom.getTestTotalCost()))
+            .formalAverageUnitCost("formal".equals(bom.getBomScope()) ? currentSkuCost : null)
+            .currentBomSkuUnitCost(currentSkuCost)
             .calculatedAt(bom.getCalculatedAt()).testItems(testItems).routes(routeVOs).build();
     }
 
@@ -109,7 +120,7 @@ public class BomLedgerServiceImpl implements BomLedgerService {
     public List<BomSkuRowVO> listSkus(Long bomId) {
         ProductBom bom = requireBom(bomId);
         List<ProductBomRoute> routes = activeRoutes(bomId);
-        Map<String, List<ProductBomRoute>> byColor = routesByColor(routes);
+        ColorRouteIndex colorRouteIndex = indexRoutesByColor(routes);
         List<Product> products = safe(productRepository.selectList(new LambdaQueryWrapper<Product>()
             .eq(Product::getParentProductId, bom.getProductId()).eq(Product::getDeletedFlag, 0)));
         if (products.isEmpty()) {
@@ -118,18 +129,30 @@ public class BomLedgerServiceImpl implements BomLedgerService {
         }
         List<BomSkuRowVO> result = new ArrayList<>();
         for (Product product : products) {
-            List<ProductBomRoute> matches = byColor.getOrDefault(product.getColor(), List.of());
+            List<ProductBomRoute> matches = routesForProduct(product, colorRouteIndex);
             if (matches.size() > 1) {
                 throw new BusinessException(ErrorCodeConstants.CODE_CONFLICT,
                     "颜色 " + product.getColor() + " 匹配到多条有效工艺路线");
             }
             ProductBomRoute route = matches.isEmpty() ? null : matches.get(0);
-            result.add(BomSkuRowVO.builder().productId(product.getProductId()).skuCode(product.getProductCode())
-                .productName(product.getProductName()).phoneModel(product.getModel()).color(product.getColor())
+            result.add(BomSkuRowVO.builder().productId(product.getProductId()).skuCode(skuDisplayCode(product))
+                .productName(product.getProductName()).phoneModel(product.getModel()).phoneModelCode(product.getPhoneModelCode())
+                .color(product.getColor()).colorCode(product.getColorCode()).finishedProductCode(product.getFinishedProductCode())
                 .status(product.getStatus()).productBomRouteId(route == null ? null : route.getProductBomRouteId())
-                .routeCode(route == null ? null : route.getRouteCode()).build());
+                .routeCode(route == null ? null : route.getRouteCode())
+                .sharedBomGroupCode(route == null ? null : route.getSharedBomGroupCode())
+                .routeVariantNo(route == null ? null : route.getRouteVariantNo())
+                .variantName(route == null ? null : route.getVariantName())
+                .skuUnitCost(route == null || currentCost(bomId, route.getProductBomRouteId()) == null
+                    ? null : currentCost(bomId, route.getProductBomRouteId()).getTotalCost()).build());
         }
         return result;
+    }
+
+    private String skuDisplayCode(Product product) {
+        return product.getFinishedProductCode() != null && !product.getFinishedProductCode().isBlank()
+            ? product.getFinishedProductCode()
+            : product.getProductCode();
     }
 
     @Override
@@ -150,19 +173,84 @@ public class BomLedgerServiceImpl implements BomLedgerService {
         ProductBom test = values.stream().filter(value -> "test".equals(value.getBomScope())).findFirst().orElse(null);
         List<ProductBomWorkbenchVO> formal = values.stream().filter(value -> "formal".equals(value.getBomScope()))
             .map(value -> getWorkbench(value.getProductBomId())).toList();
-        return BomSummaryVO.builder().testTotalCost(test == null ? null : test.getTestTotalCost())
-            .testCalculatedAt(test == null ? null : test.getCalculatedAt())
-            .testVersionNo(test == null ? null : test.getVersionNo()).formalVersions(formal).build();
-    }
-
-    private Map<String, List<ProductBomRoute>> routesByColor(List<ProductBomRoute> routes) {
-        Map<String, List<ProductBomRoute>> values = new HashMap<>();
-        for (ProductBomRoute route : routes) {
-            for (ProductBomRouteColor color : activeColors(route.getProductBomRouteId())) {
-                values.computeIfAbsent(color.getColorName(), key -> new ArrayList<>()).add(route);
+        List<ProductBomWorkbenchVO> all = values.stream().filter(value -> !"test".equals(value.getBomScope()))
+            .map(value -> getWorkbench(value.getProductBomId())).toList();
+        BigDecimal rdTotalCost = values.stream().filter(value -> "test".equals(value.getBomScope()))
+            .map(ProductBom::getTestTotalCost).filter(java.util.Objects::nonNull).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal formalCost = BigDecimal.ZERO;
+        int formalSkuCount = 0;
+        for (ProductBomWorkbenchVO workbench : all) {
+            BigDecimal routeTotal = sumRouteCosts(workbench.getRoutes());
+            rdTotalCost = rdTotalCost.add(routeTotal);
+            if ("formal".equals(workbench.getBomScope())) {
+                for (ProductBomRouteVO route : workbench.getRoutes()) {
+                    int colorCount = route.getColors() == null || route.getColors().isEmpty() ? 1 : route.getColors().size();
+                    if (route.getSkuUnitCost() != null) {
+                        formalCost = formalCost.add(route.getSkuUnitCost().multiply(BigDecimal.valueOf(colorCount)));
+                        formalSkuCount += colorCount;
+                    }
+                }
             }
         }
-        return values;
+        ProductBomWorkbenchVO current = all.isEmpty() ? null : all.get(0);
+        return BomSummaryVO.builder().testTotalCost(test == null ? null : test.getTestTotalCost())
+            .testCalculatedAt(test == null ? null : test.getCalculatedAt())
+            .testVersionNo(test == null ? null : test.getVersionNo()).formalVersions(formal)
+            .rdTotalCost(rdTotalCost)
+            .formalAverageUnitCost(formalSkuCount == 0 ? null : formalCost.divide(BigDecimal.valueOf(formalSkuCount), 6, java.math.RoundingMode.HALF_UP))
+            .currentBomSkuUnitCost(current == null ? null : current.getCurrentBomSkuUnitCost()).build();
+    }
+
+    private BigDecimal sumRouteCosts(List<ProductBomRouteVO> routes) {
+        return routes.stream().map(ProductBomRouteVO::getSkuUnitCost).filter(java.util.Objects::nonNull)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    private BigDecimal averageRouteCost(List<ProductBomRouteVO> routes) {
+        if (routes.isEmpty()) return null;
+        BigDecimal total = BigDecimal.ZERO;
+        int count = 0;
+        for (ProductBomRouteVO route : routes) {
+            if (route.getSkuUnitCost() == null) continue;
+            int colors = route.getColors() == null || route.getColors().isEmpty() ? 1 : route.getColors().size();
+            total = total.add(route.getSkuUnitCost().multiply(BigDecimal.valueOf(colors)));
+            count += colors;
+        }
+        return count == 0 ? null : total.divide(BigDecimal.valueOf(count), 6, java.math.RoundingMode.HALF_UP);
+    }
+
+    private ColorRouteIndex indexRoutesByColor(List<ProductBomRoute> routes) {
+        Map<String, List<ProductBomRoute>> byCode = new HashMap<>();
+        Map<String, List<ProductBomRoute>> byName = new HashMap<>();
+        for (ProductBomRoute route : routes) {
+            for (ProductBomRouteColor color : activeColors(route.getProductBomRouteId())) {
+                if (StringUtils.hasText(color.getColorCode())) {
+                    byCode.computeIfAbsent(normalize(color.getColorCode()), key -> new ArrayList<>()).add(route);
+                }
+                if (StringUtils.hasText(color.getColorName())) {
+                    byName.computeIfAbsent(normalize(color.getColorName()), key -> new ArrayList<>()).add(route);
+                }
+            }
+        }
+        return new ColorRouteIndex(byCode, byName);
+    }
+
+    private List<ProductBomRoute> routesForProduct(Product product, ColorRouteIndex colorRouteIndex) {
+        if (StringUtils.hasText(product.getColorCode())) {
+            return colorRouteIndex.byCode().getOrDefault(normalize(product.getColorCode()), List.of());
+        }
+        if (StringUtils.hasText(product.getColor())) {
+            return colorRouteIndex.byName().getOrDefault(normalize(product.getColor()), List.of());
+        }
+        return List.of();
+    }
+
+    private String normalize(String value) {
+        return value == null ? null : value.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private record ColorRouteIndex(Map<String, List<ProductBomRoute>> byCode,
+                                   Map<String, List<ProductBomRoute>> byName) {
     }
 
     private int countSkusWithoutConflict(ProductBom bom) {

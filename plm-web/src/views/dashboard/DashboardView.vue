@@ -1,13 +1,17 @@
 <script setup lang="ts">
 import { ArrowRight, Document, Plus, Promotion, Tickets } from '@element-plus/icons-vue'
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
 
 import PageContainer from '@/components/PageContainer/index.vue'
 import StatusTag from '@/components/StatusTag/index.vue'
+import ModelVariantRequirementForm from '@/views/project/components/ModelVariantRequirementForm.vue'
+import ProductionConfirmationDialog from '@/views/project/components/ProductionConfirmationDialog.vue'
 import {
   confirmTimelineNode,
+  getProjectDetail,
+  getProjects,
   getProjectTimeline,
   getWorkbenchInProgressProjects,
   returnTimelineNode,
@@ -15,6 +19,7 @@ import {
   type TimelineNodeVO
 } from '@/api/modules/project'
 import { uploadTimelineAttachment } from '@/api/modules/attachment'
+import { createProduct, getProductProductionColors, type ProductCreatePayload, type ProductProductionColor } from '@/api/modules/product'
 import { useUserStore } from '@/stores/user'
 import { findCurrentTimelineStep, mapTimelineStages, type TimelineStageView } from '@/utils/timelineAdapter'
 import { normalizeLegacyProductTarget } from '@/utils/projectRoute'
@@ -28,7 +33,8 @@ interface DashboardProductItem {
   ownerUserName: string
   activeBomVersion: string
   completionRate: number
-  status: 'draft' | 'developing' | 'reviewing'
+  status: 'draft' | 'developing' | 'released'
+  productType: 'product_line' | 'model_variant'
 }
 
 interface DashboardTaskItem {
@@ -45,7 +51,7 @@ interface DashboardTaskItem {
   currentStepNo?: number
   ownerUserName?: string
   completionRate?: number
-  status?: 'draft' | 'developing' | 'reviewing'
+  status?: 'draft' | 'developing' | 'released'
 }
 
 interface DashboardRiskItem {
@@ -80,7 +86,7 @@ interface DashboardProjectProgressTarget {
   currentStepNo?: number
   ownerUserName?: string
   completionRate?: number
-  status?: 'draft' | 'developing' | 'reviewing'
+  status?: 'draft' | 'developing' | 'released'
   targetPath: string
 }
 
@@ -158,37 +164,13 @@ interface ProjectOrderOption {
   sourceType: 'customer' | 'market_internal'
 }
 
-interface ApprovalTemplateNodeOption {
-  nodeKey: string
-  nodeName: string
-  approverRole: string
-  required: boolean
-}
-
-interface ApprovalTemplateOption {
-  templateId: string
-  templateName: string
-  projectType: CreateProjectType | 'all'
-  nodes: ApprovalTemplateNodeOption[]
-}
-
-interface ApprovalNodeApproverValue {
-  nodeKey: string
-  approverUserId: string
-  approverUserName: string
-}
-
 interface CreateProjectForm {
   relatedOrderCode: string
   dingTalkApprovalNo: string
-  approvalTemplateId: string
-  approvalNodeApprovers: ApprovalNodeApproverValue[]
   projectType: CreateProjectType
   productName: string
-  seriesName: string
   parentProductId: number | null
   model: string
-  color: string
   ownerUserName: string
   customerName: string
   currentStage: string
@@ -215,7 +197,8 @@ async function loadInProgressProjects() {
     ownerUserName: item.ownerUserName,
     activeBomVersion: item.activeBomVersion,
     completionRate: item.completionRate,
-    status: item.status as DashboardProductItem['status']
+    status: item.status as DashboardProductItem['status'],
+    productType: item.productType === 'model_variant' ? 'model_variant' : 'product_line'
   }))
 }
 
@@ -235,18 +218,15 @@ const quickActions: QuickActionItem[] = [
 /* ========== 新建项目弹窗状态 ========== */
 
 const createProjectVisible = ref(false)
+const createProjectSubmitting = ref(false)
 
 const createProjectForm = reactive<CreateProjectForm>({
   relatedOrderCode: '',
   dingTalkApprovalNo: '',
-  approvalTemplateId: '',
-  approvalNodeApprovers: [],
   projectType: 'product_line',
   productName: '',
-  seriesName: '',
   parentProductId: null,
   model: '',
-  color: '',
   ownerUserName: '',
   customerName: '',
   currentStage: '立项确认',
@@ -256,11 +236,9 @@ const createProjectForm = reactive<CreateProjectForm>({
 
 const projectOrderOptions = computed<ProjectOrderOption[]>(() => [])
 
-const approvalTemplateOptions = computed<ApprovalTemplateOption[]>(() => [])
-
-const approverOptions = computed<Array<{ userId: string; userName: string; roleName: string }>>(() => [])
-
-const productLineOptions = computed<Array<{ productId: number; productName: string }>>(() => [])
+const productLineOptions = ref<Array<{ productId: number; productName: string; productCode: string; status: string }>>([])
+const inheritedColorPreview = ref<ProductProductionColor[]>([])
+const inheritedColorLoading = ref(false)
 
 const topMetrics = computed<DashboardMetric[]>(() => [
   {
@@ -356,6 +334,9 @@ const progressUploadVisible = ref(false)
 const progressUploadFile = ref<File | null>(null)
 const progressUploadCategory = ref('other')
 const progressUploadStepKey = ref('')
+const progressUploadRemark = ref('')
+const productionConfirmationVisible = ref(false)
+const productionConfirmationMode = ref<'operations' | 'colors'>('operations')
 
 const progressUploadCategoryOptions = [
   { label: '图纸', value: 'drawing' },
@@ -375,12 +356,11 @@ const newProductLineProgressTemplate = [
 ]
 
 const modelVariantProgressTemplate = [
-  { nodeKey: 'ext-confirm', title: '扩展确认', phase: '扩展确认阶段', hint: '确认父产品和新型号需求来源。', ownerRole: '项目经理', childSteps: [{ stepNo: 1, title: '新型号需求确认', requireUpload: true, uploadLabel: '上传需求资料' }, { stepNo: 2, title: 'Product 子版本建立' }] },
-  { nodeKey: 'diff-design', title: '差异设计', phase: '差异调整阶段', hint: '聚焦孔位、尺寸、颜色、包装等差异。', ownerRole: '工程 / 供应商', childSteps: [{ stepNo: 3, title: '图纸与外观差异确认', requireUpload: true, uploadLabel: '上传差异图纸' }] },
-  { nodeKey: 'mold-branch', title: '模具判断', phase: '模具决策阶段', hint: '体现改模、新开模、无需模具变更的分支。', ownerRole: '工程 / 模具', childSteps: [{ stepNo: 4, title: '开模/改模申请', requireApproval: true }, { stepNo: 5, title: '制作或修改模具', requireUpload: true, uploadLabel: '上传模具修改资料' }, { stepNo: 6, title: '测试模具', requireUpload: true, uploadLabel: '上传试模记录' }] },
-  { nodeKey: 'diff-verify', title: '差异验证', phase: '验证阶段', hint: '只验证变化部分，不重复完整新产品验证。', ownerRole: '工程 / 品质', childSteps: [{ stepNo: 7, title: '差异组件/工艺确认', requireUpload: true, uploadLabel: '上传差异工艺' }, { stepNo: 8, title: '样品确认', requireUpload: true, uploadLabel: '上传样品确认资料' }, { stepNo: 9, title: '差异测试验证', requireUpload: true, uploadLabel: '上传差异测试报告' }, { stepNo: 10, title: '生产资料整理', requireUpload: true, uploadLabel: '上传增量 SOP/SIP' }] },
-  { nodeKey: 'variant-pilot', title: '小批与 MX 验证', phase: '市场验证阶段', hint: '确认新型号在产线和 MX 端可稳定承接。', ownerRole: '生产 / 品质', childSteps: [{ stepNo: 11, title: '小批量测试', requireUpload: true, uploadLabel: '上传小批测试记录' }, { stepNo: 12, title: '运模' }, { stepNo: 13, title: 'MX 验收', requireUpload: true, uploadLabel: '上传 MX 验收记录' }, { stepNo: 14, title: 'MX 小批量验证', requireUpload: true, uploadLabel: '上传 MX 小批量验证记录' }] },
-  { nodeKey: 'freeze-release', title: '冻结发布', phase: '投产发布阶段', hint: '冻结新型号 BOM、工艺、图纸和资料后正式发布。', ownerRole: '工程 / 管理层', childSteps: [{ stepNo: 15, title: '版本冻结', requireApproval: true }, { stepNo: 16, title: '正式发布', requireApproval: true }] }
+  { nodeKey: 'ext-confirm', title: '立项确认', phase: '立项阶段', hint: '确认新型号需求来源和父产品关系。', ownerRole: '项目经理 / 管理层', childSteps: [{ stepNo: 1, title: '产品立项', requireUpload: true, uploadLabel: '上传立项资料' }, { stepNo: 2, title: '确认立项', requireApproval: true }] },
+  { nodeKey: 'diff-design', title: '设计确认', phase: '设计验证阶段', hint: '确认图纸、外观和供应商可制造性差异。', ownerRole: '工程 / 供应商', childSteps: [{ stepNo: 3, title: '画图查看', requireUpload: true, uploadLabel: '上传图纸' }, { stepNo: 4, title: '供应商确认外观图纸', requireUpload: true, uploadLabel: '上传供应商确认资料' }] },
+  { nodeKey: 'mold-branch', title: '开模试模', phase: '开模阶段', hint: '完成开模申请、模具制作和试模验证。', ownerRole: '工程 / 模具', childSteps: [{ stepNo: 5, title: '申请开模', requireApproval: true }, { stepNo: 6, title: '制作模具', requireUpload: true, uploadLabel: '上传模具资料' }, { stepNo: 7, title: '测试模具', requireUpload: true, uploadLabel: '上传试模记录' }] },
+  { nodeKey: 'diff-verify', title: '样品与工艺', phase: '样品 / 工艺定型阶段', hint: '确认签样、工艺、组件、测试和生产资料。', ownerRole: '工程 / 品质', childSteps: [{ stepNo: 8, title: '签样确认', requireUpload: true, uploadLabel: '上传签样资料' }, { stepNo: 9, title: '加工艺', requireUpload: true, uploadLabel: '上传工艺方案' }, { stepNo: 10, title: '敲定工序', requireUpload: true, uploadLabel: '上传工序' }, { stepNo: 11, title: '确认组件' }, { stepNo: 12, title: '确认组件成品' }, { stepNo: 13, title: '最终外观确认样', requireUpload: true, uploadLabel: '上传外观确认样' }, { stepNo: 14, title: '红样测试', requireUpload: true, uploadLabel: '上传测试报告' }, { stepNo: 15, title: '整理生产资料', requireUpload: true, uploadLabel: '上传 SOP / SIP' }, { stepNo: 16, title: '黄样', requireUpload: true, uploadLabel: '上传黄样确认资料' }] },
+  { nodeKey: 'variant-pilot', title: '小批与 MX 验证', phase: '市场验证阶段', hint: '完成小批量测试和运模移交，运模确认后 PLM 进入完成/归档/移交状态。', ownerRole: '生产 / 品质', childSteps: [{ stepNo: 17, title: '小批量测试', requireUpload: true, uploadLabel: '上传小批测试记录' }, { stepNo: 18, title: '运模 / 移交 MX' }] }
 ]
 
 const activeProgressTemplate = computed(() =>
@@ -497,7 +477,7 @@ const selectedProgressChildSteps = computed<DashboardChildStepView[]>(() => {
     const isCurrent = Boolean(step.isCurrent ?? step.stepNo === currentProgressStepNo.value)
     const isConfirmed = Boolean(step.isConfirmed ?? (step.stepNo < currentProgressStepNo.value || Boolean(node.confirmed && isCurrent)))
     const hasUploaded = Boolean(step.requireUpload && uploadCount > 0)
-    const processRouteStep = isProcessRouteStep(step)
+    const processRouteCreateStep = isProcessRouteCreateStep(step)
     const visualStatus: ChildStepVisualStatus = step.visualStatus || (isConfirmed
       ? 'confirmed'
       : hasUploaded
@@ -513,7 +493,7 @@ const selectedProgressChildSteps = computed<DashboardChildStepView[]>(() => {
       isCurrent,
       isConfirmed,
       hasUploaded,
-      uploadLabel: processRouteStep ? '新建工艺路线' : step.uploadLabel,
+      uploadLabel: processRouteCreateStep ? '新建工艺路线' : step.uploadLabel,
       visualStatus
     }
   })
@@ -525,22 +505,72 @@ const progressUploadStepOptions = computed(() => {
 
 const processRouteStepKeys = new Set([
   'PRODUCT_LINE_PROCESS_ADD',
-  'PRODUCT_LINE_PROCESS_CONFIRM',
+  'MODEL_VARIANT_PROCESS_PLAN',
   'MODEL_VARIANT_PROCESS_DIFF_CONFIRM'
 ])
 
-function isProcessRouteStep(step?: { nodeKey?: string; stepNo?: number; title?: string; stepName?: string; nodeName?: string } | null) {
+const processConfirmationNodeKeys = new Set([
+  'PRODUCT_LINE_PROCESS_CONFIRM',
+  'MODEL_VARIANT_PROCESS_CONFIRM'
+])
+const productionColorNodeKeys = new Set([
+  'PRODUCT_LINE_PRODUCTION_DECISION_STEP',
+  'MODEL_VARIANT_MOLD_TRANSFER'
+])
+
+function getProgressStepName(step: { title?: string; stepName?: string; nodeName?: string }) {
+  return step.title || step.stepName || step.nodeName || ''
+}
+
+function isProcessRouteCreateStep(step?: { nodeKey?: string; stepNo?: number; title?: string; stepName?: string; nodeName?: string } | null) {
   if (!step) return false
-  const name = step.title || step.stepName || step.nodeName || ''
+  const name = getProgressStepName(step)
   return Boolean(
     (step.nodeKey && processRouteStepKeys.has(step.nodeKey)) ||
     step.stepNo === 9 ||
-    step.stepNo === 10 ||
     (step.stepNo === 7 && name.includes('工艺'))
   )
 }
 
-const isCurrentProcessRouteStep = computed(() => isProcessRouteStep(currentProgressStep.value))
+function isProcessConfirmationStep(step?: { nodeKey?: string; stepNo?: number; title?: string; stepName?: string; nodeName?: string } | null) {
+  if (!step) return false
+  const key = step.nodeKey || ''
+  const name = getProgressStepName(step)
+  return Boolean(
+    processConfirmationNodeKeys.has(key) ||
+    key.endsWith('_PROCESS_CONFIRM_STEP') ||
+    step.stepNo === 10 ||
+    name.includes('敲定投产工序') ||
+    name.includes('敲定工序')
+  )
+}
+
+function isProductionColorStep(step?: { nodeKey?: string; stepNo?: number; title?: string; stepName?: string; nodeName?: string } | null) {
+  if (!step) return false
+  const key = step.nodeKey || ''
+  const name = getProgressStepName(step)
+  return Boolean(
+    productionColorNodeKeys.has(key) ||
+    step.stepNo === 18 ||
+    step.stepNo === 22 ||
+    name.includes('投产决策') ||
+    name.includes('运模')
+  )
+}
+
+const isCurrentProcessRouteCreateStep = computed(() => isProcessRouteCreateStep(currentProgressStep.value))
+const isCurrentProcessConfirmationStep = computed(() => isProcessConfirmationStep(currentProgressStep.value))
+const isCurrentProductionColorStep = computed(() => isProductionColorStep(currentProgressStep.value))
+
+const isModelVariantProject = computed(() =>
+  activeProgressProject.value?.productType === 'model_variant'
+)
+
+const isRequirementFormGate = computed(() =>
+  isModelVariantProject.value && activeProgressTimeline.value?.started === false
+)
+
+const canOperateProgressTimeline = computed(() => !isRequirementFormGate.value)
 
 function getProgressUploadOptionLabel(option: DashboardChildStepView) {
   return `第 ${option.stepNo} 步：${option.title}（${Number(option.uploadCount || 0)} 个附件）`
@@ -560,7 +590,9 @@ async function loadActiveProgressTimeline(projectId: number) {
       activeProgressProject.value = {
         ...activeProgressProject.value,
         currentStage: timeline.currentNode,
-        currentStepNo: timeline.currentStepNo
+        currentStepNo: timeline.currentStepNo,
+        completionRate: timeline.timelineCompleted ? 1 : activeProgressProject.value.completionRate,
+        status: timeline.timelineCompleted ? 'released' : activeProgressProject.value.status
       }
     }
   } catch (error) {
@@ -568,9 +600,32 @@ async function loadActiveProgressTimeline(projectId: number) {
   }
 }
 
+async function handleRequirementFormConfirmed() {
+  await refreshActiveProgressProject()
+}
+
 async function refreshActiveProgressProject() {
   if (!activeProgressProject.value) return
-  await loadActiveProgressTimeline(activeProgressProject.value.productId)
+  const projectId = activeProgressProject.value.productId
+  await loadActiveProgressTimeline(projectId)
+  try {
+    const detail = await getProjectDetail(projectId)
+    if (activeProgressProject.value?.productId === projectId) {
+      activeProgressProject.value = {
+        ...activeProgressProject.value,
+        productName: detail.productName || activeProgressProject.value.productName,
+        productCode: detail.productCode || activeProgressProject.value.productCode,
+        seriesName: detail.seriesName || activeProgressProject.value.seriesName,
+        currentStage: detail.currentStage || activeProgressProject.value.currentStage,
+        currentStepNo: detail.currentStepNo ?? activeProgressProject.value.currentStepNo,
+        ownerUserName: detail.ownerUserName || activeProgressProject.value.ownerUserName,
+        completionRate: detail.completionRate ?? activeProgressProject.value.completionRate,
+        status: detail.status as DashboardProjectProgressTarget['status']
+      }
+    }
+  } catch {
+    // Timeline refresh already updated the dialog; detail reload failure should not block the user flow.
+  }
   await loadInProgressProjects()
 }
 
@@ -600,6 +655,16 @@ function openProcessRouteCreateFromDashboard() {
       createProcessRoute: '1'
     }
   })
+}
+
+function openProductionConfirmationFromDashboard(mode: 'operations' | 'colors' = 'operations') {
+  if (!activeProgressProject.value) return
+  productionConfirmationMode.value = mode
+  productionConfirmationVisible.value = true
+}
+
+async function handleProductionConfirmationConfirmedFromDashboard() {
+  await refreshActiveProgressProject()
 }
 
 function getProgressNodeTagType(status: DashboardProgressNode['status']) {
@@ -699,6 +764,7 @@ function openProgressUpload() {
   progressUploadFile.value = null
   progressUploadStepKey.value = context.node.nodeKey
   progressUploadCategory.value = context.node.requiredFileCategory || 'other'
+  progressUploadRemark.value = ''
   progressUploadVisible.value = true
 }
 
@@ -721,7 +787,7 @@ async function submitProgressUpload() {
     progressActionLoading.value = 'upload'
     const attachment = await uploadTimelineAttachment(context.project.productId, progressUploadStepKey.value, progressUploadFile.value, {
       fileCategory: progressUploadCategory.value,
-      remark: '工作台当前节点资料'
+      remark: progressUploadRemark.value.trim() || '工作台节点资料上传'
     })
     progressUploadVisible.value = false
     await refreshActiveProgressProject()
@@ -736,16 +802,6 @@ async function submitProgressUpload() {
 
 /* ========== 新建项目弹窗逻辑 ========== */
 
-const selectedApprovalTemplate = computed(() => {
-  return approvalTemplateOptions.value.find((item) => item.templateId === createProjectForm.approvalTemplateId) || null
-})
-
-const filteredApprovalTemplateOptions = computed(() => {
-  return approvalTemplateOptions.value.filter((item) => {
-    return item.projectType === 'all' || item.projectType === createProjectForm.projectType
-  })
-})
-
 function handleQuickAction(action: QuickActionItem) {
   if (action.actionType === 'create_project') {
     openCreateProjectDialog()
@@ -756,70 +812,115 @@ function handleQuickAction(action: QuickActionItem) {
 
 function openCreateProjectDialog() {
   createProjectVisible.value = true
+  loadProductLineOptions()
+}
+
+async function loadProductLineOptions() {
+  try {
+    const projects = await getProjects({ page: 1, size: 200, productType: 'product_line' })
+    productLineOptions.value = projects.filter((item) => item.status === 'released').map((item) => ({
+      productId: item.productId,
+      productName: item.productName,
+      productCode: item.productCode,
+      status: item.status
+    }))
+  } catch {
+    productLineOptions.value = []
+  }
 }
 
 function handleRelatedOrderChange(orderCode: string) {
   const order = projectOrderOptions.value.find((item) => item.orderCode === orderCode)
-  if (!order) return
+  if (!order) {
+    createProjectForm.dingTalkApprovalNo = ''
+    createProjectForm.customerName = ''
+    return
+  }
   createProjectForm.dingTalkApprovalNo = order.dingTalkApprovalNo
   createProjectForm.customerName = order.customerName
   createProjectForm.productName = order.productName
 }
 
-function handleApprovalTemplateChange(templateId: string) {
-  const template = approvalTemplateOptions.value.find((item) => item.templateId === templateId)
-  createProjectForm.approvalNodeApprovers = (template?.nodes || []).map((node) => ({
-    nodeKey: node.nodeKey,
-    approverUserId: '',
-    approverUserName: ''
-  }))
-}
-
-function setApprovalNodeApprover(nodeKey: string, userId: string) {
-  const user = approverOptions.value.find((item) => item.userId === userId)
-  const node = createProjectForm.approvalNodeApprovers.find((item) => item.nodeKey === nodeKey)
-  if (!user || !node) return
-  node.approverUserId = user.userId
-  node.approverUserName = user.userName
+async function loadInheritedColorPreview(parentProductId: number | null) {
+  inheritedColorPreview.value = []
+  if (!parentProductId || createProjectForm.projectType !== 'model_variant') return
+  inheritedColorLoading.value = true
+  try {
+    inheritedColorPreview.value = await getProductProductionColors(parentProductId)
+  } catch (error) {
+    inheritedColorPreview.value = []
+    ElMessage.warning(error instanceof Error ? error.message : '对应产品敲定颜色读取失败')
+  } finally {
+    inheritedColorLoading.value = false
+  }
 }
 
 function validateCreateProjectForm() {
-  if (!createProjectForm.relatedOrderCode) return '请选择关联订单'
-  if (!createProjectForm.dingTalkApprovalNo.trim()) return '请填写钉钉审批号'
-  if (!createProjectForm.approvalTemplateId) return '请选择审批流程模板'
-  const missingApproverNode = selectedApprovalTemplate.value?.nodes.find((node) => {
-    const approver = createProjectForm.approvalNodeApprovers.find((item) => item.nodeKey === node.nodeKey)
-    return node.required && !approver?.approverUserId
-  })
-  if (missingApproverNode) return `请选择${missingApproverNode.nodeName}审批人`
   if (!createProjectForm.projectType) return '请选择项目类型'
   if (!createProjectForm.productName.trim()) return '请填写项目名称'
-  if (!createProjectForm.seriesName.trim()) return '请填写产品系列'
   if (!createProjectForm.ownerUserName.trim()) return '请填写项目负责人'
   if (!createProjectForm.expectedReleaseDate) return '请选择预期发布时间'
   if (!createProjectForm.projectSummary.trim()) return '请填写项目说明'
   if (createProjectForm.projectType === 'model_variant') {
-    if (!createProjectForm.parentProductId) return '新型号线必须选择所属产品线'
+    if (!createProjectForm.parentProductId) return '新型号线必须选择对应产品'
     if (!createProjectForm.model.trim()) return '新型号线必须填写机型'
-    if (!createProjectForm.color.trim()) return '新型号线必须填写颜色'
+    if (!inheritedColorPreview.value.length) return '对应产品尚未敲定正式投产颜色'
   }
   return ''
 }
 
-function submitCreateProject() {
+function buildCreateProjectPayload(): ProductCreatePayload {
+  const isModelVariant = createProjectForm.projectType === 'model_variant'
+  return {
+    parentProductId: isModelVariant ? createProjectForm.parentProductId : null,
+    productName: createProjectForm.productName.trim(),
+    productType: createProjectForm.projectType,
+    model: isModelVariant ? createProjectForm.model.trim() : '--',
+    versionNo: 'A',
+    createdBy: currentUserName.value || 'system',
+    remark: createProjectForm.projectSummary.trim()
+  }
+}
+
+async function submitCreateProject() {
   const message = validateCreateProjectForm()
   if (message) {
     ElMessage.warning(message)
     return
   }
-  ElMessage.success('项目已创建，后续接入后端保存接口')
-  createProjectVisible.value = false
-  router.push('/projects?tab=in_progress')
+  createProjectSubmitting.value = true
+  try {
+    const result = await createProduct(buildCreateProjectPayload())
+    ElMessage.success(`项目已创建：${result.productCode}`)
+    createProjectVisible.value = false
+    await loadInProgressProjects()
+    router.push({ path: '/projects', query: { tab: 'in_progress', productId: String(result.productId) } })
+  } finally {
+    createProjectSubmitting.value = false
+  }
 }
 
 function open(path: string) {
   router.push(normalizeLegacyProductTarget(path))
 }
+
+watch(
+  () => createProjectForm.projectType,
+  (value) => {
+    inheritedColorPreview.value = []
+    if (value === 'product_line') {
+      createProjectForm.parentProductId = null
+      createProjectForm.model = ''
+    } else {
+      loadInheritedColorPreview(createProjectForm.parentProductId)
+    }
+  }
+)
+
+watch(
+  () => createProjectForm.parentProductId,
+  (value) => loadInheritedColorPreview(value)
+)
 
 onMounted(loadInProgressProjects)
 </script>
@@ -854,7 +955,7 @@ onMounted(loadInProgressProjects)
           class="list-button"
           type="button"
           :data-test="`dashboard-project-${item.productId}`"
-          @click="openProjectProgress({ productId: item.productId, productName: item.productName, productCode: item.productCode, seriesName: item.seriesName, currentStage: item.currentStage, ownerUserName: item.ownerUserName, completionRate: item.completionRate, status: item.status, targetPath: `/products/${item.productId}` })"
+          @click="openProjectProgress({ productId: item.productId, productName: item.productName, productCode: item.productCode, seriesName: item.seriesName, productType: item.productType, currentStage: item.currentStage, ownerUserName: item.ownerUserName, completionRate: item.completionRate, status: item.status, targetPath: `/products/${item.productId}` })"
         >
           <div class="toolbar-row">
             <div class="cell-stack">
@@ -952,7 +1053,20 @@ onMounted(loadInProgressProjects)
             <el-button type="primary" plain @click="openActiveProjectDetail">项目详情</el-button>
           </div>
         </header>
-        <section class="project-progress-layout">
+        <ModelVariantRequirementForm
+          v-if="isRequirementFormGate"
+          :key="`requirement-form-${activeProgressProject.productId}`"
+          :project-id="activeProgressProject.productId"
+          @confirmed="handleRequirementFormConfirmed"
+        />
+        <el-alert
+          v-if="isRequirementFormGate"
+          type="info"
+          :closable="false"
+          show-icon
+          :title="activeProgressTimeline?.startBlockReason || '请先完成新型号项目信息完善表，确认后进入项目时间轴。'"
+        />
+        <section v-else class="project-progress-layout">
           <aside class="project-progress-node-list">
             <button v-for="node in dashboardProgressNodes" :key="node.nodeKey" class="project-progress-node-card" :class="[`is-${node.status}`, { 'is-selected': selectedProgressNode?.nodeKey === node.nodeKey }]" type="button" @click="activeProgressNodeKey = node.nodeKey">
               <div class="project-progress-node-card__title"><strong>{{ node.title }}</strong><el-tag size="small" effect="light" :type="getProgressNodeTagType(node.status)">{{ getProgressNodeStatusText(node.status) }}</el-tag></div>
@@ -990,17 +1104,27 @@ onMounted(loadInProgressProjects)
                 </article>
               </div>
             </section>
-            <footer class="project-progress-node-actions" v-if="selectedProgressNode.status === 'current'">
+            <footer class="project-progress-node-actions" v-if="selectedProgressNode.status === 'current' && canOperateProgressTimeline">
               <el-button data-test="dashboard-progress-confirm" plain :loading="progressActionLoading === 'confirm'" @click="handleProgressAction('confirm')">确认当前节点</el-button>
               <el-button data-test="dashboard-progress-return" type="danger" plain :loading="progressActionLoading === 'return'" @click="handleProgressAction('return')">返回上一步</el-button>
               <el-button type="warning" plain @click="handleProgressAction('force')">强制推进</el-button>
-              <el-button v-if="isCurrentProcessRouteStep" data-test="dashboard-process-route-create" type="primary" :icon="Plus" @click="openProcessRouteCreateFromDashboard">新建工艺路线</el-button>
-              <el-button v-else data-test="dashboard-progress-upload-open" plain :loading="progressActionLoading === 'upload'" @click="openProgressUpload">上传节点资料</el-button>
+              <el-button v-if="isCurrentProcessConfirmationStep" data-test="dashboard-production-confirmation-open" type="primary" plain @click="openProductionConfirmationFromDashboard('operations')">敲定投产工序</el-button>
+              <el-button v-if="isCurrentProductionColorStep" data-test="dashboard-production-colors-open" type="primary" plain @click="openProductionConfirmationFromDashboard('colors')">确认投产颜色</el-button>
+              <el-button v-if="isCurrentProcessRouteCreateStep" data-test="dashboard-process-route-create" type="primary" :icon="Plus" @click="openProcessRouteCreateFromDashboard">新建工艺路线</el-button>
+              <el-button data-test="dashboard-progress-upload-open" plain :loading="progressActionLoading === 'upload'" @click="openProgressUpload">上传节点资料</el-button>
             </footer>
           </section>
         </section>
       </div>
     </el-dialog>
+
+    <ProductionConfirmationDialog
+      v-if="activeProgressProject"
+      v-model="productionConfirmationVisible"
+      :project-id="activeProgressProject.productId"
+      :mode="productionConfirmationMode"
+      @confirmed="handleProductionConfirmationConfirmedFromDashboard"
+    />
 
     <el-dialog v-model="progressUploadVisible" title="上传节点资料" width="520px" destroy-on-close>
       <div class="project-progress-upload-form">
@@ -1024,6 +1148,10 @@ onMounted(loadInProgressProjects)
           <span class="subtle-text">选择文件</span>
           <input data-test="dashboard-progress-upload-file" type="file" @change="handleProgressUploadFileChange" />
         </label>
+        <label>
+          <span class="subtle-text">备注</span>
+          <textarea v-model="progressUploadRemark" data-test="dashboard-progress-upload-remark" rows="3" maxlength="255" placeholder="填写资料说明、版本来源或线下档案位置" />
+        </label>
         <p class="page-panel-desc">资料会上传到当前大节点内选择的小步骤，文件中心和阶段门禁读取同一份后端数据。</p>
       </div>
       <template #footer>
@@ -1034,11 +1162,12 @@ onMounted(loadInProgressProjects)
 
     <el-dialog v-model="createProjectVisible" title="新建项目" width="760px" destroy-on-close>
       <el-form label-width="110px" class="create-project-form">
-        <el-form-item label="关联订单" required>
+        <el-form-item label="关联订单">
           <el-select
             v-model="createProjectForm.relatedOrderCode"
+            clearable
             filterable
-            placeholder="选择需求订单"
+            placeholder="选择需求订单（可选）"
             @change="handleRelatedOrderChange"
           >
             <el-option
@@ -1050,52 +1179,9 @@ onMounted(loadInProgressProjects)
           </el-select>
         </el-form-item>
 
-        <el-form-item label="钉钉审批号" required>
-          <el-input v-model="createProjectForm.dingTalkApprovalNo" placeholder="填写钉钉审批号，选择订单后自动带出" />
+        <el-form-item label="钉钉审批号">
+          <el-input v-model="createProjectForm.dingTalkApprovalNo" disabled placeholder="由钉钉审批自动关联" />
         </el-form-item>
-
-        <el-form-item label="审批模板" required>
-          <el-select
-            v-model="createProjectForm.approvalTemplateId"
-            filterable
-            placeholder="选择审批流程模板"
-            @change="handleApprovalTemplateChange"
-          >
-            <el-option
-              v-for="template in filteredApprovalTemplateOptions"
-              :key="template.templateId"
-              :label="template.templateName"
-              :value="template.templateId"
-            />
-          </el-select>
-        </el-form-item>
-
-        <section v-if="selectedApprovalTemplate" class="approval-node-approver-panel">
-          <div
-            v-for="node in selectedApprovalTemplate.nodes"
-            :key="node.nodeKey"
-            class="approval-node-approver-row"
-          >
-            <div>
-              <strong>{{ node.nodeName }}</strong>
-              <span v-if="node.required" class="required-mark">*</span>
-              <span class="subtle-text">{{ node.approverRole }}</span>
-            </div>
-            <el-select
-              :model-value="createProjectForm.approvalNodeApprovers.find((item) => item.nodeKey === node.nodeKey)?.approverUserId || ''"
-              filterable
-              placeholder="选择审批人"
-              @change="(userId: string) => setApprovalNodeApprover(node.nodeKey, userId)"
-            >
-              <el-option
-                v-for="user in approverOptions"
-                :key="user.userId"
-                :label="user.userName"
-                :value="user.userId"
-              />
-            </el-select>
-          </div>
-        </section>
 
         <el-form-item label="项目类型" required>
           <el-segmented
@@ -1111,27 +1197,42 @@ onMounted(loadInProgressProjects)
           <el-input v-model="createProjectForm.productName" placeholder="填写项目 / 产品名称" />
         </el-form-item>
 
-        <el-form-item label="产品系列" required>
-          <el-input v-model="createProjectForm.seriesName" placeholder="填写产品系列" />
-        </el-form-item>
-
-        <el-form-item v-if="createProjectForm.projectType === 'model_variant'" label="所属产品线" required>
-          <el-select v-model="createProjectForm.parentProductId" filterable placeholder="选择所属产品线">
+        <el-form-item v-if="createProjectForm.projectType === 'model_variant'" label="对应产品" required>
+          <el-select
+            v-model="createProjectForm.parentProductId"
+            filterable
+            placeholder="选择已发布产品线"
+            popper-class="product-line-select-popper"
+          >
             <el-option
               v-for="product in productLineOptions"
               :key="product.productId"
-              :label="product.productName"
+              :label="`${product.productName} / ${product.productCode}`"
               :value="product.productId"
-            />
+            >
+              <div class="product-line-option" :title="`${product.productName} / ${product.productCode}`">
+                <span class="product-line-option__name">{{ product.productName }}</span>
+                <span class="product-line-option__code">{{ product.productCode }}</span>
+              </div>
+            </el-option>
           </el-select>
+        </el-form-item>
+
+        <el-form-item v-if="createProjectForm.projectType === 'model_variant'" label="继承颜色" required>
+          <div v-loading="inheritedColorLoading" class="inherited-color-list">
+            <el-tag
+              v-for="color in inheritedColorPreview"
+              :key="`${color.colorCode || ''}-${color.colorName}`"
+              effect="light"
+            >
+              {{ color.colorName }}
+            </el-tag>
+            <span v-if="!inheritedColorPreview.length" class="subtle-text">选择对应产品后自动继承已敲定颜色</span>
+          </div>
         </el-form-item>
 
         <el-form-item v-if="createProjectForm.projectType === 'model_variant'" label="机型" required>
           <el-input v-model="createProjectForm.model" placeholder="例如 iPhone18" />
-        </el-form-item>
-
-        <el-form-item v-if="createProjectForm.projectType === 'model_variant'" label="颜色" required>
-          <el-input v-model="createProjectForm.color" placeholder="例如 黑色 / 蓝色" />
         </el-form-item>
 
         <el-form-item label="项目负责人" required>
@@ -1149,7 +1250,7 @@ onMounted(loadInProgressProjects)
 
       <template #footer>
         <el-button @click="createProjectVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitCreateProject">创建项目</el-button>
+        <el-button type="primary" :loading="createProjectSubmitting" @click="submitCreateProject">创建项目</el-button>
       </template>
     </el-dialog>
   </PageContainer>
@@ -1323,6 +1424,7 @@ onMounted(loadInProgressProjects)
 .project-progress-upload-form { display: flex; flex-direction: column; gap: 14px; }
 .project-progress-upload-form label { display: flex; flex-direction: column; gap: 6px; }
 .project-progress-upload-form select,
+.project-progress-upload-form textarea,
 .project-progress-upload-form input[type="file"] { min-height: 36px; border: 1px solid #dcdfe6; border-radius: 6px; padding: 6px 10px; background: #fff; }
 .dashboard-toolbar--with-tabs { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .dashboard-segment-bar { display: flex; gap: 2px; background: #fff; border-radius: 8px; padding: 4px; overflow-x: auto; margin: 0; }
@@ -1339,37 +1441,39 @@ onMounted(loadInProgressProjects)
   padding-right: 4px;
 }
 
-.approval-node-approver-panel {
+.inherited-color-list {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-bottom: 18px;
-  padding: 12px 14px;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  background: #f8fafc;
-}
-
-.approval-node-approver-row {
-  display: flex;
+  min-height: 32px;
+  width: 100%;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
-.approval-node-approver-row > div {
-  display: flex;
-  flex-direction: column;
+.product-line-option {
+  display: grid;
   gap: 2px;
-  min-width: 120px;
+  padding: 3px 0;
+  white-space: normal;
+  line-height: 1.35;
 }
 
-.approval-node-approver-row .el-select {
-  width: 200px;
+.product-line-option__name {
+  color: #0f172a;
+  font-weight: 600;
+  overflow-wrap: anywhere;
 }
 
-.required-mark {
-  color: #f56c6c;
-  margin-left: 2px;
+.product-line-option__code {
+  color: #64748b;
+  font-size: 12px;
+}
+
+:global(.product-line-select-popper .el-select-dropdown__item) {
+  height: auto;
+  min-height: 36px;
+  padding-top: 5px;
+  padding-bottom: 5px;
 }
 </style>
+

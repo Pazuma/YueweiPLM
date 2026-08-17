@@ -46,7 +46,7 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'products/create',
         name: 'ProductCreate',
-        redirect: () => toInProgressProjectRoute(),
+        component: () => import('@/views/product/ProductEdit.vue'),
         meta: {
           title: '新项目',
           permission: 'project:view',
@@ -56,7 +56,7 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'products/:id/edit',
         name: 'ProductEdit',
-        redirect: (to) => toArchivedProductRoute(String(to.params.id)),
+        component: () => import('@/views/product/ProductEdit.vue'),
         meta: {
           title: '归档产品',
           permission: 'project:view',
@@ -185,12 +185,12 @@ const routes: RouteRecordRaw[] = [
       },
       {
         path: 'processes',
-        name: 'ProcessList',
+        name: 'ProcessManagement',
         component: () => import('@/views/process/ProcessCenterView.vue'),
         meta: {
-          title: '工艺路线',
+          title: '工艺管理',
           permission: 'process:view',
-          breadcrumb: ['基础资料', '工艺路线']
+          breadcrumb: ['基础资料', '工艺管理']
         } satisfies RouteMetaConfig
       },
       {
@@ -327,7 +327,7 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'system/import',
         name: 'SystemImport',
-        component: () => import('@/views/module/ModulePlaceholderView.vue'),
+        component: () => import('@/views/system/SystemImportExportView.vue'),
         meta: {
           title: '数据导入',
           permission: 'admin:import',
@@ -397,3 +397,5 @@ router.afterEach((to) => {
 })
 
 export default router
+
+

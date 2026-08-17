@@ -4,3 +4,6 @@ target/
 .classpath
 .project
 .settings/
+
+# CoDEX temporary workspace
+.codex_tmp/

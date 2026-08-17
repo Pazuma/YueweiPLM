@@ -8,9 +8,15 @@ import com.yuewei.plm.common.exception.BusinessException;
 import com.yuewei.plm.module.bom.dto.BomRouteSaveDTO;
 import com.yuewei.plm.module.bom.dto.ProductBomItemDTO;
 import com.yuewei.plm.module.bom.entity.ProductBom;
+import com.yuewei.plm.module.bom.entity.ProductBomItem;
 import com.yuewei.plm.module.bom.entity.ProductBomImportBatch;
+import com.yuewei.plm.module.bom.entity.ProductBomRoute;
+import com.yuewei.plm.module.bom.entity.ProductBomRouteColor;
 import com.yuewei.plm.module.bom.repository.ProductBomImportBatchRepository;
+import com.yuewei.plm.module.bom.repository.ProductBomItemRepository;
 import com.yuewei.plm.module.bom.repository.ProductBomRepository;
+import com.yuewei.plm.module.bom.repository.ProductBomRouteColorRepository;
+import com.yuewei.plm.module.bom.repository.ProductBomRouteRepository;
 import com.yuewei.plm.module.bom.service.BomMaterialLookup;
 import com.yuewei.plm.module.bom.service.BomProcessRouteLookup;
 import com.yuewei.plm.module.bom.service.ProductBomWorkflowService;
@@ -42,13 +48,21 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class HistoricalBomImportService {
+    private static final String PLACEHOLDER = "--";
+    private static final String ERP_PLACEHOLDER_SOURCE = "erp_archive_placeholder";
     private static final List<String> HEADERS = List.of(
         "产品编码", "BOM版本", "行号", "路线编码", "路线名称", "适用颜色", "物料编码", "物料名称",
         "规格", "单位", "用量", "供应商", "单价", "单个成本", "损耗率", "替代料标识", "备注"
     );
+    private static final List<String> ERP_OVERVIEW_HEADERS = List.of(
+        "Código BOM", "Código padre", "Nombre padre", "Componentes", "SKUs asociados", "Estado", "Especificación", "Origen"
+    );
 
     private final ProductBomImportBatchRepository batchRepository;
     private final ProductBomRepository bomRepository;
+    private final ProductBomRouteRepository routeRepository;
+    private final ProductBomRouteColorRepository routeColorRepository;
+    private final ProductBomItemRepository itemRepository;
     private final ProductRepository productRepository;
     private final BomMaterialLookup materialLookup;
     private final BomProcessRouteLookup routeLookup;
@@ -64,14 +78,25 @@ public class HistoricalBomImportService {
         List<BomImportErrorVO> errors = new ArrayList<>();
         try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(content))) {
             var sheet = workbook.getNumberOfSheets() == 0 ? null : workbook.getSheetAt(0);
-            if (sheet == null || !validHeader(sheet.getRow(0))) {
-                errors.add(new BomImportErrorVO(1, "表头", "", "表头必须与历史 BOM 导入模板一致"));
+            if (sheet == null) {
+                errors.add(new BomImportErrorVO(1, "表头", "", "未找到可解析的工作表"));
             } else {
                 DataFormatter formatter = new DataFormatter();
-                for (int rowIndex = 1; rowIndex <= sheet.getLastRowNum(); rowIndex++) {
-                    Row row = sheet.getRow(rowIndex);
-                    if (row == null || text(row, 0, formatter).isBlank()) continue;
-                    parseRow(rowIndex + 1, row, formatter, rows, errors);
+                int erpOverviewHeaderRow = erpOverviewHeaderRow(sheet, formatter);
+                if (validHeader(sheet.getRow(0))) {
+                    for (int rowIndex = 1; rowIndex <= sheet.getLastRowNum(); rowIndex++) {
+                        Row row = sheet.getRow(rowIndex);
+                        if (row == null || text(row, 0, formatter).isBlank()) continue;
+                        parseRow(rowIndex + 1, row, formatter, rows, errors);
+                    }
+                } else if (erpOverviewHeaderRow >= 0) {
+                    for (int rowIndex = erpOverviewHeaderRow + 1; rowIndex <= sheet.getLastRowNum(); rowIndex++) {
+                        Row row = sheet.getRow(rowIndex);
+                        if (row == null || text(row, 0, formatter).isBlank()) continue;
+                        parseErpOverviewRow(rowIndex + 1, row, formatter, rows, errors);
+                    }
+                } else {
+                    errors.add(new BomImportErrorVO(1, "表头", "", "表头必须与历史 BOM 导入模板或 ERP BOM 总览格式一致"));
                 }
             }
         } catch (BusinessException exception) {
@@ -81,6 +106,7 @@ public class HistoricalBomImportService {
         }
         String status = errors.isEmpty() && !rows.isEmpty() ? "ready" : "invalid";
         ProductBomImportBatch batch = new ProductBomImportBatch();
+        batch.setProductId(rows.isEmpty() ? 0L : rows.get(0).getProductId());
         batch.setImportToken(UUID.randomUUID().toString());
         batch.setBomScope("history");
         batch.setFileName(fileName);
@@ -114,9 +140,17 @@ public class HistoricalBomImportService {
             throw new BusinessException(ErrorCodeConstants.CODE_CONFLICT, "历史导入批次已被提交");
         }
         Map<String, List<BomImportRowVO>> byBom = new LinkedHashMap<>();
-        readRows(batch.getPreviewJson()).forEach(row -> byBom.computeIfAbsent(
+        List<BomImportRowVO> importedRows = readRows(batch.getPreviewJson());
+        boolean erpOverview = importedRows.stream().anyMatch(row -> row.getBomCode() != null && !row.getBomCode().isBlank());
+        importedRows.forEach(row -> byBom.computeIfAbsent(
             row.getProductId() + "|" + row.getVersionNo(), key -> new ArrayList<>()).add(row));
-        for (List<BomImportRowVO> bomRows : byBom.values()) createReleasedBom(bomRows);
+        for (List<BomImportRowVO> bomRows : byBom.values()) {
+            if (erpOverview) {
+                createErpArchiveBom(bomRows);
+            } else {
+                createReleasedBom(bomRows);
+            }
+        }
         batch.setStatus("committed");
         batch.setCommittedAt(LocalDateTime.now());
         batch.setCommittedBy("system");
@@ -224,6 +258,161 @@ public class HistoricalBomImportService {
         }
     }
 
+    private void parseErpOverviewRow(int sourceRowNo, Row row, DataFormatter formatter,
+        List<BomImportRowVO> rows, List<BomImportErrorVO> errors) {
+        String bomCode = text(row, 0, formatter);
+        String parentCode = text(row, 1, formatter);
+        if (bomCode.isBlank() || parentCode.isBlank()) {
+            errors.add(new BomImportErrorVO(sourceRowNo, "BOM总览", "", "BOM 编码和父级产品编码不能为空"));
+            return;
+        }
+        List<Product> products = findProductsForErpParentCode(parentCode);
+        if (products.isEmpty()) {
+            errors.add(new BomImportErrorVO(sourceRowNo, "Código padre", parentCode, "未找到父级产品或产品线"));
+            return;
+        }
+        if (products.size() != 1) {
+            errors.add(new BomImportErrorVO(sourceRowNo, "Código padre", parentCode, "父级产品编码匹配到多个产品，已阻止导入"));
+            return;
+        }
+        Product product = products.get(0);
+        List<ProductBom> conflicts = bomRepository.selectList(new LambdaQueryWrapper<ProductBom>()
+            .eq(ProductBom::getDeletedFlag, 0)
+            .and(wrapper -> wrapper.eq(ProductBom::getBomCode, bomCode)
+                .or().eq(ProductBom::getProductId, product.getProductId()).eq(ProductBom::getVersionNo, bomCode)));
+        if (conflicts != null && !conflicts.isEmpty()) {
+            errors.add(new BomImportErrorVO(sourceRowNo, "Código BOM", bomCode, "ERP BOM 编码或产品历史版本已存在"));
+            return;
+        }
+        BomImportRowVO value = new BomImportRowVO();
+        value.setProductId(product.getProductId());
+        value.setProductCode(product.getProductCode());
+        value.setBomCode(bomCode);
+        value.setSourceParentCode(parentCode);
+        value.setSourceParentName(text(row, 2, formatter));
+        value.setComponentCount(integerOrNull(text(row, 3, formatter)));
+        value.setAssociatedSkuCount(integerOrNull(text(row, 4, formatter)));
+        value.setSourceStatus(text(row, 5, formatter));
+        value.setSpecification(blankToDefault(text(row, 6, formatter), PLACEHOLDER));
+        value.setSourceOrigin(blankToDefault(text(row, 7, formatter), "erp"));
+        value.setVersionNo(bomCode);
+        value.setLineNo(1);
+        value.setProcessId(0L);
+        value.setRouteCode(PLACEHOLDER);
+        value.setRouteName(PLACEHOLDER);
+        value.setColors(List.of(value.getSpecification()));
+        value.setColorItems(List.of());
+        value.setInventoryId(null);
+        value.setItemCode(PLACEHOLDER);
+        value.setItemName(PLACEHOLDER);
+        value.setUnit("pcs");
+        value.setQuantity(BigDecimal.ONE);
+        value.setSupplierName(PLACEHOLDER);
+        value.setUnitCost(BigDecimal.ZERO);
+        value.setLineCost(BigDecimal.ZERO);
+        value.setLossRate(BigDecimal.ZERO);
+        value.setCurrencyCode("CNY");
+        value.setMaterialSource("manual");
+        value.setUnmatchedFlag(1);
+        value.setLookupMessage("ERP BOM 总览缺少物料明细，按占位行归档，不参与复杂成本计算");
+        value.setSubstituteFlag(0);
+        value.setRemark(erpOverviewRemark(value));
+        rows.add(value);
+    }
+
+    private List<Product> findProductsForErpParentCode(String parentCode) {
+        List<Product> exact = safeProducts(productRepository.selectList(new LambdaQueryWrapper<Product>()
+            .eq(Product::getProductCode, parentCode).eq(Product::getDeletedFlag, 0)));
+        if (!exact.isEmpty()) return exact;
+        String baseCode = baseProductCode(parentCode);
+        if (baseCode.equals(parentCode)) return List.of();
+        return safeProducts(productRepository.selectList(new LambdaQueryWrapper<Product>()
+            .eq(Product::getProductCode, baseCode).eq(Product::getDeletedFlag, 0)));
+    }
+
+    private String baseProductCode(String parentCode) {
+        if (parentCode == null) return "";
+        String normalized = parentCode.trim();
+        if (normalized.length() >= 7 && normalized.substring(0, 7).matches("[A-Z]{3}\\d{4}")) {
+            return normalized.substring(0, 7);
+        }
+        return normalized;
+    }
+
+    private void createErpArchiveBom(List<BomImportRowVO> rows) {
+        BomImportRowVO first = rows.get(0);
+        ProductBom bom = new ProductBom();
+        bom.setProductId(first.getProductId());
+        bom.setBomCode(first.getBomCode());
+        bom.setBomName("ERP 历史 BOM " + first.getSourceParentCode());
+        bom.setBomType("mbom");
+        bom.setBomScope("formal");
+        bom.setSourceType(blankToDefault(first.getSourceOrigin(), "erp"));
+        bom.setVersionNo(first.getVersionNo());
+        bom.setStatus("released");
+        bom.setFrozenFlag(1);
+        bom.setCurrencyCode("CNY");
+        bom.setRemark(erpOverviewRemark(first));
+        LocalDateTime now = LocalDateTime.now();
+        bom.setFrozenAt(now);
+        bom.setFrozenBy("history-import");
+        bom.setReleasedAt(now);
+        bom.setReleasedBy("history-import");
+        fillCreate(bom);
+        bom.setUpdatedAt(now);
+        bom.setUpdatedBy("history-import");
+        bomRepository.insert(bom);
+
+        ProductBomRoute route = new ProductBomRoute();
+        route.setProductBomId(bom.getProductBomId());
+        route.setProductId(first.getProductId());
+        route.setProcessId(0L);
+        route.setRouteCode(PLACEHOLDER);
+        route.setRouteName(PLACEHOLDER);
+        route.setSharedBomGroupCode("ERP-" + first.getBomCode());
+        route.setRouteVariantNo("ERP-ARCHIVE");
+        route.setVariantName("ERP 历史归档占位");
+        route.setVariantSourceType(ERP_PLACEHOLDER_SOURCE);
+        route.setStatus("active");
+        fillCreate(route);
+        routeRepository.insert(route);
+
+        ProductBomRouteColor color = new ProductBomRouteColor();
+        color.setProductBomId(bom.getProductBomId());
+        color.setProductBomRouteId(route.getProductBomRouteId());
+        color.setColorCode(PLACEHOLDER);
+        color.setColorName(blankToDefault(first.getSpecification(), PLACEHOLDER));
+        color.setStatus("active");
+        fillCreate(color);
+        routeColorRepository.insert(color);
+
+        ProductBomItem item = new ProductBomItem();
+        item.setProductBomId(bom.getProductBomId());
+        item.setProductBomRouteId(route.getProductBomRouteId());
+        item.setProductId(first.getProductId());
+        item.setSharedBomGroupCode(route.getSharedBomGroupCode());
+        item.setInventoryId(null);
+        item.setItemCode(PLACEHOLDER);
+        item.setItemName(PLACEHOLDER);
+        item.setSpecification(blankToDefault(first.getSpecification(), PLACEHOLDER));
+        item.setLineNo(1);
+        item.setQuantity(BigDecimal.ONE);
+        item.setUnit("pcs");
+        item.setLossRate(BigDecimal.ZERO);
+        item.setUnitCostSnapshot(BigDecimal.ZERO);
+        item.setSupplierNameSnapshot(PLACEHOLDER);
+        item.setLineCostSnapshot(BigDecimal.ZERO);
+        item.setCurrencyCode("CNY");
+        item.setMaterialSource("manual");
+        item.setUnmatchedFlag(1);
+        item.setSubstituteFlag(0);
+        item.setRemark(erpOverviewRemark(first));
+        item.setVersionNo(first.getVersionNo());
+        item.setStatus("draft");
+        fillCreate(item);
+        itemRepository.insert(item);
+    }
+
     private void createReleasedBom(List<BomImportRowVO> rows) {
         BomImportRowVO first = rows.get(0);
         ProductBom bom = new ProductBom();
@@ -298,6 +487,23 @@ public class HistoricalBomImportService {
         return true;
     }
 
+    private int erpOverviewHeaderRow(org.apache.poi.ss.usermodel.Sheet sheet, DataFormatter formatter) {
+        int lastCandidate = Math.min(sheet.getLastRowNum(), 20);
+        for (int rowIndex = 0; rowIndex <= lastCandidate; rowIndex++) {
+            Row row = sheet.getRow(rowIndex);
+            if (row == null) continue;
+            boolean matched = true;
+            for (int cellIndex = 0; cellIndex < ERP_OVERVIEW_HEADERS.size(); cellIndex++) {
+                if (!ERP_OVERVIEW_HEADERS.get(cellIndex).equals(text(row, cellIndex, formatter))) {
+                    matched = false;
+                    break;
+                }
+            }
+            if (matched) return rowIndex;
+        }
+        return -1;
+    }
+
     private List<BomImportRowVO> readRows(String json) {
         try { return objectMapper.readValue(json, new TypeReference<List<BomImportRowVO>>() {}); }
         catch (Exception exception) { throw new BusinessException(ErrorCodeConstants.INTERNAL_ERROR, "历史导入预览数据损坏"); }
@@ -319,6 +525,30 @@ public class HistoricalBomImportService {
 
     private BigDecimal decimalOrNull(String value) {
         return value == null || value.isBlank() ? null : new BigDecimal(value.trim());
+    }
+
+    private Integer integerOrNull(String value) {
+        if (value == null || value.isBlank()) return null;
+        return new BigDecimal(value.trim()).intValue();
+    }
+
+    private String blankToDefault(String value, String defaultValue) {
+        return value == null || value.isBlank() ? defaultValue : value.trim();
+    }
+
+    private String erpOverviewRemark(BomImportRowVO row) {
+        return "ERP BOM 总览归档；source_parent_code=" + blankToDefault(row.getSourceParentCode(), PLACEHOLDER)
+            + "; source_parent_name=" + blankToDefault(row.getSourceParentName(), PLACEHOLDER)
+            + "; components=" + (row.getComponentCount() == null ? PLACEHOLDER : row.getComponentCount())
+            + "; associated_skus=" + (row.getAssociatedSkuCount() == null ? PLACEHOLDER : row.getAssociatedSkuCount())
+            + "; specification=" + blankToDefault(row.getSpecification(), PLACEHOLDER)
+            + "; source_status=" + blankToDefault(row.getSourceStatus(), PLACEHOLDER)
+            + "; source_origin=" + blankToDefault(row.getSourceOrigin(), "erp")
+            + "; placeholder_fields=route/material/cost";
+    }
+
+    private List<Product> safeProducts(List<Product> values) {
+        return values == null ? List.of() : values;
     }
 
     private void fillCreate(com.yuewei.plm.repository.entity.BaseEntity value) {

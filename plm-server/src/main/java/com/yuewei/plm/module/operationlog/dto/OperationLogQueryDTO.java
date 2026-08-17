@@ -11,7 +11,7 @@ public class OperationLogQueryDTO {
     private long page = 1;
 
     @Min(1)
-    @Max(100)
+    @Max(200)
     private long size = 20;
 
     private Long operatorUserId;

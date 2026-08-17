@@ -9,4 +9,5 @@ public class ProductReleaseGateMissingItemVO {
 
     private String code;
     private String message;
+    private String severity;
 }

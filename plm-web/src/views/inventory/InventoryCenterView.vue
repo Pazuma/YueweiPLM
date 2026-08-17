@@ -2,37 +2,25 @@
 import { computed, onMounted, ref } from 'vue'
 
 import { getInventoryCenterSnapshot } from '@/api/modules/foundation'
+import FixedTableViewport from '@/components/FixedTableViewport/index.vue'
 import PageContainer from '@/components/PageContainer/index.vue'
-import type { InventoryItemCreatePayload, InventoryListRow } from '@/types/foundation'
+import type { InventoryListRow, InventoryTreeNode } from '@/types/foundation'
 import { getStatusLabel } from '@/utils/status'
 
-type ItemGroupValue =
-  | 'all'
-  | 'finished'
-  | 'finished-cd30'
-  | 'finished-nhc01'
-  | 'raw'
-  | 'raw-tpu'
-  | 'raw-pc'
-  | 'raw-color'
-  | 'component'
-  | 'component-magnet'
-  | 'component-deco'
-  | 'component-functional'
-  | 'package'
-  | 'package-box'
-  | 'package-inlay'
-  | 'package-label'
-  | 'tooling'
-  | 'tooling-cd30'
-  | 'tooling-cd30-mold'
-  | 'tooling-cd30-hotpress'
-  | 'tooling-cd30-edge'
-  | 'tooling-lj30'
-  | 'tooling-lj30-mold'
-  | 'tooling-lj30-mirror'
+type ItemGroupValue = string
 type TimeRangeValue = 'all' | '7d' | '30d' | '90d' | 'this_year'
 type InventoryActionMode = 'select' | 'delete'
+
+interface InventoryItemCreateForm {
+  nodeId: string
+  item_code: string
+  item_name: string
+  item_group: string
+  stock_uom: string
+  is_stock_item: 0 | 1
+  is_sales_item: 0 | 1
+  is_purchase_item: 0 | 1
+}
 
 type ItemGroupOption = {
   label: string
@@ -54,6 +42,38 @@ const itemGroupCascaderProps = {
   checkStrictly: true,
   emitPath: false
 } as const
+
+const serverItemGroupOptions = ref<ItemGroupOption[]>([{ label: '全部物料', value: 'all' }])
+
+function toItemGroupOptions(nodes: InventoryTreeNode[]): ItemGroupOption[] {
+  return nodes.map((node) => ({
+    label: node.label,
+    value: node.nodeId,
+    children: node.children?.length ? toItemGroupOptions(node.children) : undefined
+  }))
+}
+
+function collectNodeIds(nodes: ItemGroupOption[], target: ItemGroupValue): string[] {
+  for (const node of nodes) {
+    if (node.value === target) return collectSelfAndChildren(node)
+    const matched = node.children ? collectNodeIds(node.children, target) : []
+    if (matched.length) return matched
+  }
+  return []
+}
+
+function collectSelfAndChildren(node: ItemGroupOption): string[] {
+  return [node.value, ...(node.children || []).flatMap(collectSelfAndChildren)]
+}
+
+function findGroupLabel(nodes: ItemGroupOption[], target: ItemGroupValue): string | undefined {
+  for (const node of nodes) {
+    if (node.value === target) return node.label
+    const childLabel = node.children ? findGroupLabel(node.children, target) : undefined
+    if (childLabel) return childLabel
+  }
+  return undefined
+}
 
 const itemGroupOptions: ItemGroupOption[] = [
   { label: '全部物料', value: 'all' },
@@ -185,10 +205,8 @@ function scopeKey(item: InventoryListRow): string {
 
 function matchItemGroup(item: InventoryListRow, group: ItemGroupValue) {
   if (group === 'all') return true
-  // parent-includes-children: check if item's scope belongs to group's child set
-  const children = groupChildMap[group]
-  if (children) return children.includes(scopeKey(item))
-  return scopeKey(item) === group
+  const visibleNodeIds = collectNodeIds(serverItemGroupOptions.value, group)
+  return visibleNodeIds.includes(item.nodeId)
 }
 
 function matchTimeRange(item: InventoryListRow, range: TimeRangeValue) {
@@ -232,7 +250,7 @@ const groupLabels: Record<string, string> = {
 }
 
 const currentViewTitle = computed(() => {
-  return groupLabels[itemGroup.value] || '全部物料'
+  return findGroupLabel(serverItemGroupOptions.value, itemGroup.value) || '全部物料'
 })
 
 // ---- filtered rows ----
@@ -254,19 +272,12 @@ const currentRows = computed(() => {
 
 // ---- create item dialog ----
 const createItemVisible = ref(false)
-const createItemForm = ref<InventoryItemCreatePayload>({
+const createItemForm = ref<InventoryItemCreateForm>({
   nodeId: '',
-  productName: '',
-  phoneModel: '',
   item_code: '',
   item_name: '',
   item_group: '',
   stock_uom: '',
-  custom_specifications: '',
-  custom_external_code: '',
-  custom_short_name: '',
-  custom_mnemonic_code: '',
-  custom_dpci: '',
   is_stock_item: 1,
   is_sales_item: 1,
   is_purchase_item: 1
@@ -274,18 +285,11 @@ const createItemForm = ref<InventoryItemCreatePayload>({
 
 function openCreateItemDialog() {
   createItemForm.value = {
-    nodeId: '',
-    productName: '',
-    phoneModel: '',
+    nodeId: itemGroup.value,
     item_code: '',
     item_name: '',
-    item_group: groupLabels[itemGroup.value] || '全部物料',
+    item_group: currentViewTitle.value,
     stock_uom: '',
-    custom_specifications: '',
-    custom_external_code: '',
-    custom_short_name: '',
-    custom_mnemonic_code: '',
-    custom_dpci: '',
     is_stock_item: 1,
     is_sales_item: 1,
     is_purchase_item: 1
@@ -298,14 +302,14 @@ function submitCreateItem() {
 
   const newItem: InventoryListRow = {
     itemId: `inv-${Date.now()}`,
-    nodeId: '',
+    nodeId: createItemForm.value.nodeId || 'all',
     code: createItemForm.value.item_code,
     name: createItemForm.value.item_name,
-    spec: createItemForm.value.custom_specifications || '--',
+    spec: '--',
     stock: '0',
     inventoryType: createItemForm.value.item_group,
-    productName: createItemForm.value.productName || undefined,
-    phoneModel: createItemForm.value.phoneModel || undefined,
+    productName: undefined,
+    phoneModel: undefined,
     status: 'available',
     supplierName: '--',
     updatedAt: new Date().toISOString().split('T')[0]
@@ -315,13 +319,18 @@ function submitCreateItem() {
   createItemVisible.value = false
 }
 
+function displayOptionalText(value?: string | null) {
+  const text = value?.trim()
+  return text || '--'
+}
+
 // ---- create group dialog ----
 const createGroupVisible = ref(false)
 const createGroupForm = ref({ parentGroup: '', groupCode: '', groupName: '' })
 
 function openCreateGroupDialog() {
   createGroupForm.value = {
-    parentGroup: groupLabels[itemGroup.value] || '全部物料',
+    parentGroup: currentViewTitle.value,
     groupCode: '',
     groupName: ''
   }
@@ -354,7 +363,11 @@ async function loadData() {
   loading.value = true
   try {
     const snapshot = await getInventoryCenterSnapshot()
+    serverItemGroupOptions.value = snapshot.tree.length ? toItemGroupOptions(snapshot.tree) : [{ label: '全部物料', value: 'all' }]
     items.value = snapshot.items
+  } catch {
+    serverItemGroupOptions.value = [{ label: '全部物料', value: 'all' }]
+    items.value = []
   } finally {
     loading.value = false
   }
@@ -372,7 +385,7 @@ onMounted(loadData)
       <el-cascader
         v-model="itemGroup"
         class="inventory-filter-bar__group"
-        :options="itemGroupOptions"
+        :options="serverItemGroupOptions"
         :props="itemGroupCascaderProps"
         placeholder="选择物料组"
       />
@@ -425,13 +438,22 @@ onMounted(loadData)
         <el-tag effect="light">{{ currentRows.length }} 条记录</el-tag>
       </div>
 
-      <el-table :data="currentRows" border stripe @selection-change="handleSelectionChange">
+      <FixedTableViewport v-slot="{ tableHeight }" :refresh-key="currentRows">
+      <el-table :data="currentRows" :height="tableHeight" border stripe @selection-change="handleSelectionChange">
         <el-table-column v-if="actionMode === 'delete'" type="selection" width="48" />
         <el-table-column prop="code" label="物料编码" min-width="160" />
         <el-table-column prop="name" label="物料名称" min-width="200" />
         <el-table-column prop="inventoryType" label="类型" width="110" />
-        <el-table-column prop="productName" label="所属产品" min-width="180" />
-        <el-table-column prop="phoneModel" label="手机型号" min-width="130" />
+        <el-table-column label="所属产品" min-width="180">
+          <template #default="{ row }">
+            {{ displayOptionalText(row.productName) }}
+          </template>
+        </el-table-column>
+        <el-table-column label="手机型号" min-width="130">
+          <template #default="{ row }">
+            {{ displayOptionalText(row.phoneModel) }}
+          </template>
+        </el-table-column>
         <el-table-column prop="spec" label="规格 / 型号" min-width="160" />
         <el-table-column prop="stock" label="库存" width="120" />
         <el-table-column label="状态" width="110">
@@ -442,6 +464,7 @@ onMounted(loadData)
         <el-table-column prop="supplierName" label="供应商" min-width="160" />
         <el-table-column prop="updatedAt" label="更新时间" width="140" />
       </el-table>
+      </FixedTableViewport>
     </section>
 
     <!-- create item dialog -->
@@ -466,31 +489,6 @@ onMounted(loadData)
           <el-col :span="12">
             <el-form-item label="库存单位" required>
               <el-input v-model="createItemForm.stock_uom" placeholder="pcs / kg / set" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="规格">
-              <el-input v-model="createItemForm.custom_specifications" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="外部编码">
-              <el-input v-model="createItemForm.custom_external_code" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="简称">
-              <el-input v-model="createItemForm.custom_short_name" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="助记码">
-              <el-input v-model="createItemForm.custom_mnemonic_code" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="DPCI 编码">
-              <el-input v-model="createItemForm.custom_dpci" />
             </el-form-item>
           </el-col>
         </el-row>

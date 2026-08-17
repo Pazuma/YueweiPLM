@@ -11,7 +11,7 @@ const props = defineProps<{
 const decoratedHistory = computed(() =>
   props.history.map((item, index) => {
     const status = item.status || 'pending'
-    const isCurrent = status === 'developing' || status === 'reviewing'
+    const isCurrent = status === 'developing'
     const isDone = ['approved', 'released', 'confirmed', 'archived', 'completed'].includes(status)
     const isRisk = status === 'blocked'
     const isSkipped = status === 'skipped' || item.branchStatus === 'skipped'

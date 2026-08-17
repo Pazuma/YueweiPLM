@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 
 import { getSystemRoles, getSystemUsers } from '@/api/modules/system'
+import FixedTableViewport from '@/components/FixedTableViewport/index.vue'
 import PageContainer from '@/components/PageContainer/index.vue'
 import type { SystemRoleItem, SystemUserItem } from '@/types/common'
 
@@ -172,6 +173,9 @@ async function loadData() {
     const [userRows, roleRows] = await Promise.all([getSystemUsers(), getSystemRoles()])
     users.value = userRows
     roles.value = roleRows
+  } catch {
+    users.value = []
+    roles.value = []
   } finally {
     loading.value = false
   }
@@ -206,7 +210,8 @@ onMounted(loadData)
     </section>
 
     <section class="page-panel" v-loading="loading">
-      <el-table :data="filteredUsers" border stripe>
+      <FixedTableViewport v-slot="{ tableHeight }" compact :refresh-key="filteredUsers">
+      <el-table :data="filteredUsers" :height="tableHeight" border stripe>
         <el-table-column prop="userName" label="姓名" min-width="120" />
         <el-table-column prop="loginName" label="账号" min-width="120" />
         <el-table-column prop="departmentName" label="部门" min-width="120" />
@@ -238,6 +243,7 @@ onMounted(loadData)
           </template>
         </el-table-column>
       </el-table>
+      </FixedTableViewport>
     </section>
 
     <el-drawer v-model="drawerVisible" :title="form.userId ? '编辑用户' : '新增用户'" size="620px">

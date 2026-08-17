@@ -44,6 +44,9 @@ describe('FileCenterView', () => {
         attachmentId: 91,
         ownerObjectType: 'Product',
         ownerObjectId: 7,
+        projectId: 7,
+        projectCode: 'PRD-CD30-IP18-BLK-A',
+        projectName: '超队 3.0 iPhone18 黑色',
         timelineNodeKey: 'sampling-process',
         fileCategory: 'testing',
         fileName: 'M4测试报告.txt',
@@ -70,6 +73,8 @@ describe('FileCenterView', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('M4测试报告.txt')
+    expect(wrapper.text()).toContain('PRD-CD30-IP18-BLK-A')
+    expect(wrapper.text()).toContain('超队 3.0 iPhone18 黑色')
     expect(wrapper.text()).toContain('sampling-process')
     expect(wrapper.text()).toContain('1 KB')
   })

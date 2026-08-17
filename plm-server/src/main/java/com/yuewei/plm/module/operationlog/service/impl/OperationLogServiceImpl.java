@@ -17,6 +17,7 @@ import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.util.StringUtils;
 
 @Service
@@ -26,7 +27,7 @@ public class OperationLogServiceImpl implements OperationLogService {
     private final OperationLogRepository operationLogRepository;
 
     @Override
-    @Transactional
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public Long logSuccess(OperationLogCreateCommand command) {
         // 操作人和 requestId 在服务层统一取值，避免各业务接口各自拼装导致审计字段不一致。
         CurrentUser currentUser = CurrentUserContext.get().orElse(null);
@@ -51,7 +52,11 @@ public class OperationLogServiceImpl implements OperationLogService {
         log.setUpdatedAt(LocalDateTime.now());
         log.setUpdatedBy(StringUtils.hasText(operatorName) ? operatorName : "system");
         log.setDeletedFlag(0);
-        operationLogRepository.insert(log);
+        try {
+            operationLogRepository.insert(log);
+        } catch (RuntimeException ignored) {
+            return null;
+        }
         return log.getLogId();
     }
 

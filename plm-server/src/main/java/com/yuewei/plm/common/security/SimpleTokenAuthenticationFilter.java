@@ -90,6 +90,9 @@ public class SimpleTokenAuthenticationFilter extends OncePerRequestFilter {
     private boolean isPublicPath(String path) {
         return path.startsWith("/api/v1/health")
             || path.equals("/api/v1/auth/login")
+            || path.equals("/api/v1/integrations/dingtalk/approval-callbacks")
+            || path.equals("/api/v1/integrations/dingtalk/outbound")
+            || path.equals("/api/dingtalk/outbound")
             || path.startsWith("/swagger-ui")
             || path.startsWith("/v3/api-docs");
     }

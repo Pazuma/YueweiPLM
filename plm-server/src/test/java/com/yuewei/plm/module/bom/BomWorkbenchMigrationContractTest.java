@@ -66,6 +66,21 @@ class BomWorkbenchMigrationContractTest {
     }
 
     @Test
+    void migrationAllowsMultipleFormalBomsForOneProcessRoute() throws Exception {
+        Path migrationPath = Path.of(
+            "src/main/resources/db/migration/V20260805_1100__allow_multiple_formal_boms_per_process.sql"
+        );
+
+        assertThat(Files.exists(migrationPath)).isTrue();
+        String migration = Files.readString(migrationPath).toLowerCase();
+        assertThat(migration).contains("drop index if exists uk_product_bom_route_formal_active");
+        assertThat(migration).contains(
+            "on plm_product_bom_route_formal_selection(product_id, process_id, product_bom_route_id)"
+        );
+        assertThat(migration).contains("where status = 'active' and deleted_flag = 0");
+    }
+
+    @Test
     void migrationDefinesBomItemSupplierPriceAndManualMaterialSnapshots() throws Exception {
         Path migrationPath = Path.of(
             "src/main/resources/db/migration/V20260721_1000__bom_item_supplier_price_snapshot.sql"
@@ -81,6 +96,44 @@ class BomWorkbenchMigrationContractTest {
         assertThat(migration).contains("material_source varchar(16) not null default 'inventory'");
         assertThat(migration).contains("unmatched_flag integer not null default 0");
         assertThat(migration).contains("idx_plm_product_bom_item_material_source");
+        assertThat(migration).contains("where deleted_flag = 0");
+    }
+
+    @Test
+    void migrationPromotesImportedBomAndProcessDataToFormalVersions() throws Exception {
+        Path migrationPath = Path.of(
+            "src/main/resources/db/migration/V20260805_1000__imported_bom_process_formal_versions.sql"
+        );
+
+        assertThat(Files.exists(migrationPath)).isTrue();
+
+        String migration = Files.readString(migrationPath).toLowerCase();
+        assertThat(migration).contains("update plm_product_bom");
+        assertThat(migration).contains("bom_scope = 'formal'");
+        assertThat(migration).contains("source_type = 'seed_reference'");
+        assertThat(migration).contains("status = 'released'");
+        assertThat(migration).contains("frozen_flag = 1");
+        assertThat(migration).contains("plm_product_bom_import_batch");
+        assertThat(migration).contains("batch.status = 'committed'");
+        assertThat(migration).contains("update plm_process");
+        assertThat(migration).contains("status = 'confirmed'");
+        assertThat(migration).contains("process.process_code like 'route-%-import-%'");
+        assertThat(migration).contains("process_type in ('routing', 'operation')");
+    }
+
+    @Test
+    void migrationRebuildsBomItemLineUniquenessForActiveRowsOnly() throws Exception {
+        Path migrationPath = Path.of(
+            "src/main/resources/db/migration/V20260722_1000__bom_item_active_line_unique.sql"
+        );
+
+        assertThat(Files.exists(migrationPath)).isTrue();
+
+        String migration = Files.readString(migrationPath).toLowerCase();
+        assertThat(migration).contains("drop constraint if exists uk_plm_product_bom_item_line");
+        assertThat(migration).contains("drop index if exists uk_plm_product_bom_item_line");
+        assertThat(migration).contains("create unique index uk_plm_product_bom_item_line");
+        assertThat(migration).contains("on plm_product_bom_item (product_bom_id, line_no)");
         assertThat(migration).contains("where deleted_flag = 0");
     }
 }

@@ -17,6 +17,21 @@ public class ProductCreateDTO {
     @Size(max = 255, message = "产品名称长度不能超过255")
     private String productName;
 
+    @Size(max = 20)
+    private String productSpecificCode;
+
+    @Size(max = 20)
+    private String phoneModelCode;
+
+    @Size(max = 20)
+    private String colorCode;
+
+    @Size(max = 80)
+    private String finishedProductCode;
+
+    @Size(max = 20)
+    private String importShortCode;
+
     @NotBlank(message = "产品类型不能为空")
     @Pattern(regexp = "product_line|model_variant", message = "产品类型仅支持 product_line 或 model_variant")
     private String productType;

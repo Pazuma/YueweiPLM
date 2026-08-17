@@ -80,12 +80,11 @@ export const systemFields: SystemFieldItem[] = [
     visibleInFilter: true,
     editable: true,
     sortNo: 30,
-    description: 'Product 状态机：draft → developing → reviewing → released → archived。',
+    description: 'Product 状态机：draft → developing → released → archived。',
     usageScenes: ['产品列表', '产品详情弹窗', '项目管理列表', 'BOM管理'],
     options: [
       { optionId: 101, label: '草稿', value: 'draft', sortNo: 10, status: 'active', isSystem: true },
       { optionId: 102, label: '开发中', value: 'developing', sortNo: 20, status: 'active', isSystem: true },
-      { optionId: 103, label: '评审中', value: 'reviewing', sortNo: 30, status: 'active', isSystem: true },
       { optionId: 104, label: '已发布', value: 'released', sortNo: 40, status: 'active', isSystem: true },
       { optionId: 105, label: '已归档', value: 'archived', sortNo: 50, status: 'active', isSystem: true }
     ],

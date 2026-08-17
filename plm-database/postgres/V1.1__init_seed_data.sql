@@ -48,7 +48,6 @@ VALUES
 
 ('product_status', 'draft', '草稿', 10, 'active', 'system', 'system'),
 ('product_status', 'developing', '开发中', 20, 'active', 'system', 'system'),
-('product_status', 'reviewing', '评审中', 30, 'active', 'system', 'system'),
 ('product_status', 'released', '已发布', 40, 'active', 'system', 'system'),
 ('product_status', 'archived', '已归档', 50, 'active', 'system', 'system'),
 

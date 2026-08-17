@@ -36,7 +36,9 @@ const processApi = vi.hoisted(() => ({
 
 const attachmentApi = vi.hoisted(() => ({
   getTimelineAttachments: vi.fn(),
+  getFileCenterAttachments: vi.fn(),
   uploadTimelineAttachment: vi.fn(),
+  uploadProjectAttachment: vi.fn(),
   downloadAttachment: vi.fn(),
   deleteAttachment: vi.fn()
 }))
@@ -47,10 +49,12 @@ const foundationApi = vi.hoisted(() => ({
 
 const projectApi = vi.hoisted(() => ({
   getProjects: vi.fn(),
+  getProjectDetail: vi.fn(),
   getProjectTimeline: vi.fn(),
   confirmTimelineNode: vi.fn(),
   advanceTimelineNode: vi.fn(),
-  returnTimelineNode: vi.fn()
+  returnTimelineNode: vi.fn(),
+  saveMoldTransferExpress: vi.fn()
 }))
 
 const routeState = vi.hoisted(() => ({
@@ -173,7 +177,17 @@ describe('project M4 panels', () => {
     attachmentApi.getTimelineAttachments.mockResolvedValue([])
     foundationApi.getProductPresentation.mockResolvedValue(createPresentation())
     projectApi.getProjects.mockResolvedValue([])
+    projectApi.getProjectDetail.mockRejectedValue(new Error('detail unavailable in default test fixture'))
     projectApi.getProjectTimeline.mockResolvedValue(createTimeline())
+    projectApi.saveMoldTransferExpress.mockResolvedValue({
+      moldTransferExpressId: 1,
+      projectId: 9,
+      timelineNodeKey: 'PRODUCT_LINE_MOLD_TRANSFER',
+      trackingNo: 'YW-TEST-001',
+      shippedAt: '2026-08-10T10:00:00',
+      status: 'active'
+    })
+    attachmentApi.getFileCenterAttachments.mockResolvedValue({ content: [], page: 1, size: 100, totalElements: 0, totalPages: 0 })
     vi.spyOn(ElMessageBox, 'prompt').mockImplementation(() => Promise.resolve({ value: '确认备注', action: 'confirm' }) as ReturnType<typeof ElMessageBox.prompt>)
   })
 
@@ -187,7 +201,7 @@ describe('project M4 panels', () => {
     expect(wrapper.get('[data-test="bom-create"]').attributes('disabled')).toBeUndefined()
   })
 
-  it('renders a frozen BOM as read-only', async () => {
+  it('keeps a frozen BOM editable for data correction', async () => {
     bomApi.getProjectBoms.mockResolvedValue([{
       productBomId: 31,
       productId: 7,
@@ -205,7 +219,7 @@ describe('project M4 panels', () => {
       bomName: '冻结 BOM',
       bomScope: 'formal',
       versionNo: 'A',
-      status: 'reviewing',
+      status: 'released',
       testItems: [],
       routes: []
     })
@@ -213,9 +227,9 @@ describe('project M4 panels', () => {
     const wrapper = mount(ProjectBomPanel, { ...mountOptions, props: { projectId: 7 } })
     await flushPromises()
 
-    expect(wrapper.text()).toContain('已冻结')
-    expect(wrapper.get('[data-test="bom-edit"]').attributes()).toHaveProperty('disabled')
-    expect(wrapper.get('[data-test="bom-item-add"]').attributes()).toHaveProperty('disabled')
+    expect(wrapper.text()).toContain('冻结 BOM')
+    expect(wrapper.get('[data-test="bom-edit"]').attributes('disabled')).toBeUndefined()
+    expect(wrapper.get('[data-test="bom-item-add"]').attributes('disabled')).toBeUndefined()
   })
 
   it('loads process routes and shows the successful empty state', async () => {
@@ -225,6 +239,28 @@ describe('project M4 panels', () => {
 
     expect(processApi.getProjectProcessRoutes).toHaveBeenCalledWith(7)
     expect(wrapper.text()).toContain('当前项目还没有工艺路线')
+  })
+
+  it('renders imported confirmed process routes as confirmed instead of draft', async () => {
+    processApi.getProjectProcessRoutes.mockResolvedValue([{
+      processId: 81,
+      productId: 7,
+      processCode: 'ROUTE-NFB4020-IMPORT-14',
+      processName: 'titanio 骑士2.0 工艺路线',
+      processType: 'routing',
+      versionNo: 'A',
+      status: 'confirmed',
+      operations: []
+    }])
+    const wrapper = mount(ProjectProcessRoutePanel, { ...mountOptions, props: { projectId: 7 } })
+
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('已确认')
+    expect(wrapper.text()).not.toContain('草稿')
+    expect(wrapper.get('[data-test="process-edit"]').attributes('disabled')).toBeUndefined()
+    expect(wrapper.get('[data-test="process-delete"]').attributes('disabled')).toBeUndefined()
+    expect(wrapper.find('[data-test="process-create-version"]').exists()).toBe(false)
   })
 
   it('opens process route creation with template operations and a node check table', async () => {
@@ -278,6 +314,60 @@ describe('project M4 panels', () => {
     expect(document.body.textContent).not.toContain('适用颜色')
   })
 
+  it('submits manual operation name and code without selecting operation master', async () => {
+    processApi.getProcessRouteTemplates.mockResolvedValue([])
+    processApi.createProcessRoute.mockResolvedValue({
+      processId: 100,
+      productId: 7,
+      processCode: 'PRD-7-CUSTOM-V1',
+      processName: '手工路线',
+      processType: 'routing',
+      versionNo: 'V1',
+      status: 'draft',
+      operations: []
+    })
+    const wrapper = mount(ProjectProcessRoutePanel, {
+      ...mountOptions,
+      props: { projectId: 7, productCode: 'PRD-7', productType: 'product_line', productSpecificCode: 'HD' }
+    })
+    await flushPromises()
+
+    await wrapper.get('[data-test="process-create"]').trigger('click')
+    await flushPromises()
+
+    const routeNameInput = document.body.querySelector('[data-test="process-route-name-input"] input') as HTMLInputElement
+    routeNameInput.value = '手工路线'
+    routeNameInput.dispatchEvent(new Event('input'))
+    const operationNameInput = document.body.querySelector('[data-test="operation-name-input"] input') as HTMLInputElement
+    operationNameInput.value = '手工注塑成型'
+    operationNameInput.dispatchEvent(new Event('input'))
+    const operationCodeInput = document.body.querySelector('[data-test="operation-craft-code-input"] input') as HTMLInputElement
+    operationCodeInput.value = '1010'
+    operationCodeInput.dispatchEvent(new Event('input'))
+    operationCodeInput.dispatchEvent(new Event('change'))
+    const businessCodeInput = document.body.querySelector('[data-test="business-operation-code-input"] input') as HTMLInputElement
+    businessCodeInput.value = 'NHD1010'
+    businessCodeInput.dispatchEvent(new Event('input'))
+    businessCodeInput.dispatchEvent(new Event('change'))
+    const qualityInput = document.body.querySelector('.operation-row [placeholder="填写该工序的质量要求"]') as HTMLInputElement
+    qualityInput.value = '外观无缩水、无明显披锋'
+    qualityInput.dispatchEvent(new Event('input'))
+    await flushPromises()
+    ;(document.body.querySelector('[data-test="process-route-save"]') as HTMLButtonElement).click()
+    await flushPromises()
+
+    const payload = processApi.createProcessRoute.mock.calls[0][1]
+    expect(payload.operations[0]).toMatchObject({
+      operationMasterProcessId: null,
+      operationSource: 'manual_snapshot',
+      processName: '手工注塑成型',
+      operationCraftCode: '1010',
+      businessOperationCode: 'NHD1010',
+      businessOperationCodeManualFlag: true,
+      codeGenerationContext: 'product_line_route'
+    })
+  })
+
   it('shows operation detail column titles in the route dialog', async () => {
     processApi.getProcessRouteTemplates.mockResolvedValue([{
       routeTemplateCode: 'ROUTE-STD-INJECTION',
@@ -307,7 +397,8 @@ describe('project M4 panels', () => {
     expect(editor?.querySelector('[data-test="operation-editor-columns"]')).not.toBeNull()
     expect(editor?.querySelectorAll('.operation-row')).toHaveLength(1)
     expect(header?.textContent).toContain('顺序')
-    expect(header?.textContent).toContain('工序编码')
+    expect(header?.textContent).toContain('产品工序编码')
+    expect(header?.textContent).toContain('基础工序编码')
     expect(header?.textContent).toContain('工序名称')
     expect(header?.textContent).toContain('标准工时')
     expect(header?.textContent).toContain('工艺参数')
@@ -315,7 +406,7 @@ describe('project M4 panels', () => {
     expect(header?.textContent).toContain('操作')
   })
 
-  it('previews editable business operation code and excludes finished product from material status', async () => {
+  it('keeps product line business operation code pending until model and color are known', async () => {
     processApi.getProcessRouteTemplates.mockResolvedValue([{
       routeTemplateCode: 'ROUTE-STD-INJECTION',
       routeTemplateName: 'Standard injection route',
@@ -323,7 +414,7 @@ describe('project M4 panels', () => {
       defaultTemplate: true,
       operations: [{
         operationCode: 'PROC_INJECTION',
-        operationCraftCode: '10',
+        operationCraftCode: '1020',
         materialStatusCode: '10',
         sequenceNo: 10,
         processName: 'Injection molding',
@@ -334,7 +425,7 @@ describe('project M4 panels', () => {
     }])
     const wrapper = mount(ProjectProcessRoutePanel, {
       ...mountOptions,
-      props: { projectId: 7, productCode: 'BA' }
+      props: { projectId: 7, productCode: 'FA' }
     })
     await flushPromises()
 
@@ -342,14 +433,14 @@ describe('project M4 panels', () => {
     await flushPromises()
 
     const businessCodeInput = document.body.querySelector('[data-test="business-operation-code-input"] input') as HTMLInputElement
-    expect(businessCodeInput?.value).toBe('NBA1010')
+    expect(businessCodeInput?.value).toBe('')
     expect(document.body.textContent).toContain('TPU / 10')
     expect(document.body.textContent).toContain('PC / 20')
     expect(document.body.textContent).toContain('半成品 / 30')
     expect(document.body.textContent).not.toContain('成品 / 40')
   })
 
-  it('fills the default business operation code after material status is selected', async () => {
+  it('does not regenerate a fake product line code when material status changes', async () => {
     processApi.getProcessRouteTemplates.mockResolvedValue([{
       routeTemplateCode: 'ROUTE-STD-INJECTION',
       routeTemplateName: 'Standard injection route',
@@ -357,7 +448,7 @@ describe('project M4 panels', () => {
       defaultTemplate: true,
       operations: [{
         operationCode: 'PROC_INJECTION',
-        operationCraftCode: '10',
+        operationCraftCode: '1020',
         sequenceNo: 10,
         processName: 'Injection molding',
         processParamJson: '{}',
@@ -367,7 +458,7 @@ describe('project M4 panels', () => {
     }])
     const wrapper = mount(ProjectProcessRoutePanel, {
       ...mountOptions,
-      props: { projectId: 7, productCode: 'BA' }
+      props: { projectId: 7, productCode: 'FA' }
     })
     await flushPromises()
 
@@ -385,7 +476,7 @@ describe('project M4 panels', () => {
     tpuOption.click()
     await flushPromises()
 
-    expect(businessCodeInput.value).toBe('NBA1010')
+    expect(businessCodeInput.value).toBe('')
   })
 
   it('submits manual business code and finished product flag without changing material status', async () => {
@@ -418,7 +509,14 @@ describe('project M4 panels', () => {
     })
     const wrapper = mount(ProjectProcessRoutePanel, {
       ...mountOptions,
-      props: { projectId: 7, productCode: 'BA' }
+      props: {
+        projectId: 7,
+        productCode: 'BA',
+        productType: 'sku',
+        productSpecificCode: 'BA',
+        phoneModelCode: '1291',
+        colorCode: '01'
+      }
     })
     await flushPromises()
 
@@ -436,12 +534,72 @@ describe('project M4 panels', () => {
 
     const payload = processApi.createProcessRoute.mock.calls[0][1]
     expect(payload.operations[0]).toMatchObject({
-      operationCraftCode: '10',
+      operationCraftCode: '1010',
       materialStatusCode: '20',
       finishedProductFlag: true,
-      businessOperationCode: 'NBA10A1',
+      businessOperationCode: 'NBA10A1129101',
       businessOperationCodeManualFlag: true
     })
+  })
+
+  it('allows repeated system operation codes when product operation codes differ', async () => {
+    processApi.getProcessRouteTemplates.mockResolvedValue([{
+      routeTemplateCode: 'ROUTE-STD-INJECTION',
+      routeTemplateName: 'Standard injection route',
+      versionNo: 'V1',
+      defaultTemplate: true,
+      operations: [
+        {
+          operationCode: 'PROC_INJECTION',
+          operationCraftCode: '20',
+          materialStatusCode: '10',
+          sequenceNo: 10,
+          operationMasterProcessId: 900,
+          processName: 'Injection molding',
+          processParamJson: '{}',
+          standardTimeMins: 12,
+          qualityRequirement: 'No burrs'
+        },
+        {
+          operationCode: 'PROC_INJECTION',
+          operationCraftCode: '10',
+          materialStatusCode: '20',
+          sequenceNo: 20,
+          operationMasterProcessId: 900,
+          processName: 'Injection molding again',
+          processParamJson: '{}',
+          standardTimeMins: 12,
+          qualityRequirement: 'No burrs'
+        }
+      ]
+    }])
+    processApi.createProcessRoute.mockResolvedValue({
+      processId: 100,
+      productId: 7,
+      processCode: 'BA-ROUTE-STD-INJECTION-V1',
+      processName: 'Standard injection route',
+      processType: 'routing',
+      versionNo: 'V1',
+      status: 'draft',
+      operations: []
+    })
+    const wrapper = mount(ProjectProcessRoutePanel, {
+      ...mountOptions,
+      props: { projectId: 7, productCode: 'BA', productSpecificCode: 'BA' }
+    })
+    await flushPromises()
+
+    await wrapper.get('[data-test="process-create"]').trigger('click')
+    await flushPromises()
+    ;(document.body.querySelector('[data-test="process-route-save"]') as HTMLButtonElement).click()
+    await flushPromises()
+
+    expect(processApi.createProcessRoute).toHaveBeenCalled()
+    const payload = processApi.createProcessRoute.mock.calls[0][1]
+    expect(payload.operations).toMatchObject([
+      { operationCode: 'PROC_INJECTION', operationCraftCode: '1020', businessOperationCode: 'NBA1020' },
+      { operationCode: 'PROC_INJECTION', operationCraftCode: '1010', businessOperationCode: 'NBA1010' }
+    ])
   })
 
   it('renders predecessor and successor nodes with operation names', async () => {
@@ -498,33 +656,95 @@ describe('project M4 panels', () => {
     expect(successors[1].textContent).not.toContain('PROC_ASSEMBLY')
   })
 
-  it('does not query or upload attachments without a current timeline node', async () => {
+  it('queries project attachments without requiring a current timeline node', async () => {
     const wrapper = mount(TimelineAttachmentPanel, {
       ...mountOptions,
-      props: { projectId: 7, nodeKey: null }
+      props: { projectId: 7 }
     })
 
     await flushPromises()
 
-    expect(attachmentApi.getTimelineAttachments).not.toHaveBeenCalled()
-    expect(wrapper.text()).toContain('当前项目没有可用的时间轴节点')
+    expect(attachmentApi.getFileCenterAttachments).toHaveBeenCalledWith({ projectId: 7, page: 1, size: 100 })
+    expect(wrapper.text()).toContain('项目文件')
     expect(wrapper.get('[data-test="attachment-upload"]').attributes()).toHaveProperty('disabled')
   })
 
-  it('queries attachments for the current timeline node', async () => {
+  it('uploads project files without selecting a timeline step', async () => {
+    attachmentApi.uploadProjectAttachment.mockResolvedValue({
+      attachmentId: 92,
+      originalFileName: '项目资料.txt',
+      fileCategory: 'other'
+    })
+    const wrapper = mount(TimelineAttachmentPanel, {
+      global: {
+        plugins: [ElementPlus],
+        stubs: {
+          ElUpload: {
+            props: ['onChange', 'onRemove'],
+            template: '<button data-test="stub-select-file" @click="onChange({ raw: { name: \'项目资料.txt\', size: 7, type: \'text/plain\' } })"><slot /></button>'
+          }
+        }
+      },
+      props: { projectId: 7 }
+    })
+
+    await flushPromises()
+    await wrapper.get('[data-test="stub-select-file"]').trigger('click')
+    await wrapper.get('[data-test="attachment-upload"]').trigger('click')
+    await flushPromises()
+
+    expect(attachmentApi.uploadProjectAttachment).toHaveBeenCalled()
+    expect(attachmentApi.uploadTimelineAttachment).not.toHaveBeenCalled()
+    const [projectId, file, metadata] = attachmentApi.uploadProjectAttachment.mock.calls[0]
+    expect(projectId).toBe(7)
+    expect(file.name).toBe('项目资料.txt')
+    expect(metadata).toMatchObject({ fileCategory: 'testing', versionNo: 'V1' })
+  })
+
+  it('queries project attachments for the material detail area', async () => {
+    attachmentApi.getFileCenterAttachments.mockResolvedValue({
+      content: [{
+        attachmentId: 91,
+        ownerObjectType: 'Product',
+        ownerObjectId: 7,
+        projectId: 7,
+        projectCode: 'PRD-7',
+        projectName: '测试产品',
+        timelineNodeKey: 'PRODUCT_LINE_INITIATION_CONFIRM',
+        timelineStageName: '立项阶段',
+        timelineStepName: '确认立项',
+        fileCategory: 'drawing',
+        fileName: 'drawing.pdf',
+        originalFileName: 'drawing.pdf',
+        fileExt: 'pdf',
+        fileSize: 1024,
+        checksum: 'abc',
+        storageType: 'local',
+        storageKey: 'projects/7/PRODUCT_LINE_INITIATION_CONFIRM/drawing.pdf',
+        versionNo: 'V1',
+        status: 'draft',
+        createdAt: '2026-07-22 10:00:00',
+        createdBy: '工程'
+      }],
+      page: 1,
+      size: 100,
+      totalElements: 1,
+      totalPages: 1
+    })
     const wrapper = mount(TimelineAttachmentPanel, {
       ...mountOptions,
-      props: { projectId: 7, nodeKey: 'sampling-process' }
+      props: { projectId: 7 }
     })
 
     await flushPromises()
 
-    expect(attachmentApi.getTimelineAttachments).toHaveBeenCalledWith(7, 'sampling-process')
-    expect(wrapper.text()).toContain('当前节点还没有附件')
+    expect(attachmentApi.getFileCenterAttachments).toHaveBeenCalledWith({ projectId: 7, page: 1, size: 100 })
+    expect(wrapper.text()).toContain('drawing.pdf')
+    expect(wrapper.text()).toContain('确认立项')
   })
 
   it('does not mount hidden attachment panels before the attachment tab is active', async () => {
-    routeState.query = { tab: 'archived', archiveView: 'product', productId: '9' }
+    routeState.query = { tab: 'archived', archiveView: 'product', productId: '9', section: 'basic' }
     projectApi.getProjects.mockResolvedValue([createProductSummary()])
 
     const wrapper = mount(ProjectCenterView, {
@@ -545,8 +765,8 @@ describe('project M4 panels', () => {
           ProjectProcessRoutePanel: { template: '<div />' },
           ProjectReleaseGatePanel: { template: '<div />' },
           TimelineAttachmentPanel: {
-            props: ['projectId', 'nodeKey'],
-            template: '<div data-test="timeline-attachment-panel">{{ projectId }}:{{ nodeKey }}</div>'
+            props: ['projectId'],
+            template: '<div data-test="timeline-attachment-panel">{{ projectId }}</div>'
           }
         }
       }
@@ -558,9 +778,214 @@ describe('project M4 panels', () => {
     expect(wrapper.find('[data-test="timeline-attachment-panel"]').exists()).toBe(false)
   })
 
+  it('keeps product detail navigation for BOM, process, and materials sections', async () => {
+    routeState.query = { tab: 'archived', archiveView: 'product', productId: '9', section: 'project_flow' }
+    projectApi.getProjects.mockResolvedValue([createProductSummary()])
+
+    const wrapper = mount(ProjectCenterView, {
+      global: {
+        plugins: [ElementPlus],
+        stubs: {
+          Teleport: true,
+          PageContainer: { template: '<main><slot /></main>' },
+          StatusTag: { template: '<span />' },
+          FilePreview: { template: '<div />' },
+          ElDialog: { props: ['modelValue'], template: '<div v-if="modelValue"><slot /><slot name="footer" /></div>' },
+          ElDropdown: { template: '<div><slot /><slot name="dropdown" /></div>' },
+          ElDropdownMenu: { template: '<div><slot /></div>' },
+          ElDropdownItem: { template: '<button><slot /></button>' },
+          ElTable: { template: '<div><slot /></div>' },
+          ElTableColumn: { template: '<div />' },
+          ProjectBomPanel: { template: '<div />' },
+          ProjectProcessRoutePanel: { template: '<div />' },
+          ProjectReleaseGatePanel: { template: '<div />' },
+          TimelineAttachmentPanel: { template: '<div />' }
+        }
+      }
+    })
+
+    await flushPromises()
+    await flushPromises()
+
+    const sectionLabels = wrapper.findAll('.detail-breadcrumb__item').map((item) => item.text())
+    expect(sectionLabels).toEqual(expect.arrayContaining(['BOM管理', '工序明细', '资料区']))
+  })
+
+  it('renders mold transfer express as tracking number registration without trace controls', async () => {
+    routeState.query = { tab: 'archived', archiveView: 'product', productId: '9', section: 'project_flow' }
+    projectApi.getProjects.mockResolvedValue([createProductSummary({ status: 'developing', currentStage: '运模' })])
+    projectApi.getProjectTimeline.mockResolvedValue({
+      ...createTimeline(9, 'PRODUCT_LINE_MOLD_TRANSFER'),
+      currentNode: '运模',
+      moldTransferExpress: {
+        moldTransferExpressId: 1,
+        projectId: 9,
+        timelineNodeKey: 'PRODUCT_LINE_MOLD_TRANSFER',
+        trackingNo: 'YW-EXP-001',
+        shippedAt: '2026-08-10T10:00:00',
+        status: 'active'
+      },
+      nodes: [{
+        nodeKey: 'PRODUCT_LINE_MOLD_TRANSFER',
+        nodeName: '运模',
+        phaseName: '开模阶段',
+        stepNo: 5,
+        status: 'current',
+        nodeStatus: 'current',
+        summary: '当前运模节点',
+        ownerRole: '工程',
+        documentCount: 0,
+        confirmed: false
+      }]
+    })
+
+    const wrapper = mount(ProjectCenterView, {
+      global: {
+        plugins: [ElementPlus],
+        stubs: {
+          Teleport: true,
+          PageContainer: { template: '<main><slot /></main>' },
+          StatusTag: { template: '<span />' },
+          FilePreview: { template: '<div />' },
+          ElDialog: { props: ['modelValue'], template: '<div v-if="modelValue"><slot /><slot name="footer" /></div>' },
+          ElDropdown: { template: '<div><slot /><slot name="dropdown" /></div>' },
+          ElDropdownMenu: { template: '<div><slot /></div>' },
+          ElDropdownItem: { template: '<button><slot /></button>' },
+          ElTable: { template: '<div><slot /></div>' },
+          ElTableColumn: { template: '<div />' },
+          ProjectBomPanel: { template: '<div />' },
+          ProjectProcessRoutePanel: { template: '<div />' },
+          ProjectReleaseGatePanel: { template: '<div />' },
+          TimelineAttachmentPanel: { template: '<div />' }
+        }
+      }
+    })
+
+    await flushPromises()
+    await flushPromises()
+
+    const panelText = wrapper.get('.mold-transfer-panel').text()
+    expect(panelText).toContain('运模快递登记')
+    expect(panelText).toContain('快递单号')
+    expect(panelText).toContain('发运时间')
+    expect(panelText).toContain('YW-EXP-001')
+    expect(panelText).not.toContain('刷新轨迹')
+    expect(panelText).not.toContain('DHL 运模进度')
+    expect(panelText).not.toContain('承运商')
+    expect(panelText).not.toContain('最新状态')
+    expect(panelText).not.toContain('最近刷新')
+    expect(wrapper.find('.mold-transfer-traces').exists()).toBe(false)
+  })
+
+  it('shows the final timeline node as completed after backend completion', async () => {
+    routeState.query = { tab: 'archived', archiveView: 'product', productId: '9', section: 'project_flow' }
+    projectApi.getProjects.mockResolvedValue([createProductSummary({ status: 'released', currentStage: '运模', currentStepNo: 18 })])
+    projectApi.getProjectTimeline.mockResolvedValue({
+      ...createTimeline(9, 'MODEL_VARIANT_MOLD_TRANSFER'),
+      timelineCompleted: true,
+      currentNode: '运模',
+      currentStepNo: 18,
+      currentConfirmed: true,
+      currentStepCode: 'MODEL_VARIANT_MOLD_TRANSFER',
+      currentStepName: '运模',
+      currentStageCode: 'MODEL_VARIANT_SMALL_BATCH_MX',
+      currentStageName: '小批与 MX 验证',
+      nodes: createTimeline(9, 'MODEL_VARIANT_MOLD_TRANSFER').nodes.map((node, index, nodes) => ({
+        ...node,
+        status: 'completed',
+        nodeStatus: 'completed',
+        confirmed: index === nodes.length - 1
+      }))
+    })
+
+    const wrapper = mount(ProjectCenterView, {
+      global: {
+        plugins: [ElementPlus],
+        stubs: {
+          Teleport: true,
+          PageContainer: { template: '<main><slot /></main>' },
+          StatusTag: { template: '<span />' },
+          FilePreview: { template: '<div />' },
+          ElDialog: { props: ['modelValue'], template: '<div v-if="modelValue"><slot /><slot name="footer" /></div>' },
+          ElDropdown: { template: '<div><slot /><slot name="dropdown" /></div>' },
+          ElDropdownMenu: { template: '<div><slot /></div>' },
+          ElDropdownItem: { template: '<button><slot /></button>' },
+          ElTable: { template: '<div><slot /></div>' },
+          ElTableColumn: { template: '<div />' },
+          ProjectBomPanel: { template: '<div />' },
+          ProjectProcessRoutePanel: { template: '<div />' },
+          ProjectReleaseGatePanel: { template: '<div />' },
+          TimelineAttachmentPanel: { template: '<div />' }
+        }
+      }
+    })
+
+    await flushPromises()
+    await flushPromises()
+
+    expect(wrapper.get('.timeline-action-panel__status').text()).toContain('已完成')
+    expect(wrapper.find('[data-test="project-timeline-confirm"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="project-timeline-advance"]').exists()).toBe(false)
+  })
+
+  it('shows the final product-line timeline node as completed after backend completion', async () => {
+    routeState.query = { tab: 'archived', archiveView: 'product', productId: '9', section: 'project_flow' }
+    projectApi.getProjects.mockResolvedValue([createProductSummary({ status: 'released', currentStage: '投产决策', currentStepNo: 22 })])
+    projectApi.getProjectTimeline.mockResolvedValue({
+      ...createTimeline(9, 'PRODUCT_LINE_PRODUCTION_DECISION_STEP'),
+      timelineCompleted: true,
+      currentNode: '投产决策',
+      currentStepNo: 22,
+      currentConfirmed: true,
+      currentStepCode: 'PRODUCT_LINE_PRODUCTION_DECISION_STEP',
+      currentStepName: '投产决策',
+      currentStageCode: 'PRODUCT_LINE_PRODUCTION_DECISION',
+      currentStageName: '投产决策',
+      nodes: [{
+        ...createTimeline(9, 'PRODUCT_LINE_PRODUCTION_DECISION_STEP').nodes[0],
+        nodeName: '投产决策',
+        phaseName: '投产发布阶段',
+        stepNo: 22,
+        status: 'completed',
+        nodeStatus: 'completed',
+        confirmed: true
+      }]
+    })
+
+    const wrapper = mount(ProjectCenterView, {
+      global: {
+        plugins: [ElementPlus],
+        stubs: {
+          Teleport: true,
+          PageContainer: { template: '<main><slot /></main>' },
+          StatusTag: { template: '<span />' },
+          FilePreview: { template: '<div />' },
+          ElDialog: { props: ['modelValue'], template: '<div v-if="modelValue"><slot /><slot name="footer" /></div>' },
+          ElDropdown: { template: '<div><slot /><slot name="dropdown" /></div>' },
+          ElDropdownMenu: { template: '<div><slot /></div>' },
+          ElDropdownItem: { template: '<button><slot /></button>' },
+          ElTable: { template: '<div><slot /></div>' },
+          ElTableColumn: { template: '<div />' },
+          ProjectBomPanel: { template: '<div />' },
+          ProjectProcessRoutePanel: { template: '<div />' },
+          ProjectReleaseGatePanel: { template: '<div />' },
+          TimelineAttachmentPanel: { template: '<div />' }
+        }
+      }
+    })
+
+    await flushPromises()
+    await flushPromises()
+
+    expect(wrapper.get('.timeline-action-panel__status').text()).toContain('已完成')
+    expect(wrapper.text()).toContain('投产决策')
+    expect(wrapper.find('[data-test="project-timeline-confirm"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="project-timeline-advance"]').exists()).toBe(false)
+  })
+
   it('mounts the M5 release gate panel in the current node section', async () => {
     routeState.query = { tab: 'archived', archiveView: 'product', productId: '9' }
-    projectApi.getProjects.mockResolvedValue([createProductSummary({ status: 'reviewing' })])
+    projectApi.getProjects.mockResolvedValue([createProductSummary({ status: 'developing' })])
 
     const wrapper = mount(ProjectCenterView, {
       global: {
@@ -590,7 +1015,7 @@ describe('project M4 panels', () => {
     await flushPromises()
     await flushPromises()
 
-    expect(wrapper.get('[data-test="release-gate-panel"]').text()).toBe('9:reviewing')
+    expect(wrapper.get('[data-test="release-gate-panel"]').text()).toBe('9:developing')
   })
 
   it('renders abandoned projects from backend summaries instead of hardcoded static rows', async () => {
@@ -643,7 +1068,7 @@ describe('project M4 panels', () => {
 
   it('shows backend timeline action errors instead of generic axios errors', async () => {
     routeState.query = { tab: 'archived', archiveView: 'product', productId: '9' }
-    projectApi.getProjects.mockResolvedValue([createProductSummary({ status: 'reviewing' })])
+    projectApi.getProjects.mockResolvedValue([createProductSummary({ status: 'developing' })])
     projectApi.confirmTimelineNode.mockRejectedValue(Object.assign(new Error('Request failed with status code 400'), {
       response: { data: { message: '只能操作当前时间轴节点' } }
     }))

@@ -16,6 +16,7 @@ public class CodeItem extends BaseEntity {
     private String codeType;
     private String codeValue;
     private String codeName;
+    private String codeNameZh;
     private String status;
     private Integer sortOrder;
 }

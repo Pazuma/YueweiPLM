@@ -5,6 +5,7 @@ export interface CodeItem {
   codeType: string
   codeValue: string
   codeName: string
+  codeNameZh?: string
   status: 'enabled' | 'disabled'
   sortOrder: number
   updatedAt?: string
@@ -22,6 +23,7 @@ export interface CodeItemPayload {
   codeType: string
   codeValue: string
   codeName: string
+  codeNameZh?: string
   sortOrder: number
 }
 
@@ -29,6 +31,7 @@ export interface CodeImportRow {
   rowNo: number
   codeValue: string
   codeName: string
+  codeNameZh?: string
   status: 'enabled' | 'disabled'
   sortOrder: number
   action: 'create' | 'update' | 'unchanged'

@@ -8,6 +8,14 @@ spring:
       write-dates-as-timestamps: false
     deserialization:
       fail-on-unknown-properties: false
+  servlet:
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
+    multipart:
+      max-file-size: ${APP_MULTIPART_MAX_FILE_SIZE:50MB}
+      max-request-size: ${APP_MULTIPART_MAX_REQUEST_SIZE:60MB}
   flyway:
     enabled: ${FLYWAY_ENABLED:true}
     locations: classpath:db/migration
@@ -44,5 +52,21 @@ app:
     dev-token: ${APP_SECURITY_DEV_TOKEN:dev-token}
   storage:
     local-root: ${APP_STORAGE_LOCAL_ROOT:data/uploads}
-    max-file-size-bytes: ${APP_STORAGE_MAX_FILE_SIZE_BYTES:52428800}
-    allowed-extensions: ${APP_STORAGE_ALLOWED_EXTENSIONS:pdf,doc,docx,xls,xlsx,ppt,pptx,txt,csv,jpg,jpeg,png,zip}
+    max-file-size-bytes: ${APP_STORAGE_MAX_FILE_SIZE_BYTES:209715200}
+    allowed-extensions: ${APP_STORAGE_ALLOWED_EXTENSIONS:pdf,doc,docx,xls,xlsx,ppt,pptx,txt,csv,jpg,jpeg,png,webp,zip,rar,7z,dwg,dxf,step,stp,igs,iges,stl,obj,3dm,prt,sldprt,sldasm}
+
+plm:
+  integrations:
+    dingtalk:
+      enabled: ${DINGTALK_INTEGRATION_ENABLED:true}
+      corp-id: ${DINGTALK_CORP_ID:}
+      app-key: ${DINGTALK_APP_KEY:}
+      app-secret: ${DINGTALK_APP_SECRET:}
+      agent-id: ${DINGTALK_AGENT_ID:}
+      product-line-process-code: ${DINGTALK_PRODUCT_LINE_PROCESS_CODE:PROC-88C58F86-D55A-4A04-BA6E-CB71071F0468}
+      model-variant-process-code: ${DINGTALK_MODEL_VARIANT_PROCESS_CODE:PROC-BD65F530-F66F-46B9-8F72-0567DD68F60C}
+      ship-mold-process-code: ${DINGTALK_SHIP_MOLD_PROCESS_CODE:}
+      outbound-endpoint: ${DINGTALK_OUTBOUND_ENDPOINT:}
+      callback-token: ${DINGTALK_CALLBACK_TOKEN:}
+      auto-approver-user-id: ${DINGTALK_AUTO_APPROVER_USER_ID:02356802443226388318}
+      product-line-cc-user-ids: ${DINGTALK_PRODUCT_LINE_CC_USER_IDS:02356802443226388318}

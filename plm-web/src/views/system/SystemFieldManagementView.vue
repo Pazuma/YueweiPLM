@@ -2,8 +2,9 @@
 import { computed, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 
+import FixedTableViewport from '@/components/FixedTableViewport/index.vue'
 import PageContainer from '@/components/PageContainer/index.vue'
-import { systemFieldInputTypeLabels, systemFieldScopeLabels, systemFields } from '@/mock/systemFields'
+import { systemFields } from '@/mock/systemFields'
 import type {
   SystemFieldInputType,
   SystemFieldItem,
@@ -12,6 +13,28 @@ import type {
   SystemFieldStatus
 } from '@/types/common'
 import { formatDate } from '@/utils/format'
+
+const systemFieldInputTypeLabels: Record<SystemFieldInputType, string> = {
+  text: '文本',
+  textarea: '多行文本',
+  number: '数字',
+  date: '日期',
+  select: '单选',
+  multi_select: '多选',
+  switch: '开关'
+}
+
+const systemFieldScopeLabels: Record<SystemFieldScope, string> = {
+  product: '产品',
+  sku: 'SKU',
+  order: '订单',
+  project: '项目',
+  bom: 'BOM',
+  process: '工艺',
+  inventory: '库存',
+  approval: '审批',
+  system: '系统'
+}
 
 /* ========== 筛选状态 ========== */
 
@@ -210,7 +233,8 @@ function getInputTypeLabel(type: SystemFieldInputType) {
           <el-tag effect="light">{{ filteredFields.length }} 条</el-tag>
         </div>
 
-        <el-table :data="filteredFields" border stripe @row-click="openDetailDrawer">
+        <FixedTableViewport v-slot="{ tableHeight }" compact :refresh-key="filteredFields">
+        <el-table :data="filteredFields" :height="tableHeight" border stripe @row-click="openDetailDrawer">
           <el-table-column prop="fieldCode" label="字段编码" min-width="160" />
           <el-table-column prop="fieldName" label="字段名称" min-width="140" />
           <el-table-column label="所属模块" width="110">
@@ -260,6 +284,7 @@ function getInputTypeLabel(type: SystemFieldInputType) {
             </template>
           </el-table-column>
         </el-table>
+        </FixedTableViewport>
       </article>
     </section>
 
@@ -298,7 +323,11 @@ function getInputTypeLabel(type: SystemFieldInputType) {
         <section v-if="selectedField.options.length">
           <h4>选项列表</h4>
           <el-table :data="selectedField.options" border size="small">
-            <el-table-column prop="label" label="选项名称" min-width="140" />
+            <el-table-column label="选项名称" min-width="220">
+              <template #default="{ row }">
+                <span class="field-option-text" :title="row.label">{{ row.label }}</span>
+              </template>
+            </el-table-column>
             <el-table-column prop="value" label="选项值" min-width="140" />
             <el-table-column prop="sortNo" label="排序" width="80" />
             <el-table-column label="状态" width="90">
@@ -389,7 +418,7 @@ function getInputTypeLabel(type: SystemFieldInputType) {
           <el-table :data="fieldDraft.options" border size="small">
             <el-table-column label="选项名称" min-width="140">
               <template #default="{ row }">
-                <el-input v-model="row.label" size="small" placeholder="选项名称" />
+                <el-input v-model="row.label" size="small" placeholder="选项名称" :title="row.label" />
               </template>
             </el-table-column>
             <el-table-column label="选项值" min-width="140">
@@ -525,6 +554,14 @@ function getInputTypeLabel(type: SystemFieldInputType) {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+.field-option-text {
+  display: inline-block;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.45;
 }
 
 /* 编辑抽屉 */

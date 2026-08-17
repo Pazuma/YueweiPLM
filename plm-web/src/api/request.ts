@@ -9,6 +9,26 @@ const request = axios.create({
   }
 })
 
+let redirectingToLogin = false
+
+function createRequestId() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+
+  return `req-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+}
+
+function redirectToLoginOnUnauthorized() {
+  localStorage.removeItem('plm_token')
+  if (redirectingToLogin || window.location.hash.startsWith('#/login')) {
+    return
+  }
+  redirectingToLogin = true
+  const current = window.location.hash.replace(/^#/, '') || '/'
+  window.location.hash = `/login?redirect=${encodeURIComponent(current)}`
+}
+
 export function prepareRequestContentType(config: InternalAxiosRequestConfig) {
   if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
     config.headers.delete('Content-Type')
@@ -22,13 +42,16 @@ request.interceptors.request.use((config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
-  config.headers['X-Request-Id'] = crypto.randomUUID()
+  config.headers['X-Request-Id'] = createRequestId()
   return config
 })
 
 request.interceptors.response.use(
   (response) => response,
   (error) => {
+    if (error.response?.status === 401 || error.response?.data?.code === 40101) {
+      redirectToLoginOnUnauthorized()
+    }
     ElMessage.error(error.response?.data?.message || '网络请求失败')
     return Promise.reject(error)
   }
@@ -65,6 +88,9 @@ export interface PageResponse<T> {
 export function unwrapResponse<T>(response: AxiosResponse<ApiResponse<T>>): T {
   const body = response.data
   if (body.code !== 0) {
+    if (body.code === 40101) {
+      redirectToLoginOnUnauthorized()
+    }
     throw new Error(body.message || '接口请求失败')
   }
   return body.data

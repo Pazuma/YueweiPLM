@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
 import { getTestCenterSnapshot } from '@/api/modules/foundation'
+import FixedTableViewport from '@/components/FixedTableViewport/index.vue'
 import PageContainer from '@/components/PageContainer/index.vue'
 import SearchBar from '@/components/SearchBar/index.vue'
 import type { SearchField } from '@/types/common'
@@ -62,6 +63,9 @@ async function loadData() {
     const snapshot = await getTestCenterSnapshot()
     categories.value = snapshot.categories
     records.value = snapshot.records
+  } catch {
+    categories.value = []
+    records.value = []
   } finally {
     loading.value = false
   }
@@ -128,7 +132,8 @@ onMounted(loadData)
           <el-button type="primary">新增测试记录</el-button>
         </div>
 
-        <el-table :data="filteredRecords" border stripe>
+        <FixedTableViewport v-slot="{ tableHeight }" :refresh-key="filteredRecords">
+        <el-table :data="filteredRecords" :height="tableHeight" border stripe>
           <el-table-column prop="productName" label="关联产品" min-width="220" />
           <el-table-column prop="testCategory" label="测试项" min-width="140" />
           <el-table-column label="结果" width="120">
@@ -149,6 +154,7 @@ onMounted(loadData)
             </template>
           </el-table-column>
         </el-table>
+        </FixedTableViewport>
       </article>
     </section>
   </PageContainer>

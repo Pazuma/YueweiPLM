@@ -1,15 +1,16 @@
-<script setup lang="ts">
-import { DocumentCopy, Lock, Plus, Promotion, Refresh, Upload } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
+﻿<script setup lang="ts">
+import { Delete, DocumentCopy, Plus, Promotion, Refresh, Upload } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { computed, reactive, ref, watch } from 'vue'
 
 import {
   copyBomVersion,
+  cancelCurrentBomConfirmation,
+  confirmCurrentBomVersion as confirmCurrentBomVersionApi,
   createProjectBom,
-  freezeBom,
+  deleteBomVersion,
   getBomWorkbench,
   getProjectBoms,
-  publishBom,
   recalculateBomCosts,
   saveBomRoutes,
   submitBomReview,
@@ -22,7 +23,9 @@ import BomImportDialog from './BomImportDialog.vue'
 import BomRouteEditor from './BomRouteEditor.vue'
 
 const props = defineProps<{ projectId: number }>()
-const emit = defineEmits<{ (event: 'changed'): void }>()
+const emit = defineEmits<{
+  (event: 'changed'): void
+}>()
 
 const loading = ref(false)
 const actionLoading = ref(false)
@@ -42,14 +45,10 @@ const createForm = reactive({
   remark: ''
 })
 
-const candidateBoms = computed(() => boms.value.filter((bom) => bom.bomType !== 'test'))
+const candidateBoms = computed(() => boms.value.filter((bom) => bom.bomType !== 'test' && bom.status !== 'archived'))
 const selectedBom = computed(() => boms.value.find((bom) => bom.productBomId === selectedBomId.value) || null)
-const isReadOnly = computed(() => ['released', 'archived'].includes(workbench.value?.status || ''))
-const isFrozen = computed(() =>
-  Boolean(selectedBom.value?.frozenFlag)
-  || selectedBom.value?.status === 'frozen'
-  || isReadOnly.value
-)
+const isReadOnly = computed(() => workbench.value?.status === 'archived')
+const blocksDeletionStatus = computed(() => ['frozen', 'released', 'archived'].includes(selectedBom.value?.status || ''))
 const bomRiskSummary = computed(() => {
   const items = workbench.value?.routes.flatMap(route => route.items) || []
   return {
@@ -62,6 +61,21 @@ const hasBomRisks = computed(() =>
   bomRiskSummary.value.manualRows > 0
   || bomRiskSummary.value.supplierMissing > 0
   || bomRiskSummary.value.costMissing > 0
+)
+const canConfirmCurrentBom = computed(() =>
+  Boolean(
+    selectedBomId.value
+    && workbench.value?.routes.length
+    && workbench.value.routes.every(route => route.colors.length && route.items.length)
+    && !isReadOnly.value
+    && !selectedBom.value?.currentFormal
+  )
+)
+const canCancelCurrentBom = computed(() =>
+  Boolean(selectedBom.value?.currentFormal && !isReadOnly.value)
+)
+const canDeleteSelectedBom = computed(() =>
+  Boolean(selectedBom.value && !blocksDeletionStatus.value && !selectedBom.value.currentFormal)
 )
 
 function errorMessage(error: unknown) {
@@ -146,14 +160,12 @@ async function saveRoutes(routes: BomRoute[]) {
   }
 }
 
-async function lifecycle(action: 'cost' | 'review' | 'freeze' | 'publish' | 'copy') {
+async function lifecycle(action: 'cost' | 'review' | 'copy') {
   if (!selectedBomId.value || !workbench.value) return
   actionLoading.value = true
   try {
     if (action === 'cost') await recalculateBomCosts(selectedBomId.value, workbench.value.routes)
     if (action === 'review') await submitBomReview(selectedBomId.value)
-    if (action === 'freeze') await freezeBom(selectedBomId.value)
-    if (action === 'publish') await publishBom(selectedBomId.value)
     if (action === 'copy') {
       const colors = workbench.value.routes.flatMap((route) => route.colors)
       await copyBomVersion(selectedBomId.value, { versionNo: `${workbench.value.versionNo}-COPY`, selectedColors: colors })
@@ -161,6 +173,66 @@ async function lifecycle(action: 'cost' | 'review' | 'freeze' | 'publish' | 'cop
     await load(selectedBomId.value)
     emit('changed')
     ElMessage.success('BOM 状态已更新')
+  } finally {
+    actionLoading.value = false
+  }
+}
+
+async function deleteSelectedBomVersion() {
+  if (!selectedBom.value || !canDeleteSelectedBom.value) return
+  await ElMessageBox.confirm(
+    `确认删除 BOM ${selectedBom.value.bomCode}（${selectedBom.value.versionNo}）吗？删除后仅做软删除，不再出现在当前版本列表中。`,
+    '删除 BOM 版本',
+    {
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+      type: 'warning'
+    }
+  )
+  actionLoading.value = true
+  try {
+    await deleteBomVersion(selectedBom.value.productBomId)
+    await load()
+    emit('changed')
+    ElMessage.success('BOM 版本已删除')
+  } finally {
+    actionLoading.value = false
+  }
+}
+
+async function confirmCurrentBomVersion() {
+  if (!selectedBomId.value || !workbench.value?.routes.length) {
+    ElMessage.warning('请先选择已维护路线、颜色和明细的 BOM')
+    return
+  }
+  actionLoading.value = true
+  try {
+    await confirmCurrentBomVersionApi(selectedBomId.value)
+    await load(selectedBomId.value)
+    emit('changed')
+    ElMessage.success('当前 BOM 版本已确认')
+  } finally {
+    actionLoading.value = false
+  }
+}
+
+async function cancelCurrentBomVersion() {
+  if (!selectedBomId.value || !selectedBom.value?.currentFormal) return
+  await ElMessageBox.confirm(
+    `确认取消 BOM ${selectedBom.value.bomCode}（${selectedBom.value.versionNo}）的当前正式确认吗？`,
+    '取消确认',
+    {
+      confirmButtonText: '取消确认',
+      cancelButtonText: '返回',
+      type: 'warning'
+    }
+  )
+  actionLoading.value = true
+  try {
+    await cancelCurrentBomConfirmation(selectedBomId.value)
+    await load(selectedBomId.value)
+    emit('changed')
+    ElMessage.success('当前 BOM 版本已取消确认')
   } finally {
     actionLoading.value = false
   }
@@ -174,7 +246,7 @@ watch(() => props.projectId, () => load(), { immediate: true })
     <header class="bom-workbench__header">
       <div>
         <h4>BOM 工作台</h4>
-        <p>在项目流程中维护候选 BOM、关联工艺路线、路线成本和后续正式确认资料。</p>
+        <p>在项目流程中维护 BOM、绑定工艺路线、路线成本，并确认当前使用版本；确认和取消确认都不会锁定资料编辑。</p>
       </div>
       <div class="command-row">
         <el-tooltip content="刷新"><el-button :icon="Refresh" circle @click="load(selectedBomId || undefined)" /></el-tooltip>
@@ -187,16 +259,36 @@ watch(() => props.projectId, () => load(), { immediate: true })
     <div v-if="candidateBoms.length" class="mode-panel">
       <div class="formal-toolbar">
         <el-select v-model="selectedBomId" aria-label="选择候选 BOM 版本" @change="changeVersion">
-          <el-option v-for="bom in candidateBoms" :key="bom.productBomId" :label="`${bom.versionNo} · ${bom.bomName}`" :value="bom.productBomId" />
+          <el-option v-for="bom in candidateBoms" :key="bom.productBomId" :label="`${bom.versionNo} - ${bom.bomName}`" :value="bom.productBomId" />
         </el-select>
         <el-tag v-if="selectedBom?.currentFormal" type="success" effect="light">当前正式</el-tag>
         <el-tag v-else effect="light">候选</el-tag>
-        <el-tag v-if="isFrozen" type="warning" effect="light">已冻结</el-tag>
         <el-tag v-if="selectedBom?.routeName" effect="plain">{{ selectedBom.routeName }}</el-tag>
         <div class="command-row command-row--push">
-          <el-button :icon="Upload" :disabled="!selectedBomId || isFrozen" @click="importVisible = true">导入 XLSX</el-button>
-          <el-button data-test="bom-edit" :disabled="!selectedBomId || isFrozen" @click="routeEditorVisible = true">维护路线与 BOM</el-button>
-          <el-button data-test="bom-item-add" :disabled="!selectedBomId || isFrozen" @click="routeEditorVisible = true">添加明细</el-button>
+          <el-button :icon="Upload" :disabled="!selectedBomId || isReadOnly" @click="importVisible = true">导入 XLSX</el-button>
+          <el-button data-test="bom-edit" :disabled="!selectedBomId || isReadOnly" @click="routeEditorVisible = true">维护 BOM 明细</el-button>
+          <el-button data-test="bom-item-add" :disabled="!selectedBomId || isReadOnly" @click="routeEditorVisible = true">添加明细</el-button>
+          <el-button
+            v-if="selectedBom?.currentFormal"
+            data-test="bom-cancel-confirmation"
+            type="warning"
+            plain
+            :loading="actionLoading"
+            :disabled="!canCancelCurrentBom"
+            @click="cancelCurrentBomVersion"
+          >
+            取消确认
+          </el-button>
+          <el-button
+            v-else
+            data-test="bom-confirm-current"
+            type="primary"
+            :loading="actionLoading"
+            :disabled="!canConfirmCurrentBom"
+            @click="confirmCurrentBomVersion"
+          >
+            确认当前 BOM 版本
+          </el-button>
         </div>
       </div>
 
@@ -208,6 +300,12 @@ watch(() => props.projectId, () => load(), { immediate: true })
           <el-tag size="small" type="danger">成本缺失 {{ bomRiskSummary.costMissing }}</el-tag>
         </template>
       </el-alert>
+
+      <div v-if="workbench" class="cost-metric-grid">
+        <div><span>研发总成本</span><strong>{{ workbench.rdTotalCost ?? '--' }}</strong></div>
+        <div><span>正式版本平均单个成本</span><strong>{{ workbench.formalAverageUnitCost ?? '--' }}</strong></div>
+        <div><span>该 BOM 单个 SKU 成本</span><strong>{{ workbench.currentBomSkuUnitCost ?? '--' }}</strong></div>
+      </div>
 
       <el-table :data="candidateBoms" class="candidate-table" size="small" @row-click="selectBom">
         <el-table-column prop="versionNo" label="版本" width="90" />
@@ -231,11 +329,11 @@ watch(() => props.projectId, () => load(), { immediate: true })
       </el-table>
 
       <div v-if="workbench?.routes.length" class="route-list">
-        <article v-for="route in workbench.routes" :key="route.routeCode" class="route-row">
-          <div class="route-row__identity"><strong>{{ route.routeName }}</strong><code>{{ route.routeCode }}</code></div>
+        <article v-for="route in workbench.routes" :key="route.productBomRouteId || route.routeVariantNo" class="route-row">
+          <div class="route-row__identity"><strong>{{ route.variantName || route.routeName }}</strong><code>{{ route.routeCode }} / {{ route.routeVariantNo || 'BASE' }}</code></div>
           <div class="color-list"><el-tag v-for="color in route.colors" :key="color" size="small">{{ color }}</el-tag></div>
           <span>{{ route.items.length }} 项物料</span>
-          <strong>{{ route.costSnapshot ? `${route.costSnapshot.currencyCode} ${route.costSnapshot.totalCost}` : '待计算' }}</strong>
+          <strong>{{ route.costSnapshot ? `${route.costSnapshot.currencyCode} ${route.skuUnitCost ?? route.costSnapshot.totalCost}` : '待计算' }}</strong>
         </article>
       </div>
       <el-empty v-else description="当前候选 BOM 尚未维护工艺路线明细" />
@@ -243,10 +341,10 @@ watch(() => props.projectId, () => load(), { immediate: true })
       <footer class="lifecycle-bar">
         <el-button :loading="actionLoading" :disabled="isReadOnly" @click="lifecycle('cost')">刷新成本</el-button>
         <el-button :icon="Promotion" :disabled="isReadOnly" @click="lifecycle('review')">提交审核</el-button>
-        <el-button :icon="Lock" :disabled="isFrozen" @click="lifecycle('freeze')">冻结</el-button>
-        <el-button type="primary" :disabled="isReadOnly" @click="lifecycle('publish')">发布</el-button>
         <el-button :icon="DocumentCopy" @click="lifecycle('copy')">复制版本</el-button>
+        <el-button type="danger" plain :icon="Delete" :disabled="!canDeleteSelectedBom" @click="deleteSelectedBomVersion">删除版本</el-button>
       </footer>
+      <p class="bom-workbench__note">确认当前版本后仍可维护资料；如选错版本，可先取消确认再重新确认。</p>
     </div>
     <el-empty v-else description="当前项目还没有 BOM" />
 
@@ -282,7 +380,14 @@ watch(() => props.projectId, () => load(), { immediate: true })
     </el-dialog>
 
     <BomImportDialog v-model="importVisible" :product-id="projectId" :bom-id="selectedBomId" @committed="load(selectedBomId || undefined)" />
-    <BomRouteEditor v-if="routeEditorVisible && workbench" v-model="routeEditorVisible" :routes="workbench.routes" :loading="actionLoading" @save="saveRoutes" />
+    <BomRouteEditor
+      v-if="routeEditorVisible && workbench"
+      v-model="routeEditorVisible"
+      :routes="workbench.routes"
+      :process-routes="processRoutes"
+      :loading="actionLoading"
+      @save="saveRoutes"
+    />
   </section>
 </template>
 
@@ -292,12 +397,16 @@ watch(() => props.projectId, () => load(), { immediate: true })
 .bom-workbench__header { justify-content: space-between; margin-bottom: 14px; }
 .bom-workbench__header h4, .bom-workbench__header p { margin: 0; }
 .bom-workbench__header p { color: var(--plm-color-text-secondary); font-size: 13px; }
+.bom-workbench__note { margin: 8px 0 0; color: var(--plm-color-text-secondary); font-size: 12px; text-align: right; }
 .mode-panel { margin-top: 14px; }
 .formal-toolbar { flex-wrap: wrap; margin-bottom: 12px; }
 .formal-toolbar :deep(.el-select) { width: 260px; }
 .command-row--push { margin-left: auto; }
 .bom-risk-alert { margin-bottom: 12px; }
 .bom-risk-alert :deep(.el-alert__title) { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.cost-metric-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
+.cost-metric-grid > div { display: grid; gap: 4px; padding: 10px; border: 1px solid var(--el-border-color-lighter); background: var(--el-fill-color-lighter); }
+.cost-metric-grid span { color: var(--plm-color-text-secondary); font-size: 12px; }
 .candidate-table { margin-bottom: 14px; }
 .create-dialog__hint { margin: 0 0 12px; color: var(--plm-color-text-secondary); font-size: 13px; }
 .route-list { border-top: 1px solid var(--el-border-color-lighter); }

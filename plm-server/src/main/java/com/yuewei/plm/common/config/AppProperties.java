@@ -41,8 +41,8 @@ public class AppProperties {
     public static class Storage {
 
         private String localRoot = "data/uploads";
-        private long maxFileSizeBytes = 52_428_800L;
-        private String allowedExtensions = "pdf,doc,docx,xls,xlsx,ppt,pptx,txt,csv,jpg,jpeg,png,zip";
+        private long maxFileSizeBytes = 209_715_200L;
+        private String allowedExtensions = "pdf,doc,docx,xls,xlsx,ppt,pptx,txt,csv,jpg,jpeg,png,webp,zip,rar,7z,dwg,dxf,step,stp,igs,iges,stl,obj,3dm,prt,sldprt,sldasm";
 
         public String getLocalRoot() {
             return localRoot;
