@@ -1,6 +1,6 @@
 spring:
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5433/plm}
+    url: ${DB_URL:jdbc:postgresql://localhost:5433/plm?currentSchema=plm}
     username: ${DB_USERNAME:plm}
     password: ${DB_PASSWORD:plm123}
     driver-class-name: org.postgresql.Driver

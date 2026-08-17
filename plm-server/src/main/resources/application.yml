@@ -19,6 +19,9 @@ spring:
   flyway:
     enabled: ${FLYWAY_ENABLED:true}
     locations: classpath:db/migration
+    default-schema: ${DB_SCHEMA:plm}
+    schemas: ${DB_SCHEMA:plm}
+    create-schemas: false
     baseline-on-migrate: true
     baseline-version: "20260703.0000"
 

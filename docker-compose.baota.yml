@@ -5,6 +5,11 @@ services:
     command: redis-server --appendonly yes
     volumes:
       - plm_redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
     restart: unless-stopped
     networks:
       - plm-net
@@ -20,7 +25,8 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: prod
       SERVER_PORT: "8080"
-      DB_URL: ${DB_URL}
+      DB_URL: ${DB_URL:-jdbc:postgresql://192.168.1.10:5432/plm?currentSchema=plm}
+      DB_SCHEMA: ${DB_SCHEMA:-plm}
       DB_USERNAME: ${DB_USERNAME}
       DB_PASSWORD: ${DB_PASSWORD}
       REDIS_HOST: redis
@@ -38,8 +44,21 @@ services:
     volumes:
       - plm_uploads:/app/data/uploads
     depends_on:
-      - redis
-    restart: unless-stopped
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent --show-error http://localhost:8080/api/v1/health/db >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    restart: on-failure:5
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 2G
+          pids: 256
     networks:
       - plm-net
 

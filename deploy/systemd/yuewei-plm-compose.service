@@ -1,0 +1,18 @@
+[Unit]
+Description=Yuewei PLM Docker Compose stack
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/yuewei-plm
+EnvironmentFile=-/opt/yuewei-plm/.env
+ExecStartPre=/usr/bin/docker compose --env-file .env -f docker-compose.baota.yml config -q
+ExecStart=/usr/bin/docker compose --env-file .env -f docker-compose.baota.yml up -d --remove-orphans
+ExecStop=/usr/bin/docker compose --env-file .env -f docker-compose.baota.yml down
+RemainAfterExit=yes
+TimeoutStartSec=120
+
+[Install]
+WantedBy=multi-user.target

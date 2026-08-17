@@ -75,7 +75,8 @@ plm-server/
 | `APP_NAME` | `plm-server` | 应用名 |
 | `SPRING_PROFILES_ACTIVE` | `dev` | 当前环境 |
 | `SERVER_PORT` | `8080` | 服务端口 |
-| `DB_URL` | `jdbc:postgresql://localhost:5433/plm` | PostgreSQL 连接地址 |
+| `DB_URL` | `jdbc:postgresql://localhost:5433/plm?currentSchema=plm` | PostgreSQL 连接地址；生产值必须显式携带 `currentSchema=plm` |
+| `DB_SCHEMA` | `plm` | Flyway 默认和受管 schema；生产环境固定为 `plm` |
 | `DB_USERNAME` | `plm` | 数据库用户名 |
 | `DB_PASSWORD` | `plm123` | 开发库密码 |
 | `REDIS_HOST` | `localhost` | Redis 地址 |
@@ -86,7 +87,7 @@ plm-server/
 | `APP_STORAGE_LOCAL_ROOT` | `data/uploads` | 本地文件存储根目录 |
 | `LOG_LEVEL` | `info` | 项目日志级别 |
 
-生产环境不要依赖默认密码，必须通过环境变量注入 `DB_PASSWORD`、`APP_SECURITY_DEV_TOKEN`、`APP_STORAGE_LOCAL_ROOT`。
+生产环境必须注入 `DB_URL`、`DB_SCHEMA=plm`、`DB_PASSWORD`、`APP_SECURITY_DEV_TOKEN`、`APP_STORAGE_LOCAL_ROOT`，不要依赖默认密码或未限定 schema 的 JDBC URL。
 
 ## 统一接口规则
 

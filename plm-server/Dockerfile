@@ -10,7 +10,10 @@ RUN mvn package -DskipTests -B -q
 
 FROM ${RUNTIME_IMAGE}
 WORKDIR /app
-RUN groupadd -r plm && useradd -r -g plm plm
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd -r plm && useradd -r -g plm plm
 RUN mkdir -p /app/data/uploads && chown -R plm:plm /app
 COPY --from=build /build/target/*.jar app.jar
 USER plm
