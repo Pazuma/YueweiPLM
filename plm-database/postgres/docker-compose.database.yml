@@ -1,27 +1,28 @@
 services:
   postgres:
-    image: postgres:15-alpine
+    image: "${POSTGRES_IMAGE:?POSTGRES_IMAGE must match the existing PGDATA major version}"
     container_name: plm-postgres
     environment:
-      POSTGRES_DB: plm
-      POSTGRES_USER: plm
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-plm123}
+      POSTGRES_DB: ${POSTGRES_DB:-plm_data_management}
+      POSTGRES_USER: "${DB_USERNAME:?DB_USERNAME must be set}"
+      POSTGRES_PASSWORD: "${DB_PASSWORD:?DB_PASSWORD must be set}"
       TZ: Asia/Shanghai
     ports:
-      - "${DB_PORT:-5432}:5432"
+      - "${DB_BIND_ADDRESS:-172.19.49.226}:${DB_PORT:-5432}:5432"
     volumes:
-      - plm_pgdata:/var/lib/postgresql/data
+      - type: bind
+        source: "${POSTGRES_DATA_ROOT:?POSTGRES_DATA_ROOT must be set}"
+        target: /var/lib/postgresql/data
+        bind:
+          create_host_path: false
       - ./V1.0__init_schema.sql:/docker-entrypoint-initdb.d/01-init-schema.sql:ro
       - ./V1.1__init_seed_data.sql:/docker-entrypoint-initdb.d/02-init-seed-data.sql:ro
       - ./V1.2__erp_item_bom_alignment.sql:/docker-entrypoint-initdb.d/03-erp-item-bom-alignment.sql:ro
       - ./V1.3__workflow_locking_alignment.sql:/docker-entrypoint-initdb.d/04-workflow-locking-alignment.sql:ro
       - ./V1.3__workflow_locking_seed_data.sql:/docker-entrypoint-initdb.d/05-workflow-locking-seed-data.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U plm -d plm"]
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
       interval: 10s
       timeout: 5s
       retries: 5
     restart: unless-stopped
-
-volumes:
-  plm_pgdata:

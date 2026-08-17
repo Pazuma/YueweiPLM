@@ -16,13 +16,18 @@
 
 ```bash
 cd postgres
+cp .env.database.example .env.database
+chmod 600 .env.database
+# 编辑 .env.database：POSTGRES_IMAGE 必须与现有 PGDATA 的 major 版本一致；
+# POSTGRES_DATA_ROOT 必须是已挂载并完成冷迁移的真实目录。
 docker compose --env-file .env.database -f docker-compose.database.yml up -d
 ```
 
 说明：
 
-- 当前默认通过 Docker Desktop 运行。
-- 本地默认映射端口为 `5433`，避免与宿主机已有 PostgreSQL `5432` 冲突。
+- `POSTGRES_IMAGE`、`POSTGRES_DATA_ROOT`、`DB_USERNAME` 和 `DB_PASSWORD` 都必须显式设置；没有生产弱口令或匿名卷回退。
+- 生产默认只绑定数据库服务器私网地址 `172.19.49.226`；本地隔离验证时把 `DB_BIND_ADDRESS` 改成 `127.0.0.1`，并使用独立的空数据目录和非冲突端口。
+- 已有 PGDATA 的 major 版本不能靠修改镜像标签升级；升级必须使用单独的 `pg_upgrade` 或逻辑恢复流程。
 - 启动后可直接在 Docker Desktop 中看到 `plm-postgres` 容器。
 
 首次启动时，PostgreSQL 会自动执行：
@@ -35,22 +40,25 @@ V1.3__workflow_locking_alignment.sql
 V1.3__workflow_locking_seed_data.sql
 ```
 
-连接参数：
+连接参数全部来自受限权限的 `.env.database`，不在仓库中保存真实密码：
 
 ```text
-host: localhost
-port: 5433
-database: plm
-username: plm
-password: plm123
+host: DB_BIND_ADDRESS
+port: DB_PORT
+database: POSTGRES_DB
+username: DB_USERNAME
+password: DB_PASSWORD（仅服务器保存）
 ```
 
 ## 验证 SQL
 
 ```bash
-docker exec -it plm-postgres psql -U plm -d plm -c "select count(*) from information_schema.tables where table_schema='plm';"
-docker exec -it plm-postgres psql -U plm -d plm -c "select count(*) from plm.sys_dict_item;"
-docker exec -it plm-postgres psql -U plm -d plm -c "select status from plm.plm_approval_instance group by status;"
+docker compose --env-file .env.database -f docker-compose.database.yml exec postgres \
+  sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "select count(*) from information_schema.tables where table_schema='"'"'plm'"'"';"'
+docker compose --env-file .env.database -f docker-compose.database.yml exec postgres \
+  sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "select count(*) from plm.sys_dict_item;"'
+docker compose --env-file .env.database -f docker-compose.database.yml exec postgres \
+  sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "select status from plm.plm_approval_instance group by status;"'
 ```
 
 ## 设计边界

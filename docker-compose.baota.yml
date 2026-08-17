@@ -22,19 +22,27 @@ services:
         BUILD_IMAGE: ${SERVER_BUILD_IMAGE:-maven:3.9-eclipse-temurin-17}
         RUNTIME_IMAGE: ${SERVER_RUNTIME_IMAGE:-eclipse-temurin:17-jre}
     container_name: plm-server
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+        case "$${DB_URL}" in
+          *"currentSchema=plm"*) exec java -jar app.jar ;;
+          *) echo "DB_URL must include currentSchema=plm" >&2; exit 64 ;;
+        esac
     environment:
       SPRING_PROFILES_ACTIVE: prod
       SERVER_PORT: "8080"
-      DB_URL: ${DB_URL:-jdbc:postgresql://192.168.1.10:5432/plm?currentSchema=plm}
-      DB_SCHEMA: ${DB_SCHEMA:-plm}
-      DB_USERNAME: ${DB_USERNAME}
-      DB_PASSWORD: ${DB_PASSWORD}
+      DB_URL: "${DB_URL:?DB_URL must be set}"
+      DB_SCHEMA: plm
+      DB_USERNAME: "${DB_USERNAME:?DB_USERNAME must be set}"
+      DB_PASSWORD: "${DB_PASSWORD:?DB_PASSWORD must be set}"
       REDIS_HOST: redis
       REDIS_PORT: "6379"
-      APP_SECURITY_ENABLED: "${APP_SECURITY_ENABLED:-true}"
-      APP_SECURITY_DEV_TOKEN: "${APP_SECURITY_DEV_TOKEN:-dev-token}"
+      APP_SECURITY_ENABLED: "true"
+      APP_SECURITY_DEV_TOKEN: "${APP_SECURITY_DEV_TOKEN:?APP_SECURITY_DEV_TOKEN must be set}"
       APP_STORAGE_LOCAL_ROOT: data/uploads
-      DINGTALK_MODEL_VARIANT_PROCESS_CODE: "${DINGTALK_MODEL_VARIANT_PROCESS_CODE:-PROC-BD65F530-F66F-46B9-8F72-0567DD68F60C}"
+      DINGTALK_MODEL_VARIANT_PROCESS_CODE: "${DINGTALK_MODEL_VARIANT_PROCESS_CODE:-}"
       DINGTALK_APP_KEY: "${DINGTALK_APP_KEY:-}"
       DINGTALK_APP_SECRET: "${DINGTALK_APP_SECRET:-}"
       DINGTALK_CALLBACK_TOKEN: "${DINGTALK_CALLBACK_TOKEN:-}"
@@ -47,18 +55,15 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl --fail --silent --show-error http://localhost:8080/api/v1/health/db >/dev/null || exit 1"]
+      test: ["CMD-SHELL", "curl --fail --silent --show-error http://localhost:8080/api/v1/health/db | grep -q '\"database\":\"UP\"'"]
       interval: 30s
       timeout: 5s
       retries: 5
       start_period: 60s
     restart: on-failure:5
-    deploy:
-      resources:
-        limits:
-          cpus: '1.5'
-          memory: 2G
-          pids: 256
+    cpus: 1.5
+    mem_limit: 2g
+    pids_limit: 256
     networks:
       - plm-net
 

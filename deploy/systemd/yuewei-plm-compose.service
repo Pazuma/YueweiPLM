@@ -6,10 +6,10 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-WorkingDirectory=/opt/yuewei-plm
-EnvironmentFile=-/opt/yuewei-plm/.env
+WorkingDirectory=/www/wwwroot/YUEWEI/Yuewei-plm
+EnvironmentFile=/www/wwwroot/YUEWEI/Yuewei-plm/.env
 ExecStartPre=/usr/bin/docker compose --env-file .env -f docker-compose.baota.yml config -q
-ExecStart=/usr/bin/docker compose --env-file .env -f docker-compose.baota.yml up -d --remove-orphans
+ExecStart=/usr/bin/docker compose --env-file .env -f docker-compose.baota.yml up -d
 ExecStop=/usr/bin/docker compose --env-file .env -f docker-compose.baota.yml down
 RemainAfterExit=yes
 TimeoutStartSec=120

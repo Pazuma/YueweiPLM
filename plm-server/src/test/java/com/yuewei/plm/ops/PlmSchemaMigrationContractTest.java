@@ -6,6 +6,7 @@ import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.Statement;
+import java.util.List;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.io.FileSystemResource;
@@ -26,10 +27,18 @@ class PlmSchemaMigrationContractTest {
     @Test
     void initializesAndUpgradesPlmWithoutAcceptingPublicHistory() throws Exception {
         try (Connection connection = connection()) {
-            ScriptUtils.executeSqlScript(
-                connection,
-                new FileSystemResource(Path.of("..", "plm-database", "postgres", "V1.0__init_schema.sql"))
-            );
+            for (String script : List.of(
+                "V1.0__init_schema.sql",
+                "V1.1__init_seed_data.sql",
+                "V1.2__erp_item_bom_alignment.sql",
+                "V1.3__workflow_locking_alignment.sql",
+                "V1.3__workflow_locking_seed_data.sql"
+            )) {
+                ScriptUtils.executeSqlScript(
+                    connection,
+                    new FileSystemResource(Path.of("..", "plm-database", "postgres", script))
+                );
+            }
             try (Statement statement = connection.createStatement()) {
                 statement.execute("""
                     create table public.flyway_schema_history (
@@ -59,8 +68,8 @@ class PlmSchemaMigrationContractTest {
             .schemas("plm")
             .createSchemas(false)
             .baselineOnMigrate(true)
-            .baselineVersion("0")
-            .locations("classpath:db/migration-contract")
+            .baselineVersion("20260703.0000")
+            .locations("classpath:db/migration")
             .load();
 
         assertThat(flyway.migrate().success).isTrue();
@@ -82,16 +91,22 @@ class PlmSchemaMigrationContractTest {
             try (ResultSet resultSet = statement.executeQuery("""
                 select count(*)
                 from plm.flyway_schema_history
-                where script = 'V1__schema_history_probe.sql' and success = true
+                where type = 'SQL' and success = true
                 """)) {
                 resultSet.next();
-                assertThat(resultSet.getInt(1)).isEqualTo(1);
+                long expectedMigrationCount;
+                try (var migrationFiles = java.nio.file.Files.list(Path.of("src/main/resources/db/migration"))) {
+                    expectedMigrationCount = migrationFiles
+                        .filter(path -> path.getFileName().toString().matches("V.*__.*\\.sql"))
+                        .count();
+                }
+                assertThat(resultSet.getLong(1)).isEqualTo(expectedMigrationCount);
             }
 
             try (ResultSet resultSet = statement.executeQuery("""
                 select count(*)
                 from public.flyway_schema_history
-                where script = 'V1__schema_history_probe.sql'
+                where script like 'V2026%'
                 """)) {
                 resultSet.next();
                 assertThat(resultSet.getInt(1)).isZero();
