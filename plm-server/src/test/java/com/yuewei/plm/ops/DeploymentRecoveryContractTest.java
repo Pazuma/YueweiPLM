@@ -52,6 +52,14 @@ class DeploymentRecoveryContractTest {
     }
 
     @Test
+    void productionWebProxyPreservesOriginalHostAndPort() throws Exception {
+        String nginx = Files.readString(REPOSITORY_ROOT.resolve("plm-web/nginx.conf"));
+
+        assertThat(nginx).contains("proxy_set_header Host $http_host;");
+        assertThat(nginx).doesNotContain("proxy_set_header Host $host;");
+    }
+
+    @Test
     void baotaExampleContainsOnlyPlaceholdersAndBootUnitIsOneShot() throws Exception {
         String example = Files.readString(REPOSITORY_ROOT.resolve(".env.baota.example"));
         String localCompose = Files.readString(REPOSITORY_ROOT.resolve("docker-compose.yml"));
