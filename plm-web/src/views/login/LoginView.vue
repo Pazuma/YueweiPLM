@@ -11,14 +11,9 @@ const userStore = useUserStore()
 const loading = ref(false)
 
 const form = reactive({
-  username: 'engineer01',
-  password: 'plm123456'
+  username: '',
+  password: ''
 })
-
-const accounts = [
-  'engineer01 / plm123456 - 工程部测试账号',
-  'engineer02 / plm123456 - 工程部测试账号'
-]
 
 async function handleLogin() {
   loading.value = true
@@ -51,13 +46,6 @@ async function handleLogin() {
         </el-form-item>
         <el-button type="primary" :loading="loading" style="width: 100%" @click="handleLogin">登录</el-button>
       </el-form>
-
-      <div class="login-panel__tips">
-        <strong>后端 M1 测试账号</strong>
-        <ul>
-          <li v-for="item in accounts" :key="item">{{ item }}</li>
-        </ul>
-      </div>
     </section>
   </div>
 </template>
@@ -92,13 +80,4 @@ async function handleLogin() {
   color: var(--plm-color-text-secondary);
 }
 
-.login-panel__tips {
-  margin-top: 20px;
-  color: var(--plm-color-text-secondary);
-  font-size: 13px;
-}
-
-.login-panel__tips ul {
-  padding-left: 18px;
-}
 </style>

@@ -1,0 +1,30 @@
+[Unit]
+Description=Local infrastructure health checks and DingTalk alerts
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+EnvironmentFile=/etc/local-infra-alert/dingtalk.env
+ExecStart=/usr/bin/python3 /usr/local/lib/local-infra-alert/local_infra_alert.py --config /etc/local-infra-alert/config.json --state-dir /var/lib/local-infra-alert
+TimeoutStartSec=120
+Nice=10
+IOSchedulingClass=idle
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadWritePaths=/var/lib/local-infra-alert
+MemoryMax=128M
+CPUQuota=10%
+TasksMax=32
+
+[Install]
+WantedBy=multi-user.target

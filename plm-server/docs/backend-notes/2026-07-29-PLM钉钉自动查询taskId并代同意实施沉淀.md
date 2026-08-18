@@ -124,7 +124,7 @@ POST https://oapi.dingtalk.com/topapi/process/instance/execute?access_token=xxx
 请求地址：
 
 ```text
-http://35487b62.r31.cpolar.top/api/v1/integrations/dingtalk/outbound
+http://replace-with-private-relay.example/api/v1/integrations/dingtalk/outbound
 ```
 
 请求头：
@@ -163,7 +163,7 @@ DINGTALK_APP_KEY=钉钉企业内部应用AppKey
 DINGTALK_APP_SECRET=钉钉企业内部应用AppSecret
 DINGTALK_CALLBACK_TOKEN=dev-token
 DINGTALK_AUTO_APPROVER_USER_ID=02356802443226388318
-DINGTALK_OUTBOUND_ENDPOINT=http://35487b62.r31.cpolar.top/api/v1/integrations/dingtalk/outbound
+DINGTALK_OUTBOUND_ENDPOINT=http://replace-with-private-relay.example/api/v1/integrations/dingtalk/outbound
 ```
 
 注意：
@@ -207,7 +207,7 @@ BUILD SUCCESS
 
 ```powershell
 Invoke-RestMethod -Method Post `
-  -Uri "http://35487b62.r31.cpolar.top/api/v1/integrations/dingtalk/outbound" `
+  -Uri "http://replace-with-private-relay.example/api/v1/integrations/dingtalk/outbound" `
   -Headers @{ "Authorization" = "Bearer dev-token" } `
   -ContentType "application/json" `
   -Body '{"action":"agree","approvalInstanceId":"202607291410000433467","processInstanceId":"202607291410000433467","actionerUserId":"02356802443226388318","remark":"PLM运模已完成，自动同意"}'

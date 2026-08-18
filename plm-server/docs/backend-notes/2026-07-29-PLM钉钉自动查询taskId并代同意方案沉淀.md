@@ -259,7 +259,7 @@ plm:
 请求地址：
 
 ```text
-http://35487b62.r31.cpolar.top/api/v1/integrations/dingtalk/outbound
+http://replace-with-private-relay.example/api/v1/integrations/dingtalk/outbound
 ```
 
 请求头：

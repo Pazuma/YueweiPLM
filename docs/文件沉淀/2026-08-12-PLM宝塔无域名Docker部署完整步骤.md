@@ -17,7 +17,7 @@ http://服务器IP:8110
   -> http://服务器IP:8110
   -> plm-web(Nginx)
   -> /api 反向代理到 plm-server
-  -> 远程 PostgreSQL：8.135.19.108:5432/plm_yuewei?currentSchema=plm
+  -> 远程 PostgreSQL：<数据库私网地址>:5432/plm_yuewei?currentSchema=plm
   -> Docker 内部 Redis
 ```
 
@@ -26,20 +26,20 @@ http://服务器IP:8110
 ### 2.1 远程 PostgreSQL
 
 ```text
-数据库地址：8.135.19.108
+数据库地址：<数据库私网地址>
 端口：5432
 数据库名：plm_yuewei
 Schema：plm
 用户名：postgres
-密码：Postgres@123
+密码：<已轮换的数据库密码>
 ```
 
 必须在后端连接串中带上 `currentSchema=plm`：
 
 ```env
-DB_URL=jdbc:postgresql://8.135.19.108:5432/plm_yuewei?currentSchema=plm
+DB_URL=jdbc:postgresql://<数据库私网地址>:5432/plm_yuewei?currentSchema=plm
 DB_USERNAME=postgres
-DB_PASSWORD=Postgres@123
+DB_PASSWORD=<已轮换的数据库密码>
 ```
 
 ### 2.2 数据导入校验结果
@@ -257,9 +257,9 @@ cp .env.baota.example .env
 WEB_PORT=8110
 SERVER_PORT=8080
 
-DB_URL=jdbc:postgresql://8.135.19.108:5432/plm_yuewei?currentSchema=plm
+DB_URL=jdbc:postgresql://<数据库私网地址>:5432/plm_yuewei?currentSchema=plm
 DB_USERNAME=postgres
-DB_PASSWORD=Postgres@123
+DB_PASSWORD=<已轮换的数据库密码>
 
 APP_SECURITY_ENABLED=true
 APP_SECURITY_DEV_TOKEN=请替换为随机长字符串
@@ -431,24 +431,24 @@ BOM 管理可打开
 在任意装有 Docker 的机器执行：
 
 ```bash
-docker run --rm -e PGPASSWORD=Postgres@123 postgres:15-alpine \
-  psql -h 8.135.19.108 -p 5432 -U postgres -d plm_yuewei \
+docker run --rm -e PGPASSWORD=<已轮换的数据库密码> postgres:15-alpine \
+  psql -h <数据库私网地址> -p 5432 -U postgres -d plm_yuewei \
   -c "select product_type, status, count(*) from plm.plm_product where deleted_flag = 0 group by product_type, status order by product_type, status;"
 ```
 
 核心模块数量：
 
 ```bash
-docker run --rm -e PGPASSWORD=Postgres@123 postgres:15-alpine \
-  psql -h 8.135.19.108 -p 5432 -U postgres -d plm_yuewei \
+docker run --rm -e PGPASSWORD=<已轮换的数据库密码> postgres:15-alpine \
+  psql -h <数据库私网地址> -p 5432 -U postgres -d plm_yuewei \
   -c "select 'product' as module, count(*) from plm.plm_product union all select 'bom', count(*) from plm.plm_product_bom union all select 'process', count(*) from plm.plm_process union all select 'attachment', count(*) from plm.plm_attachment union all select 'order', count(*) from plm.plm_order;"
 ```
 
 建议设置数据库默认 Schema：
 
 ```bash
-docker run --rm -e PGPASSWORD=Postgres@123 postgres:15-alpine \
-  psql -h 8.135.19.108 -p 5432 -U postgres -d plm_yuewei \
+docker run --rm -e PGPASSWORD=<已轮换的数据库密码> postgres:15-alpine \
+  psql -h <数据库私网地址> -p 5432 -U postgres -d plm_yuewei \
   -c "alter database plm_yuewei set search_path to plm, public;"
 ```
 
@@ -516,7 +516,7 @@ relation "plm_product" does not exist
 处理：确认 `.env`：
 
 ```env
-DB_URL=jdbc:postgresql://8.135.19.108:5432/plm_yuewei?currentSchema=plm
+DB_URL=jdbc:postgresql://<数据库私网地址>:5432/plm_yuewei?currentSchema=plm
 ```
 
 ### 11.4 8110 访问不了
@@ -541,9 +541,9 @@ curl -I http://127.0.0.1:8110
 检查 `.env`：
 
 ```env
-DB_URL=jdbc:postgresql://8.135.19.108:5432/plm_yuewei?currentSchema=plm
+DB_URL=jdbc:postgresql://<数据库私网地址>:5432/plm_yuewei?currentSchema=plm
 DB_USERNAME=postgres
-DB_PASSWORD=Postgres@123
+DB_PASSWORD=<已轮换的数据库密码>
 ```
 
 检查远程 PostgreSQL 是否允许宝塔服务器 IP 访问 `5432`。
@@ -575,7 +575,7 @@ docker compose up -d --build
 如果导入前已有远程备份，使用：
 
 ```bash
-pg_restore -h 8.135.19.108 -p 5432 -U postgres -d plm_yuewei --clean --if-exists 备份文件.dump
+pg_restore -h <数据库私网地址> -p 5432 -U postgres -d plm_yuewei --clean --if-exists 备份文件.dump
 ```
 
 如果没有正式数据，不需要回滚，重新 drop 并创建空库后再次导入即可。

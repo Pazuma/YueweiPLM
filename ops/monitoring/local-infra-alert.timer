@@ -1,0 +1,12 @@
+[Unit]
+Description=Run local infrastructure alerts every five minutes
+
+[Timer]
+OnCalendar=*-*-* *:00/5:00
+Persistent=true
+RandomizedDelaySec=20
+AccuracySec=30s
+Unit=local-infra-alert.service
+
+[Install]
+WantedBy=timers.target
