@@ -1,11 +1,15 @@
+import io
+import json
 import unittest
 from unittest import mock
 
 from ops.monitoring.local_infra_alert import (
+    DingTalkNotifier,
     container_status,
     cpu_percent,
     mount_status,
     parse_docker_inspect,
+    redact_text,
     restart_delta_status,
     run_command,
     severity_for_percent,
@@ -61,6 +65,69 @@ class ProbeTests(unittest.TestCase):
         self.assertEqual(result.returncode, 124)
         self.assertEqual(result.stdout, "")
         self.assertIn("timed out", result.stderr)
+
+
+class DingTalkNotifierTests(unittest.TestCase):
+    @staticmethod
+    def response(payload):
+        response = mock.MagicMock()
+        response.__enter__.return_value.read.return_value = json.dumps(payload).encode()
+        return response
+
+    @mock.patch("ops.monitoring.local_infra_alert.urllib.request.urlopen")
+    def test_sends_one_direct_markdown_message(self, urlopen):
+        urlopen.side_effect = [
+            self.response({"errcode": 0, "access_token": "token-value"}),
+            self.response({"processQueryKey": "query-key"}),
+        ]
+        notifier = DingTalkNotifier("robot-code", "app-key", "app-secret", "user-123")
+
+        result = notifier.send("测试标题", "测试正文")
+
+        self.assertTrue(result)
+        token_request = urlopen.call_args_list[0].args[0]
+        self.assertIn("gettoken", token_request.full_url)
+        send_request = urlopen.call_args_list[1].args[0]
+        payload = json.loads(send_request.data.decode())
+        self.assertEqual(payload["robotCode"], "robot-code")
+        self.assertEqual(payload["userIds"], ["user-123"])
+        self.assertEqual(payload["msgKey"], "sampleMarkdown")
+        self.assertEqual(
+            json.loads(payload["msgParam"]),
+            {"title": "测试标题", "text": "测试正文"},
+        )
+        self.assertNotIn("conversationId", payload)
+
+    def test_missing_credentials_are_rejected(self):
+        with self.assertRaises(ValueError):
+            DingTalkNotifier("", "app-key", "app-secret", "user-123")
+
+    def test_redacts_tokens_secrets_passwords_and_recipient(self):
+        raw = (
+            "https://example.test/send?access_token=topsecret "
+            "password=hunter2 appsecret=secret-value user-123"
+        )
+        redacted = redact_text(raw, ["user-123"])
+        for secret in ("topsecret", "hunter2", "secret-value", "user-123"):
+            self.assertNotIn(secret, redacted)
+        self.assertIn("[REDACTED]", redacted)
+
+    @mock.patch("ops.monitoring.local_infra_alert.urllib.request.urlopen")
+    def test_delivery_failure_is_retryable_and_redacted(self, urlopen):
+        urlopen.side_effect = RuntimeError(
+            "access_token=topsecret appsecret=secret-value user-123"
+        )
+        notifier = DingTalkNotifier("robot-code", "app-key", "secret-value", "user-123")
+        error_stream = io.StringIO()
+
+        with mock.patch("sys.stderr", error_stream):
+            result = notifier.send("测试", "正文")
+
+        self.assertFalse(result)
+        output = error_stream.getvalue()
+        self.assertNotIn("topsecret", output)
+        self.assertNotIn("secret-value", output)
+        self.assertNotIn("user-123", output)
 
 
 if __name__ == "__main__":

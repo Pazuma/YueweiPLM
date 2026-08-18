@@ -3,8 +3,12 @@
 
 import json
 import os
+import re
 import subprocess
+import sys
 import tempfile
+import urllib.parse
+import urllib.request
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
@@ -17,6 +21,104 @@ class CommandResult:
     returncode: int
     stdout: str
     stderr: str
+
+
+def redact_text(value: str, extra_secrets: Optional[List[str]] = None) -> str:
+    redacted = str(value)
+    for secret in extra_secrets or []:
+        if secret:
+            redacted = redacted.replace(secret, "[REDACTED]")
+    redacted = re.sub(
+        r"(?i)([?&](?:access_token|token|appsecret|secret|password)=)[^&\s]+",
+        r"\1[REDACTED]",
+        redacted,
+    )
+    redacted = re.sub(
+        r"(?i)((?:access_token|token|appsecret|secret|password)\s*[:=]\s*)[^\s]+",
+        r"\1[REDACTED]",
+        redacted,
+    )
+    return redacted
+
+
+class DingTalkNotifier:
+    def __init__(
+        self, robot_code: str, app_key: str, app_secret: str, user_id: str
+    ) -> None:
+        values = (robot_code, app_key, app_secret, user_id)
+        if any(not value for value in values):
+            raise ValueError("DingTalk notifier configuration is incomplete")
+        self.robot_code = robot_code
+        self.app_key = app_key
+        self.app_secret = app_secret
+        self.user_id = user_id
+
+    @classmethod
+    def from_environment(cls) -> "DingTalkNotifier":
+        return cls(
+            os.environ.get("DINGTALK_ROBOT_CODE", ""),
+            os.environ.get("DINGTALK_ROBOT_APPKEY", ""),
+            os.environ.get("DINGTALK_ROBOT_APPSECRET", ""),
+            os.environ.get("DINGTALK_ALERT_USER_ID", ""),
+        )
+
+    @staticmethod
+    def _read_json(request: urllib.request.Request) -> Dict[str, Any]:
+        with urllib.request.urlopen(request, timeout=5) as response:
+            raw = response.read()
+        parsed = json.loads(raw.decode("utf-8"))
+        if not isinstance(parsed, dict):
+            raise ValueError("DingTalk returned a non-object response")
+        return parsed
+
+    def _access_token(self) -> str:
+        query = urllib.parse.urlencode(
+            {"appkey": self.app_key, "appsecret": self.app_secret}
+        )
+        request = urllib.request.Request(
+            "https://oapi.dingtalk.com/gettoken?" + query,
+            headers={"Accept": "application/json"},
+        )
+        result = self._read_json(request)
+        token = result.get("access_token")
+        if result.get("errcode") not in (0, None) or not token:
+            raise RuntimeError("DingTalk token request was rejected")
+        return str(token)
+
+    def send(self, title: str, text: str) -> bool:
+        secrets = [self.app_secret, self.user_id]
+        try:
+            token = self._access_token()
+            secrets.append(token)
+            payload = {
+                "robotCode": self.robot_code,
+                "userIds": [self.user_id],
+                "msgKey": "sampleMarkdown",
+                "msgParam": json.dumps(
+                    {"title": title, "text": text}, ensure_ascii=False
+                ),
+            }
+            request = urllib.request.Request(
+                "https://api.dingtalk.com/v1.0/robot/oToMessages/batchSend",
+                data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+                headers={
+                    "Content-Type": "application/json",
+                    "x-acs-dingtalk-access-token": token,
+                },
+                method="POST",
+            )
+            result = self._read_json(request)
+            invalid = result.get("invalidStaffIdList") or []
+            limited = result.get("flowControlledStaffIdList") or []
+            if invalid or limited:
+                raise RuntimeError("DingTalk rejected or rate-limited the recipient")
+            return True
+        except Exception as error:  # Notification failure must not abort checks.
+            print(
+                "DingTalk delivery failed: " + redact_text(str(error), secrets),
+                file=sys.stderr,
+            )
+            return False
 
 
 def severity_for_percent(
