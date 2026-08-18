@@ -43,3 +43,12 @@ systemctl daemon-reload
 ```
 
 Removing the script, configuration and state is optional. Disabling the timer has no effect on business containers.
+
+## Production verification (2026-08-18)
+
+- Application and database timers completed their first scheduled five-minute cycle with exit status 0.
+- Docker restart-count snapshots matched the pre-deployment baselines on both hosts; unhealthy and restarting counts were zero.
+- PLM, FIFO, PostgreSQL, MySQL and RAG readiness checks passed after deployment.
+- Journal scans found zero configured secret-value matches.
+- Measured dry-run peak RSS was approximately 46 MiB per invocation. Wall-clock duration was 0.14–0.19 seconds on the current healthy hosts; the process exits after each invocation.
+- Root-only evidence is stored on each host at `/root/local-infra-alert-evidence-20260818-203643`.
