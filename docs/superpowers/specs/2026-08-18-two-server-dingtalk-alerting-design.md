@@ -63,6 +63,7 @@
 - 钉钉接收人从 `dingtalk_oa.ding_user_snapshot` 只读查询，必须满足姓名“施鸣坤”当前有效记录、userId 和企业均唯一；部署记录只保存校验结果和 ID 指纹，不输出完整 ID。
 - 从现有配置复制机器人凭据时不经过终端输出，目标文件严格限制为 root 可读。
 - systemd 服务启用 `NoNewPrivileges`、`PrivateTmp`、只读系统保护，并只开放状态目录的写权限。
+- systemd 服务设置 `MemoryMax=128M`、`CPUQuota=10%`、`TasksMax=32`、低 I/O 优先级和 120 秒超时；检查脚本不是常驻进程，每次执行完成即退出。
 - 部署前保存现有 systemd 单元清单；卸载时停止并禁用 timer，删除新单元和状态目录即可，不触碰业务配置。
 
 ## 验证
