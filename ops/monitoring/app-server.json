@@ -1,0 +1,55 @@
+{
+  "role": "application-server",
+  "interval_seconds": 300,
+  "data_mount": {
+    "uuid": "5049fb42-9394-4360-a41a-c6429651f362",
+    "fstype": "ext4"
+  },
+  "thresholds": {
+    "cpu_warning": 80,
+    "cpu_critical": 80,
+    "cpu_recovery": 70,
+    "disk_warning": 75,
+    "disk_critical": 85,
+    "disk_recovery": 70,
+    "restart_max": 3
+  },
+  "critical_containers": [
+    "crm-logistics-message-center-funasr-1",
+    "dingtalk-oa-kafka",
+    "fifo-inventory",
+    "freight-calculator-api",
+    "freight-calculator-web",
+    "oem-crm-minio",
+    "oem-crm-postgres",
+    "oem-crm-redis",
+    "plm-server",
+    "plm-web",
+    "yw-eims-backend",
+    "yw-eims-frontend",
+    "yw-eims-postgres"
+  ],
+  "service_checks": [
+    {
+      "key": "plm-database",
+      "type": "docker_http",
+      "container": "plm-server",
+      "port": 8080,
+      "path": "/api/v1/health/db",
+      "status": 200,
+      "body_contains": "\"database\":\"UP\""
+    },
+    {
+      "key": "plm-web",
+      "type": "http",
+      "url": "http://127.0.0.1:8111/",
+      "status": 200
+    },
+    {
+      "key": "fifo",
+      "type": "http",
+      "url": "http://127.0.0.1:8006/",
+      "status": 200
+    }
+  ]
+}

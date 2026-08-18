@@ -1,18 +1,22 @@
 import io
 import json
+from pathlib import Path
 import unittest
 from unittest import mock
 
 from ops.monitoring.local_infra_alert import (
+    CheckResult,
     DingTalkNotifier,
     container_status,
     cpu_percent,
     mount_status,
     parse_docker_inspect,
+    process_results,
     redact_text,
     restart_delta_status,
     run_command,
     severity_for_percent,
+    severity_with_recovery,
     transition_actions,
 )
 
@@ -128,6 +132,86 @@ class DingTalkNotifierTests(unittest.TestCase):
         self.assertNotIn("topsecret", output)
         self.assertNotIn("secret-value", output)
         self.assertNotIn("user-123", output)
+
+
+class ResultProcessingTests(unittest.TestCase):
+    class FakeNotifier:
+        def __init__(self, success=True):
+            self.success = success
+            self.messages = []
+
+        def send(self, title, text):
+            self.messages.append((title, text))
+            return self.success
+
+    def test_hysteresis_holds_alert_until_recovery_threshold(self):
+        self.assertEqual(severity_with_recovery(79, "CRITICAL", 80, 80, 70), "CRITICAL")
+        self.assertEqual(severity_with_recovery(69, "CRITICAL", 80, 80, 70), "OK")
+
+    def test_alert_is_deduplicated_and_recovery_is_sent(self):
+        notifier = self.FakeNotifier()
+        state = {"checks": {}}
+        failing = [CheckResult("disk.root", "CRITICAL", "root 90%")]
+
+        process_results(failing, state, notifier, "app", 100)
+        process_results(failing, state, notifier, "app", 200)
+        process_results(
+            [CheckResult("disk.root", "OK", "root 50%")],
+            state,
+            notifier,
+            "app",
+            300,
+        )
+
+        self.assertEqual(len(notifier.messages), 2)
+        self.assertIn("告警", notifier.messages[0][0])
+        self.assertIn("恢复", notifier.messages[1][0])
+
+    def test_failed_delivery_remains_pending(self):
+        notifier = self.FakeNotifier(success=False)
+        state = {"checks": {}}
+        failing = [CheckResult("docker", "CRITICAL", "Docker unavailable")]
+
+        process_results(failing, state, notifier, "db", 100)
+        process_results(failing, state, notifier, "db", 200)
+
+        self.assertEqual(len(notifier.messages), 2)
+        self.assertNotIn("docker", state["checks"])
+
+
+class ProductionConfigTests(unittest.TestCase):
+    root = Path(__file__).resolve().parents[1]
+
+    def test_host_configs_are_complete(self):
+        for filename, role in (
+            ("app-server.json", "application-server"),
+            ("db-server.json", "database-server"),
+        ):
+            config = json.loads((self.root / filename).read_text())
+            self.assertEqual(config["role"], role)
+            self.assertEqual(config["interval_seconds"], 300)
+            self.assertEqual(config["data_mount"]["fstype"], "ext4")
+            self.assertGreater(len(config["data_mount"]["uuid"]), 10)
+            self.assertTrue(config["critical_containers"])
+            self.assertTrue(config["service_checks"])
+
+    def test_systemd_units_bound_resources_and_use_five_minutes(self):
+        service = (self.root / "local-infra-alert.service").read_text()
+        timer = (self.root / "local-infra-alert.timer").read_text()
+        for directive in (
+            "Type=oneshot",
+            "NoNewPrivileges=true",
+            "PrivateTmp=true",
+            "MemoryMax=128M",
+            "CPUQuota=10%",
+            "TasksMax=32",
+            "IOSchedulingClass=idle",
+            "TimeoutStartSec=120",
+            "ReadWritePaths=/var/lib/local-infra-alert",
+        ):
+            self.assertIn(directive, service)
+        self.assertIn("OnCalendar=*-*-* *:00/5:00", timer)
+        self.assertIn("Persistent=true", timer)
 
 
 if __name__ == "__main__":

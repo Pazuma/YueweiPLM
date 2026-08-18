@@ -1,0 +1,68 @@
+{
+  "role": "database-server",
+  "interval_seconds": 300,
+  "data_mount": {
+    "uuid": "1ff3b09f-dc10-4076-afe9-0a024b9e2cf5",
+    "fstype": "ext4"
+  },
+  "thresholds": {
+    "cpu_warning": 80,
+    "cpu_critical": 80,
+    "cpu_recovery": 70,
+    "disk_warning": 75,
+    "disk_critical": 85,
+    "disk_recovery": 70,
+    "restart_max": 3
+  },
+  "critical_containers": [
+    "1Panel-openresty-Hbgy",
+    "1Panel-postgresql-1o2G",
+    "claw_bridge_app",
+    "openclaw_main",
+    "openviking",
+    "xushu-attu",
+    "xushu-backend",
+    "xushu-excel-parser",
+    "xushu-frontend",
+    "xushu-milvus",
+    "xushu-minio",
+    "xushu-mysql",
+    "xushu-rabbitmq",
+    "xushu-redis"
+  ],
+  "service_checks": [
+    {
+      "key": "postgresql",
+      "type": "command",
+      "command": [
+        "docker",
+        "exec",
+        "1Panel-postgresql-1o2G",
+        "sh",
+        "-lc",
+        "pg_isready -U \"$POSTGRES_USER\""
+      ],
+      "timeout": 5
+    },
+    {
+      "key": "mysql",
+      "type": "container_health",
+      "container": "xushu-mysql"
+    },
+    {
+      "key": "rag-backend",
+      "type": "docker_http",
+      "container": "xushu-backend",
+      "port": 8989,
+      "path": "/actuator/health",
+      "status": 200,
+      "body_contains": "\"status\":\"UP\""
+    },
+    {
+      "key": "rag-frontend",
+      "type": "http",
+      "url": "http://127.0.0.1:8980/",
+      "status": 200
+    }
+  ]
+}
