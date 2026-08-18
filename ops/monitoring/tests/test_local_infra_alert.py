@@ -213,6 +213,13 @@ class ProductionConfigTests(unittest.TestCase):
         self.assertIn("OnCalendar=*-*-* *:00/5:00", timer)
         self.assertIn("Persistent=true", timer)
 
+    def test_script_entrypoint_runs_after_all_function_definitions(self):
+        source = (self.root / "local_infra_alert.py").read_text()
+        self.assertGreater(
+            source.rfind('if __name__ == "__main__":'),
+            source.rfind("def save_state("),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

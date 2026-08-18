@@ -507,10 +507,6 @@ def main(argv: Optional[List[str]] = None) -> int:
     return 0
 
 
-if __name__ == "__main__":
-    raise SystemExit(main())
-
-
 def transition_actions(
     previous_status: Optional[str],
     current_status: str,
@@ -553,3 +549,7 @@ def save_state(path: str, state: Dict[str, Any]) -> None:
     finally:
         if os.path.exists(temporary_path):
             os.unlink(temporary_path)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
